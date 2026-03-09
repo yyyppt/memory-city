@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7CBBD1EBB8B78B8F9DFC195C /* Pods_MemoryCityUITests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F4847AEFE6C1C11368258D76 /* Pods_MemoryCityUITests.framework */; };
+		DF0F30276EADE3ED1F2DCFAE /* Pods_MemoryCity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A99E437064264BEB2A45AE98 /* Pods_MemoryCity.framework */; };
+		E252A91F16946DA59861644F /* Pods_MemoryCityTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F6DCC8160847E1107FE6322D /* Pods_MemoryCityTests.framework */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		4BDE113A2F5EE6F000360967 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +33,15 @@
 		4BDE111E2F5EE6ED00360967 /* MemoryCity.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MemoryCity.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		4BDE11392F5EE6F000360967 /* MemoryCityTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryCityTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4BDE11432F5EE6F000360967 /* MemoryCityUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MemoryCityUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		60A7A78D86C3810DBDF62CD8 /* Pods-MemoryCityUITests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoryCityUITests.debug.xcconfig"; path = "Target Support Files/Pods-MemoryCityUITests/Pods-MemoryCityUITests.debug.xcconfig"; sourceTree = "<group>"; };
+		76A88494B379805D445F8976 /* Pods-MemoryCity.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoryCity.release.xcconfig"; path = "Target Support Files/Pods-MemoryCity/Pods-MemoryCity.release.xcconfig"; sourceTree = "<group>"; };
+		7887A5F3F83D378A4E273D38 /* Pods-MemoryCityTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoryCityTests.debug.xcconfig"; path = "Target Support Files/Pods-MemoryCityTests/Pods-MemoryCityTests.debug.xcconfig"; sourceTree = "<group>"; };
+		A99E437064264BEB2A45AE98 /* Pods_MemoryCity.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MemoryCity.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		D547057C0CBB20FC22D3D255 /* Pods-MemoryCity.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoryCity.debug.xcconfig"; path = "Target Support Files/Pods-MemoryCity/Pods-MemoryCity.debug.xcconfig"; sourceTree = "<group>"; };
+		DC2B01DB55BA3261DD3AA233 /* Pods-MemoryCityTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoryCityTests.release.xcconfig"; path = "Target Support Files/Pods-MemoryCityTests/Pods-MemoryCityTests.release.xcconfig"; sourceTree = "<group>"; };
+		DE2DCE137CF0AEFF2B947445 /* Pods-MemoryCityUITests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-MemoryCityUITests.release.xcconfig"; path = "Target Support Files/Pods-MemoryCityUITests/Pods-MemoryCityUITests.release.xcconfig"; sourceTree = "<group>"; };
+		F4847AEFE6C1C11368258D76 /* Pods_MemoryCityUITests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MemoryCityUITests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		F6DCC8160847E1107FE6322D /* Pods_MemoryCityTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MemoryCityTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -50,11 +65,15 @@
 		};
 		4BDE113C2F5EE6F000360967 /* MemoryCityTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MemoryCityTests;
 			sourceTree = "<group>";
 		};
 		4BDE11462F5EE6F000360967 /* MemoryCityUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = MemoryCityUITests;
 			sourceTree = "<group>";
 		};
@@ -65,6 +84,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				DF0F30276EADE3ED1F2DCFAE /* Pods_MemoryCity.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -72,6 +92,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E252A91F16946DA59861644F /* Pods_MemoryCityTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -79,6 +100,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7CBBD1EBB8B78B8F9DFC195C /* Pods_MemoryCityUITests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -92,6 +114,8 @@
 				4BDE113C2F5EE6F000360967 /* MemoryCityTests */,
 				4BDE11462F5EE6F000360967 /* MemoryCityUITests */,
 				4BDE111F2F5EE6ED00360967 /* Products */,
+				F5BC7F0BACD112316B8EA9C5 /* Pods */,
+				E9DCB64E447C3BAFA400F18A /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -105,6 +129,30 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		E9DCB64E447C3BAFA400F18A /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				A99E437064264BEB2A45AE98 /* Pods_MemoryCity.framework */,
+				F6DCC8160847E1107FE6322D /* Pods_MemoryCityTests.framework */,
+				F4847AEFE6C1C11368258D76 /* Pods_MemoryCityUITests.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		F5BC7F0BACD112316B8EA9C5 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				D547057C0CBB20FC22D3D255 /* Pods-MemoryCity.debug.xcconfig */,
+				76A88494B379805D445F8976 /* Pods-MemoryCity.release.xcconfig */,
+				7887A5F3F83D378A4E273D38 /* Pods-MemoryCityTests.debug.xcconfig */,
+				DC2B01DB55BA3261DD3AA233 /* Pods-MemoryCityTests.release.xcconfig */,
+				60A7A78D86C3810DBDF62CD8 /* Pods-MemoryCityUITests.debug.xcconfig */,
+				DE2DCE137CF0AEFF2B947445 /* Pods-MemoryCityUITests.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -112,9 +160,11 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4BDE114C2F5EE6F000360967 /* Build configuration list for PBXNativeTarget "MemoryCity" */;
 			buildPhases = (
+				6345A452176C8E15874E1387 /* [CP] Check Pods Manifest.lock */,
 				4BDE111A2F5EE6ED00360967 /* Sources */,
 				4BDE111B2F5EE6ED00360967 /* Frameworks */,
 				4BDE111C2F5EE6ED00360967 /* Resources */,
+				A9E47AC6D42EC7A9C7CD51B0 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -124,8 +174,6 @@
 				4BDE11202F5EE6ED00360967 /* MemoryCity */,
 			);
 			name = MemoryCity;
-			packageProductDependencies = (
-			);
 			productName = MemoryCity;
 			productReference = 4BDE111E2F5EE6ED00360967 /* MemoryCity.app */;
 			productType = "com.apple.product-type.application";
@@ -134,6 +182,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4BDE11512F5EE6F000360967 /* Build configuration list for PBXNativeTarget "MemoryCityTests" */;
 			buildPhases = (
+				BD111A334C772818C0882D47 /* [CP] Check Pods Manifest.lock */,
 				4BDE11352F5EE6F000360967 /* Sources */,
 				4BDE11362F5EE6F000360967 /* Frameworks */,
 				4BDE11372F5EE6F000360967 /* Resources */,
@@ -147,8 +196,6 @@
 				4BDE113C2F5EE6F000360967 /* MemoryCityTests */,
 			);
 			name = MemoryCityTests;
-			packageProductDependencies = (
-			);
 			productName = MemoryCityTests;
 			productReference = 4BDE11392F5EE6F000360967 /* MemoryCityTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,6 +204,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 4BDE11542F5EE6F000360967 /* Build configuration list for PBXNativeTarget "MemoryCityUITests" */;
 			buildPhases = (
+				EA82D6C2DB7556753B6DC533 /* [CP] Check Pods Manifest.lock */,
 				4BDE113F2F5EE6F000360967 /* Sources */,
 				4BDE11402F5EE6F000360967 /* Frameworks */,
 				4BDE11412F5EE6F000360967 /* Resources */,
@@ -170,8 +218,6 @@
 				4BDE11462F5EE6F000360967 /* MemoryCityUITests */,
 			);
 			name = MemoryCityUITests;
-			packageProductDependencies = (
-			);
 			productName = MemoryCityUITests;
 			productReference = 4BDE11432F5EE6F000360967 /* MemoryCityUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -243,6 +289,92 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		6345A452176C8E15874E1387 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MemoryCity-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		A9E47AC6D42EC7A9C7CD51B0 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MemoryCity/Pods-MemoryCity-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-MemoryCity/Pods-MemoryCity-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-MemoryCity/Pods-MemoryCity-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		BD111A334C772818C0882D47 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MemoryCityTests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		EA82D6C2DB7556753B6DC533 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-MemoryCityUITests-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		4BDE111A2F5EE6ED00360967 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -283,6 +415,7 @@
 /* Begin XCBuildConfiguration section */
 		4BDE114D2F5EE6F000360967 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D547057C0CBB20FC22D3D255 /* Pods-MemoryCity.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -309,6 +442,7 @@
 		};
 		4BDE114E2F5EE6F000360967 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 76A88494B379805D445F8976 /* Pods-MemoryCity.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -451,6 +585,7 @@
 		};
 		4BDE11522F5EE6F000360967 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7887A5F3F83D378A4E273D38 /* Pods-MemoryCityTests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -468,6 +603,7 @@
 		};
 		4BDE11532F5EE6F000360967 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DC2B01DB55BA3261DD3AA233 /* Pods-MemoryCityTests.release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
@@ -485,6 +621,7 @@
 		};
 		4BDE11552F5EE6F000360967 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 60A7A78D86C3810DBDF62CD8 /* Pods-MemoryCityUITests.debug.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -500,6 +637,7 @@
 		};
 		4BDE11562F5EE6F000360967 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DE2DCE137CF0AEFF2B947445 /* Pods-MemoryCityUITests.release.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

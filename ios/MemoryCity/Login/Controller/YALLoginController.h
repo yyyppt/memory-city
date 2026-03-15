@@ -6,6 +6,7 @@
 //
 
 #import "ViewController.h"
+#import "YALTabBarController.h"
 #import "YALLoginView.h"
 
 @interface YALLoginController : ViewController

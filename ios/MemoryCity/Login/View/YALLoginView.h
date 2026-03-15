@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+typedef void(^TapLoginBlock)(void);
+
 @interface YALLoginView : UIView
 
 @property(nonatomic,strong)UITextField *accountField;
@@ -18,5 +20,7 @@
 
 @property(nonatomic,strong)UIButton *appleButton;
 @property(nonatomic,strong)UIButton *wechatButton;
+
+@property (nonatomic, copy) TapLoginBlock tapLoginBlock;
 
 @end

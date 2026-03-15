@@ -15,8 +15,16 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.loginView = [[YALLoginView alloc] initWithFrame:self.view.bounds];
+    _loginView = [[YALLoginView alloc] initWithFrame:self.view.bounds];
     [self.view addSubview:self.loginView];
+    
+    __weak typeof(self) weakSelf = self;
+    _loginView.tapLoginBlock = ^{
+        NSLog(@"ioaewfieauifuadeifa");
+        YALTabBarController *tabBarController = [[YALTabBarController alloc] init];
+        NSLog(@"tab = %@", tabBarController);
+        [weakSelf.navigationController pushViewController:tabBarController animated:YES];
+    };
 }
 
 @end

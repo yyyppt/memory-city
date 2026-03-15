@@ -66,6 +66,7 @@
     _loginButton.backgroundColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
     [_loginButton setTitle:@"登录" forState:UIControlStateNormal];
     _loginButton.layer.cornerRadius = 28;
+    [_loginButton addTarget:self action:@selector(pressLogin) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_loginButton];
     
     _forgetButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width - 120,440,100,30)];
@@ -94,6 +95,12 @@
     _wechatButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width/2+20,610,60,60)];
     [_wechatButton setImage:[UIImage imageNamed:@"wechat.png"] forState:UIControlStateNormal];
     [self addSubview:_wechatButton];
+}
+
+- (void)pressLogin {
+    if (_tapLoginBlock) {
+        _tapLoginBlock();
+    }
 }
 
 @end

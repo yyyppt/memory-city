@@ -29,6 +29,38 @@
   [self setupViewControllers];
   [self setupTabBarAppearance];
   [self setupCenterButton];
+
+  // 顶部导航栏使用奶油白 + 橙色图标（支持深色模式）
+  UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+  UINavigationBar *navigationBar = [UINavigationBar appearance];
+  navigationBar.tintColor = highlightColor;
+
+  if (@available(iOS 13.0, *)) {
+    UIColor *dynamicBackground = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+      if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        // 深色模式：接近 systemBackground，略带透明
+        return [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.95];
+      } else {
+        // 浅色模式：奶油白
+        return [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:0.95];
+      }
+    }];
+
+    UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+    [appearance configureWithDefaultBackground];
+    appearance.backgroundColor = dynamicBackground;
+    appearance.shadowColor = [UIColor clearColor];
+    appearance.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor labelColor] };
+
+    navigationBar.standardAppearance = appearance;
+    navigationBar.scrollEdgeAppearance = appearance;
+    navigationBar.compactAppearance = appearance;
+  } else {
+    navigationBar.barTintColor = [UIColor whiteColor];
+    navigationBar.translucent = YES;
+    [navigationBar setShadowImage:[UIImage new]];
+    [navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
+  }
 }
 
 - (void)setupViewControllers {
@@ -38,38 +70,43 @@
   YALMapController *mapVC = [[YALMapController alloc] init];
   YALMineController *mineVC = [[YALMineController alloc] init];
 
+  UINavigationController *homeNav = [[UINavigationController alloc] initWithRootViewController:homeVC];
+  UINavigationController *memoriesNav = [[UINavigationController alloc] initWithRootViewController:memoriesVC];
+  UINavigationController *releaseNav = [[UINavigationController alloc] initWithRootViewController:releaseVC];
+  UINavigationController *mapNav = [[UINavigationController alloc] initWithRootViewController:mapVC];
+  UINavigationController *mineNav = [[UINavigationController alloc] initWithRootViewController:mineVC];
+
   if (@available(iOS 13.0, *)) {
-    homeVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home"
+    homeNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home"
                                                       image:[UIImage systemImageNamed:@"house"]
                                               selectedImage:[UIImage systemImageNamed:@"house.fill"]];
 
-    memoriesVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Memories"
+    memoriesNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Memories"
                                                            image:[UIImage systemImageNamed:@"wand.and.stars.inverse"]
                                                    selectedImage:[UIImage systemImageNamed:@"wand.and.stars"]];
 
     UITabBarItem *releaseItem =
     [[UITabBarItem alloc] initWithTitle:nil image:[[UIImage alloc] init] tag:2];
     releaseItem.enabled = NO;
-    releaseVC.tabBarItem = releaseItem;
-    releaseVC.tabBarItem = releaseItem;
+    releaseNav.tabBarItem = releaseItem;
 
-    mapVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Map"
+    mapNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Map"
                                                      image:[UIImage systemImageNamed:@"location"]
                                              selectedImage:[UIImage systemImageNamed:@"location.fill"]];
 
-    mineVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Mine"
+    mineNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Mine"
                                                       image:[UIImage systemImageNamed:@"person"]
                                               selectedImage:[UIImage systemImageNamed:@"person.fill"]];
   } else {
-    homeVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home" image:nil tag:0];
-    memoriesVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Memories" image:nil tag:1];
+    homeNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home" image:nil tag:0];
+    memoriesNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Memories" image:nil tag:1];
     UITabBarItem *releaseItem = [[UITabBarItem alloc] initWithTitle:nil image:nil tag:2];
-    releaseVC.tabBarItem = releaseItem;
-    mapVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Map" image:nil tag:3];
-    mineVC.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Mine" image:nil tag:4];
+    releaseNav.tabBarItem = releaseItem;
+    mapNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Map" image:nil tag:3];
+    mineNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Mine" image:nil tag:4];
   }
 
-  self.viewControllers = @[homeVC, memoriesVC, releaseVC, mapVC, mineVC];
+  self.viewControllers = @[homeNav, memoriesNav, releaseNav, mapNav, mineNav];
 }
 
 - (void)setupTabBarAppearance {

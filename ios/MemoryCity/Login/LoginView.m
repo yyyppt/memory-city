@@ -15,15 +15,14 @@
     
     if (self) {
         self.backgroundColor = [UIColor whiteColor];
+        self.backgroundColor = [UIColor systemBackgroundColor];
         [self setupUI];
     }
     
     return self;
 }
 
-- (void)setupUI
-{
-    
+- (void)setupUI {
     UIImageView *logo = [[UIImageView alloc] initWithFrame:CGRectMake(0,120,80,80)];
     logo.center = CGPointMake(self.center.x,160);
     logo.image = [UIImage imageNamed:@"logo"];
@@ -46,8 +45,6 @@
     sub.textAlignment = NSTextAlignmentCenter;
     [self addSubview:sub];
     
-    
-    //账号
     _accountField = [[UITextField alloc] initWithFrame:CGRectMake(40,320,self.frame.size.width-80,50)];
     _accountField.placeholder = @"请输入您的联系方式";
     _accountField.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1];
@@ -56,8 +53,6 @@
     _accountField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_accountField];
     
-    
-    //密码
     _passwordField = [[UITextField alloc] initWithFrame:CGRectMake(40,390,self.frame.size.width-80,50)];
     _passwordField.placeholder = @"请输入密码";
     _passwordField.secureTextEntry = YES;
@@ -67,30 +62,24 @@
     _passwordField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_passwordField];
     
-    
-    //登录
     _loginButton = [[UIButton alloc] initWithFrame:CGRectMake(40,470,self.frame.size.width-80,55)];
     _loginButton.backgroundColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
     [_loginButton setTitle:@"登录" forState:UIControlStateNormal];
     _loginButton.layer.cornerRadius = 28;
     [self addSubview:_loginButton];
     
-    
-    //忘记密码
-    _forgetButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width-120,440,100,30)];
+    _forgetButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width - 120,440,100,30)];
     [_forgetButton setTitle:@"忘记密码?" forState:UIControlStateNormal];
     [_forgetButton setTitleColor:[UIColor orangeColor] forState:UIControlStateNormal];
     _forgetButton.titleLabel.font = [UIFont systemFontOfSize:13];
     [self addSubview:_forgetButton];
     
-    
-    //注册
     _registerButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width-70,80,60,30)];
     [_registerButton setTitle:@"注册" forState:UIControlStateNormal];
     [_registerButton setTitleColor:[UIColor orangeColor] forState:UIControlStateNormal];
     [self addSubview:_registerButton];
     
-    
+
     UILabel *other = [[UILabel alloc] initWithFrame:CGRectMake(0,560,self.frame.size.width,30)];
     other.text = @"其他登录方式";
     other.textColor = [UIColor grayColor];
@@ -98,14 +87,10 @@
     other.textAlignment = NSTextAlignmentCenter;
     [self addSubview:other];
     
-    
-    //Apple
     _appleButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width/2-80,610,60,60)];
     [_appleButton setImage:[UIImage imageNamed:@"apple.png"] forState:UIControlStateNormal];
     [self addSubview:_appleButton];
     
-    
-    //微信
     _wechatButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width/2+20,610,60,60)];
     [_wechatButton setImage:[UIImage imageNamed:@"wechat.png"] forState:UIControlStateNormal];
     [self addSubview:_wechatButton];

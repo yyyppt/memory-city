@@ -5,12 +5,15 @@
 //  Created by yyyyy on 2026/3/9.
 //
 
+//
+//  SceneDelegate.m
+//  MemoryCity
+//
+//  Created by yyyyy on 2026/3/9.
+//
+
 #import "SceneDelegate.h"
-<<<<<<< HEAD
-#import "LoginViewController.h"
-=======
 #import "YALTabBarController.h"
->>>>>>> 299c15e95e6a5630e9fd6af8cfb96cfc561c8c98
 
 @interface SceneDelegate ()
 
@@ -20,13 +23,6 @@
 
 
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
-<<<<<<< HEAD
-    UIWindowScene *windowScene = (UIWindowScene *)scene;
-    self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
-    LoginViewController *loginVC = [[LoginViewController alloc] init];
-    self.window.rootViewController = loginVC;
-    [self.window makeKeyAndVisible];
-=======
   // Use this method to optionally configure and attach the UIWindow `window` to the provided UIWindowScene `scene`.
   // If using a storyboard, the `window` property will automatically be initialized and attached to the scene.
   // This delegate does not imply the connecting scene or session are new (see `application:configurationForConnectingSceneSession` instead).
@@ -41,7 +37,6 @@
   YALTabBarController *tabBarController = [[YALTabBarController alloc] init];
   self.window.rootViewController = tabBarController;
   [self.window makeKeyAndVisible];
->>>>>>> 299c15e95e6a5630e9fd6af8cfb96cfc561c8c98
 }
 
 

@@ -30,37 +30,37 @@
   [self setupTabBarAppearance];
   [self setupCenterButton];
 
-  // 顶部导航栏使用奶油白 + 橙色图标（支持深色模式）
-  UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
-  UINavigationBar *navigationBar = [UINavigationBar appearance];
-  navigationBar.tintColor = highlightColor;
-
-  if (@available(iOS 13.0, *)) {
-    UIColor *dynamicBackground = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-      if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-        // 深色模式：接近 systemBackground，略带透明
-        return [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.95];
-      } else {
-        // 浅色模式：奶油白
-        return [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:0.95];
-      }
-    }];
-
-    UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
-    [appearance configureWithDefaultBackground];
-    appearance.backgroundColor = dynamicBackground;
-    appearance.shadowColor = [UIColor clearColor];
-    appearance.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor labelColor] };
-
-    navigationBar.standardAppearance = appearance;
-    navigationBar.scrollEdgeAppearance = appearance;
-    navigationBar.compactAppearance = appearance;
-  } else {
-    navigationBar.barTintColor = [UIColor whiteColor];
-    navigationBar.translucent = YES;
-    [navigationBar setShadowImage:[UIImage new]];
-    [navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
-  }
+//  // 顶部导航栏使用奶油白 + 橙色图标（支持深色模式）
+//  UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+//  UINavigationBar *navigationBar = [UINavigationBar appearance];
+//  navigationBar.tintColor = highlightColor;
+//
+//  if (@available(iOS 13.0, *)) {
+//    UIColor *dynamicBackground = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+//      if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
+//        // 深色模式：接近 systemBackground，略带透明
+//        return [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.95];
+//      } else {
+//        // 浅色模式：奶油白
+//        return [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:0.95];
+//      }
+//    }];
+//
+//    UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+//    [appearance configureWithDefaultBackground];
+//    appearance.backgroundColor = dynamicBackground;
+//    appearance.shadowColor = [UIColor clearColor];
+//    appearance.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor labelColor] };
+//
+//    navigationBar.standardAppearance = appearance;
+//    navigationBar.scrollEdgeAppearance = appearance;
+//    navigationBar.compactAppearance = appearance;
+//  } else {
+//    navigationBar.barTintColor = [UIColor whiteColor];
+//    navigationBar.translucent = YES;
+//    [navigationBar setShadowImage:[UIImage new]];
+//    [navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
+//  }
 }
 
 - (void)setupViewControllers {

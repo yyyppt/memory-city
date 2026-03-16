@@ -5,6 +5,13 @@
 //  Created by yyyyy on 2026/3/9.
 //
 
+//
+//  SceneDelegate.m
+//  MemoryCity
+//
+//  Created by yyyyy on 2026/3/9.
+//
+
 #import "SceneDelegate.h"
 #import "YALLoginController.h"
 

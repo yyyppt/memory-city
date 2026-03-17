@@ -59,7 +59,6 @@
                                       itemWidth:itemWidth];
     }
 
-    // 找到当前最短的一列
     NSInteger targetColumn = 0;
     CGFloat minHeight = self.columnHeights.firstObject.floatValue;
     for (NSInteger col = 1; col < self.columnHeights.count; col++) {
@@ -82,7 +81,6 @@
     self.columnHeights[targetColumn] = @(CGRectGetMaxY(frame) + self.rowSpacing);
   }
 
-  // 内容高度为最高一列
   CGFloat maxHeight = self.sectionInset.top;
   for (NSNumber *height in self.columnHeights) {
     if (height.floatValue > maxHeight) {
@@ -117,7 +115,6 @@
 }
 
 - (BOOL)shouldInvalidateLayoutForBoundsChange:(CGRect)newBounds {
-  // 宽度变化时需要重新计算（横竖屏切换）
   CGRect oldBounds = self.collectionView.bounds;
   return fabs(CGRectGetWidth(oldBounds) - CGRectGetWidth(newBounds)) > 0.5;
 }

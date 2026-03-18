@@ -7,6 +7,7 @@
 
 #import "YALMessageController.h"
 #import "YALMessageCell.h"
+#import <Masonry/Masonry.h>
 
 @interface YALMessageController () <UITableViewDataSource, UITableViewDelegate>
 
@@ -20,9 +21,10 @@
 - (void)viewDidLoad {
   [super viewDidLoad];
 
-  self.view.backgroundColor = [UIColor systemBackgroundColor];
+  self.view.backgroundColor = [self pageBackgroundColor];
   self.title = @"消息";
   self.navigationItem.hidesBackButton = YES;
+  self.navigationController.navigationBar.tintColor = [self accentColor];
 
   if (@available(iOS 13.0, *)) {
     UIImage *back = [UIImage systemImageNamed:@"chevron.left"];
@@ -44,23 +46,23 @@
                                        style:UIBarButtonItemStylePlain
                                       target:self
                                       action:@selector(trashTapped)];
+    moreItem.tintColor = [self accentColor];
+    trashItem.tintColor = [self accentColor];
     self.navigationItem.rightBarButtonItems = @[trashItem, moreItem];
   }
 
-  self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
-  if (@available(iOS 13.0, *)) {
-    self.tableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
-  } else {
-    self.tableView.backgroundColor = [UIColor colorWithWhite:0.98 alpha:1.0];
-  }
+  self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+  self.tableView.backgroundColor = [self pageBackgroundColor];
   self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
   self.tableView.showsVerticalScrollIndicator = NO;
   self.tableView.dataSource = self;
   self.tableView.delegate = self;
-  self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   [self.tableView registerClass:[YALMessageCell class] forCellReuseIdentifier:@"YALMessageCell"];
   self.tableView.tableHeaderView = [self buildHeaderView];
   [self.view addSubview:self.tableView];
+  [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.edges.equalTo(self.view);
+  }];
 
   self.messages = @[
     @{
@@ -70,7 +72,7 @@
       @"time": @"11:42",
       @"unreadCount": @2,
       @"showDot": @NO,
-      @"avatarBgColor": [UIColor systemBlueColor],
+      @"avatarBgColor": [self accentColor],
       @"avatarIcon": [UIImage systemImageNamed:@"sparkles"]
     },
     @{
@@ -80,7 +82,7 @@
       @"time": @"昨天",
       @"unreadCount": @0,
       @"showDot": @YES,
-      @"avatarBgColor": [UIColor systemOrangeColor],
+      @"avatarBgColor": [self warmBrownColor],
       @"avatarIcon": [UIImage systemImageNamed:@"face.smiling"]
     },
     @{
@@ -90,7 +92,7 @@
       @"time": @"周三",
       @"unreadCount": @0,
       @"showDot": @NO,
-      @"avatarBgColor": [UIColor systemPurpleColor],
+      @"avatarBgColor": [self accentSoftColor],
       @"avatarIcon": [UIImage systemImageNamed:@"camera.aperture"]
     },
     @{
@@ -100,7 +102,7 @@
       @"time": @"周二",
       @"unreadCount": @12,
       @"showDot": @NO,
-      @"avatarBgColor": [UIColor systemGreenColor],
+      @"avatarBgColor": [self mutedAccentColor],
       @"avatarIcon": [UIImage systemImageNamed:@"person.2.fill"]
     }
   ];
@@ -108,56 +110,100 @@
 
 - (UIView *)buildHeaderView {
   CGFloat width = CGRectGetWidth(self.view.bounds);
-  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 100)];
+  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 114)];
   header.backgroundColor = [UIColor clearColor];
 
   NSArray<NSDictionary *> *items = @[
     @{
       @"title": @"回复与@",
       @"icon": @"bubble.left.and.bubble.right.fill",
-      @"bgColor": [UIColor secondarySystemBackgroundColor],
-      @"iconColor": [UIColor systemGreenColor]
+      @"bgColor": [UIColor colorWithRed:1.0 green:0.97 blue:0.93 alpha:1.0],
+      @"iconColor": [self accentColor]
     },
     @{
       @"title": @"收到喜欢",
       @"icon": @"heart.fill",
-      @"bgColor": [UIColor secondarySystemBackgroundColor],
-      @"iconColor": [UIColor systemPinkColor]
+      @"bgColor": [UIColor colorWithRed:0.995 green:0.955 blue:0.91 alpha:1.0],
+      @"iconColor": [self warmBrownColor]
     },
     @{
       @"title": @"新增粉丝",
       @"icon": @"person.2.fill",
-      @"bgColor": [UIColor secondarySystemBackgroundColor],
-      @"iconColor": [UIColor systemBlueColor]
+      @"bgColor": [UIColor colorWithRed:1.0 green:0.975 blue:0.945 alpha:1.0],
+      @"iconColor": [self mutedAccentColor]
     }
   ];
 
   CGFloat gap = 10.0;
-  CGFloat cardWidth = (width - 16.0 * 2 - gap * 2) / 3.0;
+  NSMutableArray<UIView *> *cards = [NSMutableArray array];
   for (NSInteger i = 0; i < items.count; i++) {
     NSDictionary *item = items[i];
-    UIView *card = [[UIView alloc] initWithFrame:CGRectMake(16 + i * (cardWidth + gap), 12, cardWidth, 74)];
+    UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
     card.backgroundColor = item[@"bgColor"];
     card.layer.cornerRadius = 14.0;
     card.layer.masksToBounds = YES;
+    card.layer.borderWidth = 1.0;
+    card.layer.borderColor = [self softBorderColor].CGColor;
 
-    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((cardWidth - 22) / 2.0, 14, 22, 22)];
+    UIView *iconBadge = [[UIView alloc] initWithFrame:CGRectZero];
+    iconBadge.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.62];
+    iconBadge.layer.cornerRadius = 17.0;
+
+    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectZero];
     if (@available(iOS 13.0, *)) {
       iconView.image = [UIImage systemImageNamed:item[@"icon"]];
     }
     iconView.tintColor = item[@"iconColor"];
     iconView.contentMode = UIViewContentModeScaleAspectFit;
 
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 43, cardWidth, 20)];
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     titleLabel.text = item[@"title"];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
     titleLabel.textColor = [UIColor labelColor];
 
-    [card addSubview:iconView];
+    [iconBadge addSubview:iconView];
+    [card addSubview:iconBadge];
     [card addSubview:titleLabel];
     [header addSubview:card];
+    [cards addObject:card];
+
+    [iconBadge mas_makeConstraints:^(MASConstraintMaker *make) {
+      make.top.equalTo(card.mas_top).offset(13.0);
+      make.centerX.equalTo(card.mas_centerX);
+      make.width.height.mas_equalTo(34.0);
+    }];
+
+    [iconView mas_makeConstraints:^(MASConstraintMaker *make) {
+      make.center.equalTo(iconBadge);
+      make.width.height.mas_equalTo(20.0);
+    }];
+
+    [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+      make.left.right.equalTo(card);
+      make.top.equalTo(iconBadge.mas_bottom).offset(4.0);
+    }];
   }
+
+  UIView *firstCard = cards.firstObject;
+  UIView *secondCard = cards.count > 1 ? cards[1] : nil;
+  UIView *thirdCard = cards.count > 2 ? cards[2] : nil;
+
+  [firstCard mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(header.mas_left).offset(16.0);
+    make.top.equalTo(header.mas_top).offset(16.0);
+    make.bottom.equalTo(header.mas_bottom).offset(-16.0);
+  }];
+  [secondCard mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(firstCard.mas_right).offset(gap);
+    make.top.bottom.width.equalTo(firstCard);
+  }];
+  [thirdCard mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(secondCard.mas_right).offset(gap);
+    make.right.equalTo(header.mas_right).offset(-16.0);
+    make.top.bottom.width.equalTo(firstCard);
+  }];
+
   return header;
 }
 
@@ -186,5 +232,34 @@
 }
 
 - (void)trashTapped {}
+
+#pragma mark - Colors
+
+- (UIColor *)accentColor {
+  return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+}
+
+- (UIColor *)accentSoftColor {
+  return [UIColor colorWithRed:0.95 green:0.73 blue:0.47 alpha:1.0];
+}
+
+- (UIColor *)mutedAccentColor {
+  return [UIColor colorWithRed:0.79 green:0.62 blue:0.45 alpha:1.0];
+}
+
+- (UIColor *)warmBrownColor {
+  return [UIColor colorWithRed:0.69 green:0.52 blue:0.35 alpha:1.0];
+}
+
+- (UIColor *)pageBackgroundColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor systemGroupedBackgroundColor];
+  }
+  return [UIColor colorWithWhite:0.97 alpha:1.0];
+}
+
+- (UIColor *)softBorderColor {
+  return [UIColor colorWithWhite:0.0 alpha:0.05];
+}
 
 @end

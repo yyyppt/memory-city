@@ -11,12 +11,16 @@
 #import "YALPostModel.h"
 #import <MapKit/MapKit.h>
 #import <CoreLocation/CoreLocation.h>
+#import "YALReleaseController.h"
 
-@interface YALMapController () <MKMapViewDelegate, CLLocationManagerDelegate>
+@interface YALMapController () <MKMapViewDelegate, CLLocationManagerDelegate, UITextFieldDelegate>
 
 @property (nonatomic, strong) MKMapView *mapView;
 @property (nonatomic, strong) CLLocationManager *locationManager;
 @property (nonatomic, strong) UIButton *locateButton;
+@property (nonatomic, strong) UIView *searchContainerView;
+@property (nonatomic, strong) UITextField *searchTextField;
+@property (nonatomic, strong) UIButton *searchButton;
 
 @end
 
@@ -26,23 +30,119 @@
     [super viewDidLoad];
 
     self.view.backgroundColor = [UIColor whiteColor];
+    self.extendedLayoutIncludesOpaqueBars = YES;
+    [self setupNavigationBar];
 
-    // 初始化地图
     self.mapView = [[MKMapView alloc] initWithFrame:self.view.bounds];
     self.mapView.delegate = self;
 
     [self.view addSubview:self.mapView];
+    [self setupBottomSearchBar];
     [self setupLocateButton];
 
     // 初始化定位
     self.locationManager = [[CLLocationManager alloc] init];
     self.locationManager.delegate = self;
 
-    // 长按手势（添加回忆）
     UILongPressGestureRecognizer *longPress =
     [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPress:)];
 
     [self.mapView addGestureRecognizer:longPress];
+}
+
+- (void)setupNavigationBar {
+    self.title = @"Map";
+    self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
+    self.navigationController.navigationBar.translucent = YES;
+
+    if (@available(iOS 13.0, *)) {
+        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithDefaultBackground];
+        appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+        appearance.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.7];
+        appearance.titleTextAttributes = @{
+            NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold],
+            NSForegroundColorAttributeName: [UIColor labelColor]
+        };
+
+        // 移除分隔线
+        appearance.shadowColor = nil;
+        appearance.shadowImage = [UIImage new];
+
+        // 应用到所有状态
+        self.navigationController.navigationBar.standardAppearance = appearance;
+        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+        self.navigationController.navigationBar.compactAppearance = appearance;
+
+        // 当滚动到边缘时的效果
+        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+    } else {
+        // iOS 13以下版本的设置
+        self.navigationController.navigationBar.barTintColor = [UIColor colorWithWhite:1.0 alpha:0.7];
+        self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
+        [self.navigationController.navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
+        self.navigationController.navigationBar.shadowImage = [UIImage new];
+    }
+
+    self.navigationItem.rightBarButtonItem = nil;
+}
+- (void)setupBottomSearchBar {
+    self.searchContainerView = [[UIView alloc] init];
+    self.searchContainerView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.searchContainerView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.96];
+    self.searchContainerView.layer.cornerRadius = 16.0;
+    self.searchContainerView.layer.masksToBounds = YES;
+    self.searchContainerView.layer.borderWidth = 1.0;
+    self.searchContainerView.layer.borderColor = [UIColor colorWithWhite:0.88 alpha:1.0].CGColor;
+
+    self.searchTextField = [[UITextField alloc] init];
+    self.searchTextField.translatesAutoresizingMaskIntoConstraints = NO;
+    self.searchTextField.placeholder = @"搜索地点、地址或地标";
+    self.searchTextField.font = [UIFont systemFontOfSize:15 weight:UIFontWeightRegular];
+    self.searchTextField.returnKeyType = UIReturnKeySearch;
+    self.searchTextField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    self.searchTextField.delegate = self;
+    self.searchTextField.leftViewMode = UITextFieldViewModeAlways;
+    UIView *leftPadding = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 20)];
+    self.searchTextField.leftView = leftPadding;
+
+    self.searchButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.searchButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.searchButton setTitle:@"搜索" forState:UIControlStateNormal];
+    self.searchButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [self.searchButton addTarget:self action:@selector(handleSearchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+
+    [self.searchContainerView addSubview:self.searchTextField];
+    [self.searchContainerView addSubview:self.searchButton];
+    [self.view addSubview:self.searchContainerView];
+
+    UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [self.searchContainerView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor constant:14.0],
+        [self.searchContainerView.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor constant:-14.0],
+        [self.searchContainerView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-12.0],
+        [self.searchContainerView.heightAnchor constraintEqualToConstant:54.0],
+
+        [self.searchButton.trailingAnchor constraintEqualToAnchor:self.searchContainerView.trailingAnchor constant:-12.0],
+        [self.searchButton.centerYAnchor constraintEqualToAnchor:self.searchContainerView.centerYAnchor],
+        [self.searchButton.widthAnchor constraintEqualToConstant:44.0],
+
+        [self.searchTextField.leadingAnchor constraintEqualToAnchor:self.searchContainerView.leadingAnchor constant:10.0],
+        [self.searchTextField.trailingAnchor constraintEqualToAnchor:self.searchButton.leadingAnchor constant:-8.0],
+        [self.searchTextField.centerYAnchor constraintEqualToAnchor:self.searchContainerView.centerYAnchor],
+        [self.searchTextField.heightAnchor constraintEqualToConstant:40.0]
+    ]];
+}
+
+- (void)addMemoryPointAtCoordinate:(CLLocationCoordinate2D)coordinate {
+    YALMemoryPoint *annotation = [YALMemoryPoint pointWithCoordinate:coordinate
+                                                               title:@"新的回忆"
+                                                            subtitle:@"点气泡后，左删右看"
+                                                          detailText:@"刚刚在地图上留下的新记忆"
+                                                         userCreated:YES];
+
+    [self.mapView addAnnotation:annotation];
+    [self.mapView selectAnnotation:annotation animated:YES];
 }
 
 - (void)setupLocateButton {
@@ -68,12 +168,58 @@
     [self.view addSubview:self.locateButton];
 
     UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
+    NSLayoutYAxisAnchor *bottomAnchorTarget = self.searchContainerView ? self.searchContainerView.topAnchor : safeArea.bottomAnchor;
+    CGFloat bottomConstant = self.searchContainerView ? -12.0 : -24.0;
     [NSLayoutConstraint activateConstraints:@[
         [self.locateButton.widthAnchor constraintEqualToConstant:52.0],
         [self.locateButton.heightAnchor constraintEqualToConstant:52.0],
         [self.locateButton.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor constant:-16.0],
-        [self.locateButton.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-24.0]
+        [self.locateButton.bottomAnchor constraintEqualToAnchor:bottomAnchorTarget constant:bottomConstant]
     ]];
+}
+
+- (void)openReleaseController {
+    YALReleaseController *release = [[YALReleaseController alloc] init];
+    release.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:release animated:YES];
+}
+
+- (void)handleSearchButtonTapped {
+    NSString *query = [self.searchTextField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (query.length == 0) {
+        return;
+    }
+    [self.searchTextField resignFirstResponder];
+
+    MKLocalSearchRequest *request = [[MKLocalSearchRequest alloc] init];
+    request.naturalLanguageQuery = query;
+    request.region = self.mapView.region;
+
+    MKLocalSearch *search = [[MKLocalSearch alloc] initWithRequest:request];
+    __weak typeof(self) weakSelf = self;
+    [search startWithCompletionHandler:^(MKLocalSearchResponse * _Nullable response, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+
+        MKMapItem *firstItem = response.mapItems.firstObject;
+        if (error || !firstItem) {
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"未找到地点"
+                                                                           message:@"换个关键词试试，例如商圈、地铁站、景点名。"
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+            return;
+        }
+
+        CLLocationCoordinate2D coordinate = firstItem.placemark.coordinate;
+        MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(coordinate, 1200, 1200);
+        [strongSelf.mapView setRegion:region animated:YES];
+    }];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [self handleSearchButtonTapped];
+    return YES;
 }
 
 - (void)handleLocateButtonTapped {
@@ -117,18 +263,48 @@
     CLLocationCoordinate2D coordinate =
     [self.mapView convertPoint:point toCoordinateFromView:self.mapView];
 
-    // 创建标记
-    YALMemoryPoint *annotation = [YALMemoryPoint pointWithCoordinate:coordinate
-                                                               title:@"新的回忆"
-                                                            subtitle:@"点气泡后，左删右看"
-                                                          detailText:@"刚刚在地图上留下的新记忆"
-                                                         userCreated:YES];
+    UIAlertController *sheet =
+        [UIAlertController alertControllerWithTitle:@"长按操作"
+                                            message:nil
+                                     preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [self.mapView addAnnotation:annotation];
-    [self.mapView selectAnnotation:annotation animated:YES];
+    __weak typeof(self) weakSelf = self;
+    [sheet addAction:[UIAlertAction actionWithTitle:@"添加标点"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        [strongSelf addMemoryPointAtCoordinate:coordinate];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"去发布"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        YALReleaseController *release = [[YALReleaseController alloc] init];
+        release.hidesBottomBarWhenPushed = YES;
+        if (strongSelf.navigationController) {
+            [strongSelf.navigationController pushViewController:release animated:YES];
+        } else {
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:release];
+            [strongSelf presentViewController:nav animated:YES completion:nil];
+        }
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    // iPad 上 ActionSheet 必须设置锚点
+    UIPopoverPresentationController *popover = sheet.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = self.mapView;
+        popover.sourceRect = CGRectMake(point.x, point.y, 1, 1);
+        popover.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    }
+
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
-#pragma mark - 自定义标记样式
 
 - (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id<MKAnnotation>)annotation {
 

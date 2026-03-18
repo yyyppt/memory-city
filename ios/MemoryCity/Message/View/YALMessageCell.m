@@ -6,8 +6,10 @@
 //
 
 #import "YALMessageCell.h"
+#import <Masonry/Masonry.h>
 
 @implementation YALMessageCell {
+  UIView *_cardView;
   UIView *_avatarContainer;
   UIImageView *_avatarIconView;
   UILabel *_nameLabel;
@@ -22,11 +24,19 @@
   if (self) {
     self.backgroundColor = [UIColor clearColor];
     self.selectionStyle = UITableViewCellSelectionStyleNone;
+    self.contentView.backgroundColor = [UIColor clearColor];
+
+    _cardView = [[UIView alloc] init];
+    _cardView.backgroundColor = [self cardBackgroundColor];
+    _cardView.layer.cornerRadius = 18.0;
+    _cardView.layer.borderWidth = 1.0;
+    _cardView.layer.borderColor = [self softBorderColor].CGColor;
+    [self.contentView addSubview:_cardView];
 
     _avatarContainer = [[UIView alloc] init];
     _avatarContainer.layer.cornerRadius = 24.0;
     _avatarContainer.layer.masksToBounds = YES;
-    [self.contentView addSubview:_avatarContainer];
+    [_cardView addSubview:_avatarContainer];
 
     _avatarIconView = [[UIImageView alloc] init];
     _avatarIconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -35,58 +45,85 @@
     _nameLabel = [[UILabel alloc] init];
     _nameLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     _nameLabel.textColor = [UIColor labelColor];
-    [self.contentView addSubview:_nameLabel];
+    [_cardView addSubview:_nameLabel];
 
     _summaryLabel = [[UILabel alloc] init];
     _summaryLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
     _summaryLabel.textColor = [UIColor secondaryLabelColor];
-    [self.contentView addSubview:_summaryLabel];
+    [_cardView addSubview:_summaryLabel];
 
     _timeLabel = [[UILabel alloc] init];
     _timeLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
     _timeLabel.textColor = [UIColor secondaryLabelColor];
     _timeLabel.textAlignment = NSTextAlignmentRight;
-    [self.contentView addSubview:_timeLabel];
+    [_cardView addSubview:_timeLabel];
 
     _badgeLabel = [[UILabel alloc] init];
     _badgeLabel.textColor = [UIColor whiteColor];
-    if (@available(iOS 13.0, *)) {
-      _badgeLabel.backgroundColor = [UIColor systemRedColor];
-    } else {
-      _badgeLabel.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
-    }
+    _badgeLabel.backgroundColor = [self accentColor];
     _badgeLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
     _badgeLabel.textAlignment = NSTextAlignmentCenter;
     _badgeLabel.layer.cornerRadius = 9.0;
     _badgeLabel.layer.masksToBounds = YES;
-    [self.contentView addSubview:_badgeLabel];
+    [_cardView addSubview:_badgeLabel];
 
     _dotView = [[UIView alloc] init];
-    if (@available(iOS 13.0, *)) {
-      _dotView.backgroundColor = [UIColor systemRedColor];
-    } else {
-      _dotView.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.19 alpha:1.0];
-    }
+    _dotView.backgroundColor = [self accentColor];
     _dotView.layer.cornerRadius = 4.0;
     _dotView.layer.masksToBounds = YES;
-    [self.contentView addSubview:_dotView];
+    [_cardView addSubview:_dotView];
+
+    [self setupConstraints];
   }
   return self;
 }
 
-- (void)layoutSubviews {
-  [super layoutSubviews];
+- (void)setupConstraints {
+  [_cardView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.edges.equalTo(self.contentView).insets(UIEdgeInsetsMake(6.0, 12.0, 6.0, 12.0));
+  }];
 
-  CGFloat contentWidth = CGRectGetWidth(self.contentView.bounds);
-  _avatarContainer.frame = CGRectMake(16, 12, 48, 48);
-  _avatarIconView.frame = CGRectMake(12, 12, 24, 24);
+  [_avatarContainer mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(_cardView.mas_left).offset(14.0);
+    make.centerY.equalTo(_cardView.mas_centerY);
+    make.width.height.mas_equalTo(48.0);
+  }];
 
-  _nameLabel.frame = CGRectMake(76, 14, contentWidth - 160, 22);
-  _summaryLabel.frame = CGRectMake(76, 38, contentWidth - 160, 20);
-  _timeLabel.frame = CGRectMake(contentWidth - 90, 14, 72, 20);
+  [_avatarIconView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.center.equalTo(_avatarContainer);
+    make.width.height.mas_equalTo(24.0);
+  }];
 
-  _badgeLabel.frame = CGRectMake(contentWidth - 36, 40, 20, 18);
-  _dotView.frame = CGRectMake(contentWidth - 24, 45, 8, 8);
+  [_timeLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(_cardView.mas_top).offset(10.0);
+    make.right.equalTo(_cardView.mas_right).offset(-14.0);
+    make.width.mas_equalTo(60.0);
+  }];
+
+  [_nameLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(_avatarContainer.mas_right).offset(12.0);
+    make.top.equalTo(_cardView.mas_top).offset(10.0);
+    make.right.lessThanOrEqualTo(_timeLabel.mas_left).offset(-10.0);
+  }];
+
+  [_summaryLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(_nameLabel);
+    make.top.equalTo(_nameLabel.mas_bottom);
+    make.right.lessThanOrEqualTo(_cardView.mas_right).offset(-48.0);
+  }];
+
+  [_badgeLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.right.equalTo(_cardView.mas_right).offset(-14.0);
+    make.top.equalTo(_cardView.mas_top).offset(32.0);
+    make.height.mas_equalTo(18.0);
+    make.width.mas_equalTo(20.0);
+  }];
+
+  [_dotView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.right.equalTo(_cardView.mas_right).offset(-14.0);
+    make.top.equalTo(_cardView.mas_top).offset(37.0);
+    make.width.height.mas_equalTo(8.0);
+  }];
 }
 
 - (void)configureWithMessage:(NSDictionary *)message {
@@ -104,14 +141,8 @@
   if (highlight.length > 0) {
     NSRange range = [name rangeOfString:highlight];
     if (range.location != NSNotFound) {
-      UIColor *highlightColor;
-      if (@available(iOS 13.0, *)) {
-        highlightColor = [UIColor systemBlueColor];
-      } else {
-        highlightColor = [UIColor colorWithRed:0.41 green:0.73 blue:1.0 alpha:1.0];
-      }
       [nameAttr addAttribute:NSForegroundColorAttributeName
-                       value:highlightColor
+                       value:[self accentColor]
                        range:range];
     }
   }
@@ -126,13 +157,34 @@
     _dotView.hidden = YES;
     _badgeLabel.text = unreadCount.integerValue > 99 ? @"99+" : unreadCount.stringValue;
     CGFloat width = unreadCount.integerValue > 9 ? 26.0 : 20.0;
-    _badgeLabel.frame = CGRectMake(CGRectGetWidth(self.contentView.bounds) - 16 - width, 40, width, 18);
+    [_badgeLabel mas_updateConstraints:^(MASConstraintMaker *make) {
+      make.width.mas_equalTo(width);
+    }];
     _badgeLabel.layer.cornerRadius = 9.0;
   } else {
     _badgeLabel.hidden = YES;
     _dotView.hidden = !showDot;
+    [_badgeLabel mas_updateConstraints:^(MASConstraintMaker *make) {
+      make.width.mas_equalTo(20.0);
+    }];
   }
 }
 
-@end
+#pragma mark - Colors
 
+- (UIColor *)accentColor {
+  return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+}
+
+- (UIColor *)cardBackgroundColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor secondarySystemBackgroundColor];
+  }
+  return [UIColor whiteColor];
+}
+
+- (UIColor *)softBorderColor {
+  return [UIColor colorWithWhite:0.0 alpha:0.05];
+}
+
+@end

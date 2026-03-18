@@ -15,6 +15,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) YALTimeLineEntryModel *entry;
 @property (nonatomic, copy, nullable) void (^tapAction)(YALTimeLineEntryModel *entry);
 
++ (CGFloat)cardHeightForEntry:(YALTimeLineEntryModel *)entry width:(CGFloat)cardWidth;
+
 @end
 
 NS_ASSUME_NONNULL_END

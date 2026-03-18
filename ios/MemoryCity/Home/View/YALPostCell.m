@@ -55,7 +55,7 @@
     self.fixedImageHeight = 0.0;
 
     _imageView = [[UIImageView alloc] init];
-    _imageView.contentMode = UIViewContentModeScaleAspectFill;
+    _imageView.contentMode = UIViewContentModeScaleAspectFit;
     _imageView.clipsToBounds = YES;
 
     _titleLabel = [[UILabel alloc] init];

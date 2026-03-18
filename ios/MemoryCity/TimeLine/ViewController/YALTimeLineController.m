@@ -132,8 +132,8 @@
 - (void)timeLineView:(YALTimeLineView *)view didSelectEntry:(YALTimeLineEntryModel *)entry {
   (void)view;
   YALTimeLineDetailController *detail = [[YALTimeLineDetailController alloc] init];
-  detail.dateText = entry.dateText ?: @"";
-  detail.coverImage = entry.image;
+  detail.dateText  = entry.dateText ?: @"";
+  detail.coverImage = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
   detail.hidesBottomBarWhenPushed = YES;
   [self.navigationController pushViewController:detail animated:YES];
 }

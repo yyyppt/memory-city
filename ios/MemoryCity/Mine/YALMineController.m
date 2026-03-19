@@ -353,7 +353,6 @@
     }];
 }
 
-#pragma mark - Factory
 
 - (UIView *)makeStatViewWithValue:(NSString *)value title:(NSString *)title {
     UIView *container = [[UIView alloc] init];
@@ -392,6 +391,7 @@
                                          tag:(NSInteger)tag {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.tag = tag;
+    button.userInteractionEnabled = YES;
     button.backgroundColor = [self cardBackgroundColor];
     button.layer.cornerRadius = 20.0;
     button.layer.borderWidth = 1.0;
@@ -399,11 +399,13 @@
     [button addTarget:self action:@selector(quickActionTapped:) forControlEvents:UIControlEventTouchUpInside];
 
     UIView *iconBadge = [[UIView alloc] init];
+    iconBadge.userInteractionEnabled = NO;
     iconBadge.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.12];
     iconBadge.layer.cornerRadius = 18.0;
     [button addSubview:iconBadge];
 
     UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.userInteractionEnabled = NO;
     iconView.tintColor = [self accentColor];
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     if (@available(iOS 13.0, *)) {
@@ -413,11 +415,13 @@
 
     UILabel *titleLabel = [self labelWithFont:[UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold]
                                         color:[UIColor labelColor]];
+    titleLabel.userInteractionEnabled = NO;
     titleLabel.text = title;
     [button addSubview:titleLabel];
 
     UILabel *subtitleLabel = [self labelWithFont:[UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular]
                                            color:[UIColor secondaryLabelColor]];
+    subtitleLabel.userInteractionEnabled = NO;
     subtitleLabel.text = subtitle;
     [button addSubview:subtitleLabel];
 
@@ -452,6 +456,7 @@
                                      tag:(NSInteger)tag {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.tag = tag;
+    button.userInteractionEnabled = YES;
     button.backgroundColor = [self cardBackgroundColor];
     button.layer.cornerRadius = 18.0;
     button.layer.borderWidth = 1.0;
@@ -459,11 +464,13 @@
     [button addTarget:self action:@selector(serviceTapped:) forControlEvents:UIControlEventTouchUpInside];
 
     UIView *iconBadge = [[UIView alloc] init];
+    iconBadge.userInteractionEnabled = NO;
     iconBadge.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.10];
     iconBadge.layer.cornerRadius = 18.0;
     [button addSubview:iconBadge];
 
     UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.userInteractionEnabled = NO;
     iconView.tintColor = [self accentColor];
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     if (@available(iOS 13.0, *)) {
@@ -473,15 +480,18 @@
 
     UILabel *titleLabel = [self labelWithFont:[UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold]
                                         color:[UIColor labelColor]];
+    titleLabel.userInteractionEnabled = NO;
     titleLabel.text = title;
     [button addSubview:titleLabel];
 
     UILabel *subtitleLabel = [self labelWithFont:[UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular]
                                            color:[UIColor secondaryLabelColor]];
+    subtitleLabel.userInteractionEnabled = NO;
     subtitleLabel.text = subtitle;
     [button addSubview:subtitleLabel];
 
     UIImageView *chevronView = [[UIImageView alloc] init];
+    chevronView.userInteractionEnabled = NO;
     chevronView.tintColor = [UIColor tertiaryLabelColor];
     chevronView.contentMode = UIViewContentModeScaleAspectFit;
     if (@available(iOS 13.0, *)) {

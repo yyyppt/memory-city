@@ -16,7 +16,6 @@ target 'MemoryCity' do
   pod 'AFNetworking'
   pod 'Masonry'
   pod 'WCDB.objc'
-  pod 'LookinServer', :configurations => ['Debug']
   target 'MemoryCityTests' do
     inherit! :search_paths
   end

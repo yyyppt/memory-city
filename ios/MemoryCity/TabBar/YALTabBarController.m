@@ -8,7 +8,7 @@
 #import "YALTabBarController.h"
 #import "YALTabBar.h"
 #import "YALHomeController.h"
-#import "YALTimeLineController.h"
+#import "YALMemoryController.h"
 #import "YALReleaseController.h"
 #import "YALMapController.h"
 #import "YALMineController.h"
@@ -65,7 +65,7 @@
 
 - (void)setupViewControllers {
   YALHomeController *homeVC = [[YALHomeController alloc] init];
-  YALTimeLineController *memoriesVC = [[YALTimeLineController alloc] init];
+  YALMemoryController *memoriesVC = [[YALMemoryController alloc] init];
   YALReleaseController *releaseVC = [[YALReleaseController alloc] init];
   YALMapController *mapVC = [[YALMapController alloc] init];
   YALMineController *mineVC = [[YALMineController alloc] init];

@@ -54,6 +54,49 @@
   NSCalendar *cal = [NSCalendar currentCalendar];
   NSDateComponents *base = [cal components:NSCalendarUnitYear | NSCalendarUnitMonth fromDate:now];
 
+  // If set by YALMemoryController, only show one month section
+  if (self.displayYear > 0 && self.displayMonth >= 1 && self.displayMonth <= 12) {
+    NSDateComponents *c = [[NSDateComponents alloc] init];
+    c.year = self.displayYear;
+    c.month = self.displayMonth;
+    c.day = 1;
+    NSDate *monthDate = [cal dateFromComponents:c] ?: now;
+
+    NSDateFormatter *monthFmt = [[NSDateFormatter alloc] init];
+    monthFmt.dateFormat = @"yyyy.MM";
+
+    NSDateFormatter *dayFmt = [[NSDateFormatter alloc] init];
+    dayFmt.dateFormat = @"yyyy.MM.dd";
+
+    YALTimeLineSectionModel *section = [[YALTimeLineSectionModel alloc] init];
+    section.monthText = [monthFmt stringFromDate:monthDate];
+    section.expanded = YES;
+
+    // Demo: simulate “哪些日子发了记点”
+    NSInteger count = 8;
+    NSMutableArray<YALTimeLineEntryModel *> *entries = [NSMutableArray array];
+    for (NSInteger d = 0; d < count; d++) {
+      NSDateComponents *dc = [[NSDateComponents alloc] init];
+      dc.year = c.year;
+      dc.month = c.month;
+      dc.day = 1 + (NSInteger)(arc4random_uniform(26)); // 1~26
+      NSDate *dayDate = [cal dateFromComponents:dc] ?: monthDate;
+
+      YALTimeLineEntryModel *e = [[YALTimeLineEntryModel alloc] init];
+      e.dateText = [dayFmt stringFromDate:dayDate]; // 哪日发了
+      e.image = [UIImage imageNamed:@"WechatIMG395 1.jpg"];
+      e.titleText = e.dateText;
+      NSInteger cnt = 1 + (arc4random_uniform(4));
+      e.subtitleText = [NSString stringWithFormat:@"这天有%ld个记点", (long)cnt];
+      [entries addObject:e];
+    }
+    section.entries = entries;
+    [result addObject:section];
+
+    self.title = [NSString stringWithFormat:@"%ld · %02ld", (long)self.displayYear, (long)self.displayMonth];
+    return result;
+  }
+
   for (NSInteger i = 0; i < 6; i++) {
     NSDateComponents *c = [[NSDateComponents alloc] init];
     c.year = base.year;
@@ -119,20 +162,16 @@
 #pragma mark - YALTimeLineViewDelegate
 
 - (void)timeLineView:(YALTimeLineView *)view didToggleSectionAtIndex:(NSInteger)sectionIndex {
-  if (sectionIndex < 0 || sectionIndex >= self.sections.count) { return; }
+  if (sectionIndex < 0 || sectionIndex >= self.sections.count) return;
 
   YALTimeLineSectionModel *section = self.sections[sectionIndex];
   section.expanded = !section.isExpanded;
-
-  // 更自然的展开/收起：带弹性的 cross-fade + layout 过渡
-  view.sections = self.sections;
-  [view reloadData];
+  [view reloadDataAnimated:YES];
 }
 
 - (void)timeLineView:(YALTimeLineView *)view didSelectEntry:(YALTimeLineEntryModel *)entry {
-  (void)view;
   YALTimeLineDetailController *detail = [[YALTimeLineDetailController alloc] init];
-  detail.dateText  = entry.dateText ?: @"";
+  detail.dateText   = entry.dateText ?: @"";
   detail.coverImage = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
   detail.hidesBottomBarWhenPushed = YES;
   [self.navigationController pushViewController:detail animated:YES];

@@ -120,8 +120,14 @@
   CGFloat cardW = width - side * 2;
   CGFloat cardX = side;
 
-  CGFloat imageH = MIN(260.0, width * 0.68);
   CGFloat inner = 14.0;
+
+  CGFloat imageH = 200.0;
+  UIImage *img = self.coverImageView.image;
+  if (img && img.size.width > 0) {
+      imageH = (cardW - inner * 2) * (img.size.height / img.size.width);
+      imageH = MIN(imageH, width * 1.2);
+  }
 
   self.coverImageView.frame = CGRectMake(inner, inner, cardW - inner * 2, imageH);
 

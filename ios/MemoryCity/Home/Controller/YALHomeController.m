@@ -78,6 +78,7 @@ static CGFloat const kYALItemSpacing = 10.0;
         searchField.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightLight];
         searchField.borderStyle = UITextBorderStyleNone;
         searchField.tintColor = highlightColor; // 光标颜色
+        searchField.keyboardType = UIKeyboardTypeDefault;
 
         // 统一放大镜图标样式（颜色 + 粗细）
         UIImageSymbolConfiguration *config =

@@ -12,6 +12,7 @@
 #import <MapKit/MapKit.h>
 #import <CoreLocation/CoreLocation.h>
 #import "YALReleaseController.h"
+#import <Masonry/Masonry.h>
 
 @interface YALMapController () <MKMapViewDelegate, CLLocationManagerDelegate, UITextFieldDelegate>
 
@@ -21,6 +22,7 @@
 @property (nonatomic, strong) UIView *searchContainerView;
 @property (nonatomic, strong) UITextField *searchTextField;
 @property (nonatomic, strong) UIButton *searchButton;
+@property (nonatomic, strong) NSLayoutConstraint *searchBottomConstraint;
 
 @end
 
@@ -33,10 +35,27 @@
     self.extendedLayoutIncludesOpaqueBars = YES;
     [self setupNavigationBar];
 
-    self.mapView = [[MKMapView alloc] initWithFrame:self.view.bounds];
+    self.mapView = [[MKMapView alloc] initWithFrame:CGRectZero];
     self.mapView.delegate = self;
+    // 1. 统一“干净地图”基础风格
+    self.mapView.mapType = MKMapTypeStandard;
+    self.mapView.showsBuildings = YES;
+    self.mapView.showsTraffic = NO;
+    if (@available(iOS 13.0, *)) {
+
+        // 仅在系统支持时使用 POI 过滤（避免低版本编译报错）
+        Class poiClass = NSClassFromString(@"MKPointOfInterestFilter");
+        SEL selector = NSSelectorFromString(@"filterExcludingAllPointsOfInterest");
+        if (poiClass && [poiClass respondsToSelector:selector]) {
+            id filter = ((id (*)(id, SEL))[poiClass methodForSelector:selector])(poiClass, selector);
+            self.mapView.pointOfInterestFilter = filter;
+        }
+    }
 
     [self.view addSubview:self.mapView];
+    [self.mapView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
     [self setupBottomSearchBar];
     [self setupLocateButton];
 
@@ -48,6 +67,81 @@
     [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPress:)];
 
     [self.mapView addGestureRecognizer:longPress];
+
+    // Tap blank to dismiss keyboard
+    UITapGestureRecognizer *tap =
+    [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTapBlank)];
+    tap.cancelsTouchesInView = NO;
+    [self.view addGestureRecognizer:tap];
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self applyMapStyleForCurrentTrait];
+    static BOOL sDidShowHint = NO;
+    if (!sDidShowHint) {
+        sDidShowHint = YES;
+        [self showAddMemoryHint];
+    }
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        if (self.traitCollection.userInterfaceStyle != previousTraitCollection.userInterfaceStyle) {
+            [self applyMapStyleForCurrentTrait];
+        }
+    }
+}
+
+- (void)applyMapStyleForCurrentTrait {
+    self.mapView.mapType = MKMapTypeStandard;
+}
+
+- (void)showAddMemoryHint {
+    UIView *hint = [[UIView alloc] initWithFrame:CGRectZero];
+    hint.backgroundColor = [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:0.96];
+    hint.layer.cornerRadius = 16.0;
+    hint.layer.borderWidth = 1.0;
+    hint.layer.borderColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:0.25].CGColor;
+    hint.alpha = 0.0;
+
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
+    label.text = @"长按地图添加回忆点";
+    label.textColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.numberOfLines = 1;
+
+    [hint addSubview:label];
+    [self.view addSubview:hint];
+
+    hint.translatesAutoresizingMaskIntoConstraints = NO;
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    [NSLayoutConstraint activateConstraints:@[
+        [hint.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
+        [hint.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12.0],
+        [label.leadingAnchor constraintEqualToAnchor:hint.leadingAnchor constant:14.0],
+        [label.trailingAnchor constraintEqualToAnchor:hint.trailingAnchor constant:-14.0],
+        [label.topAnchor constraintEqualToAnchor:hint.topAnchor constant:8.0],
+        [label.bottomAnchor constraintEqualToAnchor:hint.bottomAnchor constant:-8.0]
+    ]];
+
+    [UIView animateWithDuration:0.25 animations:^{
+        hint.alpha = 1.0;
+    } completion:^(__unused BOOL finished) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.3 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.25
+                             animations:^{
+                hint.alpha = 0.0;
+            } completion:^(__unused BOOL finished2) {
+                [hint removeFromSuperview];
+            }];
+        });
+    }];
 }
 
 - (void)setupNavigationBar {
@@ -64,20 +158,15 @@
             NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold],
             NSForegroundColorAttributeName: [UIColor labelColor]
         };
-
-        // 移除分隔线
         appearance.shadowColor = nil;
         appearance.shadowImage = [UIImage new];
 
-        // 应用到所有状态
         self.navigationController.navigationBar.standardAppearance = appearance;
         self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
         self.navigationController.navigationBar.compactAppearance = appearance;
 
-        // 当滚动到边缘时的效果
         self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
     } else {
-        // iOS 13以下版本的设置
         self.navigationController.navigationBar.barTintColor = [UIColor colorWithWhite:1.0 alpha:0.7];
         self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
         [self.navigationController.navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
@@ -100,6 +189,7 @@
     self.searchTextField.placeholder = @"搜索地点、地址或地标";
     self.searchTextField.font = [UIFont systemFontOfSize:15 weight:UIFontWeightRegular];
     self.searchTextField.returnKeyType = UIReturnKeySearch;
+    self.searchTextField.keyboardType = UIKeyboardTypeDefault;
     self.searchTextField.clearButtonMode = UITextFieldViewModeWhileEditing;
     self.searchTextField.delegate = self;
     self.searchTextField.leftViewMode = UITextFieldViewModeAlways;
@@ -117,21 +207,29 @@
     [self.view addSubview:self.searchContainerView];
 
     UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
-    [NSLayoutConstraint activateConstraints:@[
-        [self.searchContainerView.leadingAnchor constraintEqualToAnchor:safeArea.leadingAnchor constant:14.0],
-        [self.searchContainerView.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor constant:-14.0],
-        [self.searchContainerView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-12.0],
-        [self.searchContainerView.heightAnchor constraintEqualToConstant:54.0],
+    self.searchBottomConstraint =
+    [self.searchContainerView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-12.0];
+    [NSLayoutConstraint activateConstraints:@[self.searchBottomConstraint]];
 
-        [self.searchButton.trailingAnchor constraintEqualToAnchor:self.searchContainerView.trailingAnchor constant:-12.0],
-        [self.searchButton.centerYAnchor constraintEqualToAnchor:self.searchContainerView.centerYAnchor],
-        [self.searchButton.widthAnchor constraintEqualToConstant:44.0],
+    // 其余位置和内部布局用 Masonry，和项目整体保持一致
+    [self.searchContainerView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.leading.equalTo(self.view.mas_leading).offset(14.0);
+        make.trailing.equalTo(self.view.mas_trailing).offset(-14.0);
+        make.height.mas_equalTo(54.0);
+    }];
 
-        [self.searchTextField.leadingAnchor constraintEqualToAnchor:self.searchContainerView.leadingAnchor constant:10.0],
-        [self.searchTextField.trailingAnchor constraintEqualToAnchor:self.searchButton.leadingAnchor constant:-8.0],
-        [self.searchTextField.centerYAnchor constraintEqualToAnchor:self.searchContainerView.centerYAnchor],
-        [self.searchTextField.heightAnchor constraintEqualToConstant:40.0]
-    ]];
+    [self.searchButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.trailing.equalTo(self.searchContainerView.mas_trailing).offset(-12.0);
+        make.centerY.equalTo(self.searchContainerView.mas_centerY);
+        make.width.mas_equalTo(44.0);
+    }];
+
+    [self.searchTextField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.leading.equalTo(self.searchContainerView.mas_leading).offset(10.0);
+        make.trailing.equalTo(self.searchButton.mas_leading).offset(-8.0);
+        make.centerY.equalTo(self.searchContainerView.mas_centerY);
+        make.height.mas_equalTo(40.0);
+    }];
 }
 
 - (void)addMemoryPointAtCoordinate:(CLLocationCoordinate2D)coordinate {
@@ -170,12 +268,16 @@
     UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
     NSLayoutYAxisAnchor *bottomAnchorTarget = self.searchContainerView ? self.searchContainerView.topAnchor : safeArea.bottomAnchor;
     CGFloat bottomConstant = self.searchContainerView ? -12.0 : -24.0;
+    // 底部约束保持用系统 anchor，保证和 safeArea 行为一致
     [NSLayoutConstraint activateConstraints:@[
-        [self.locateButton.widthAnchor constraintEqualToConstant:52.0],
-        [self.locateButton.heightAnchor constraintEqualToConstant:52.0],
-        [self.locateButton.trailingAnchor constraintEqualToAnchor:safeArea.trailingAnchor constant:-16.0],
         [self.locateButton.bottomAnchor constraintEqualToAnchor:bottomAnchorTarget constant:bottomConstant]
     ]];
+
+    // 其余宽高与水平位置使用 Masonry
+    [self.locateButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.trailing.equalTo(self.view.mas_trailing).offset(-16.0);
+        make.width.height.mas_equalTo(52.0);
+    }];
 }
 
 - (void)openReleaseController {
@@ -220,6 +322,25 @@
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
     [self handleSearchButtonTapped];
     return YES;
+}
+
+- (void)textFieldDidBeginEditing:(UITextField *)textField {
+    (void)textField;
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(keyboardWillChangeFrameForMap:)
+                                                 name:UIKeyboardWillChangeFrameNotification
+                                               object:nil];
+}
+
+- (void)textFieldDidEndEditing:(UITextField *)textField {
+    (void)textField;
+    [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                    name:UIKeyboardWillChangeFrameNotification
+                                                  object:nil];
+    self.searchBottomConstraint.constant = -12.0;
+    [UIView animateWithDuration:0.25 animations:^{
+        [self.view layoutIfNeeded];
+    }];
 }
 
 - (void)handleLocateButtonTapped {
@@ -373,8 +494,7 @@ calloutAccessoryControlTapped:(UIControl *)control {
     YALMemoryPoint *memoryAnnotation = (YALMemoryPoint *)annotation;
     if (control == view.leftCalloutAccessoryView && memoryAnnotation.userCreated) {
         [self confirmDeleteAnnotation:memoryAnnotation];
-        return;
-    }
+        return;    }
 
     if (control == view.rightCalloutAccessoryView) {
         [self showDetailForAnnotation:memoryAnnotation];
@@ -442,6 +562,37 @@ calloutAccessoryControlTapped:(UIControl *)control {
     detail.post = post;
     detail.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:detail animated:YES];
+}
+
+
+- (void)handleTapBlank {
+    [self.view endEditing:YES];
+}
+
+
+- (void)keyboardWillChangeFrameForMap:(NSNotification *)note {
+    NSDictionary *userInfo = note.userInfo;
+    CGRect endFrame = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationCurve curve = [userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+
+    CGFloat keyboardHeightInView = CGRectGetMaxY(self.view.bounds) - [self.view convertRect:endFrame fromView:nil].origin.y;
+    if (keyboardHeightInView < 0) keyboardHeightInView = 0;
+
+    CGFloat safeBottom = 0;
+    if (@available(iOS 11.0, *)) {
+        safeBottom = self.view.safeAreaInsets.bottom;
+    }
+    // Map 里搜索条更贴近键盘一点
+    CGFloat gap = 4.0;
+    CGFloat offset = -MAX(0, keyboardHeightInView - safeBottom + gap);
+    self.searchBottomConstraint.constant = offset - 12.0;
+
+    [UIView beginAnimations:nil context:NULL];
+    [UIView setAnimationDuration:duration];
+    [UIView setAnimationCurve:curve];
+    [self.view layoutIfNeeded];
+    [UIView commitAnimations];
 }
 
 @end

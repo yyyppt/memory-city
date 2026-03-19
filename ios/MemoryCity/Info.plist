@@ -23,5 +23,7 @@
 			</array>
 		</dict>
 	</dict>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>用于地图定位</string>
 </dict>
 </plist>

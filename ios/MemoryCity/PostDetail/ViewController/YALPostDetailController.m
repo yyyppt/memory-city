@@ -157,6 +157,8 @@
     self.inputTextView.tintColor = [UIColor systemBlueColor];
     self.inputTextView.delegate = self;
     self.inputTextView.scrollEnabled = NO;
+    // 使用系统默认键盘，完整支持中文输入
+    self.inputTextView.keyboardType = UIKeyboardTypeDefault;
     self.inputTextView.returnKeyType = UIReturnKeyDefault;
     self.inputTextView.textContainerInset = UIEdgeInsetsMake(12.0, 12.0, 12.0, 12.0);
     self.inputTextView.textContainer.lineFragmentPadding = 0;
@@ -500,8 +502,9 @@
     }
     CGFloat keyboardGap = 0;
     if (keyboardHeightInView > 0) {
-        CGFloat desiredGap = [self targetInputHeightForEditing:self.inputExpanded] / 3.0;
-        keyboardGap = MIN(20.0, MAX(12.0, desiredGap));
+        // 再多抬一点，确保整个输入框完全露出
+        CGFloat desiredGap = [self targetInputHeightForEditing:self.inputExpanded] * 0.55;
+        keyboardGap = MIN(32.0, MAX(20.0, desiredGap));
     }
     CGFloat offset = -MAX(0, keyboardHeightInView - safeBottom + keyboardGap);
 
@@ -606,14 +609,12 @@
     [self.inputPlaceholderLabel mas_remakeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.inputContainer.mas_left).offset(12.0);
         make.right.lessThanOrEqualTo(self.publishButton.mas_left).offset(-8.0);
-        if (editing) {
-            make.top.equalTo(self.inputContainer.mas_top).offset(10.0);
-        } else {
-            make.centerY.equalTo(self.inputContainer.mas_centerY);
-        }
+        // 无论是否在编辑，都保持占据输入框的垂直中间
+        make.centerY.equalTo(self.inputContainer.mas_centerY);
     }];
 
-    self.inputContainer.layer.cornerRadius = editing ? 18.0 : 20.0;
+    // 编辑时稍微更圆一点，整体更像一颗气泡
+    self.inputContainer.layer.cornerRadius = editing ? 22.0 : 20.0;
     self.publishButton.hidden = NO;
     [self.publishButtonWidthConstraint uninstall];
     [self.publishButton mas_updateConstraints:^(MASConstraintMaker *make) {

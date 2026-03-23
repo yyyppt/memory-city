@@ -6,6 +6,7 @@
 //
 
 #import "YALLoginController.h"
+#import "YALRegisterController.h"
 
 @interface YALLoginController ()
 
@@ -20,6 +21,15 @@
     [self.view addSubview:self.loginView];
     
     __weak typeof(self) weakSelf = self;
+    _loginView.tapRegisterBlock = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        YALRegisterController *reg = [[YALRegisterController alloc] init];
+        UINavigationController *nav = strongSelf.navigationController;
+        if (nav) {
+            [nav pushViewController:reg animated:YES];
+        }
+    };
     _loginView.tapLoginBlock = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) { return; }

@@ -14,6 +14,13 @@
 
 @implementation YALMemoryView
 
+@synthesize yearsWithContent = _yearsWithContent;
+
+- (void)setYearsWithContent:(NSSet<NSNumber *> *)yearsWithContent {
+    _yearsWithContent = [yearsWithContent copy];
+    [self reloadYearNavigation];
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
@@ -36,7 +43,7 @@
         _titleLabel.text = @"";
 
         _yearLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _yearLabel.font = [UIFont systemFontOfSize:52 weight:UIFontWeightHeavy];
+        _yearLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightHeavy];
         _yearLabel.textColor = [UIColor labelColor];
         _yearLabel.textAlignment = NSTextAlignmentCenter;
         _yearLabel.userInteractionEnabled = YES;
@@ -79,6 +86,7 @@
 - (void)setYear:(NSInteger)year {
     _year = year;
     self.yearLabel.text = [NSString stringWithFormat:@"%ld", (long)year];
+    [self reloadYearNavigation];
 }
 
 - (void)setMonths:(NSArray<YALMemoryMonthModel *> *)months {
@@ -88,7 +96,26 @@
 
 - (void)reload {
     self.yearLabel.text = [NSString stringWithFormat:@"%ld", (long)self.year];
+    [self reloadYearNavigation];
     [self.collectionView reloadData];
+}
+
+- (void)reloadYearNavigation {
+    NSSet *set = self.yearsWithContent ?: [NSSet set];
+    BOOL has = [set containsObject:@(self.year)];
+
+    self.yearLabel.textColor = has ? [UIColor labelColor] : [UIColor tertiaryLabelColor];
+    self.yearLabel.userInteractionEnabled = has;
+
+    NSArray *sorted = [set.allObjects sortedArrayUsingSelector:@selector(compare:)];
+    NSInteger idx = [sorted indexOfObject:@(self.year)];
+    BOOL canPrev = (idx != NSNotFound && idx > 0);
+    BOOL canNext = (idx != NSNotFound && idx < (NSInteger)sorted.count - 1);
+
+    self.prevButton.enabled = canPrev;
+    self.nextButton.enabled = canNext;
+    self.prevButton.alpha = canPrev ? 1.0 : 0.35;
+    self.nextButton.alpha = canNext ? 1.0 : 0.35;
 }
 
 - (void)layoutSubviews {
@@ -98,19 +125,20 @@
     CGFloat top = 10;
     if (@available(iOS 11.0, *)) top += self.safeAreaInsets.top;
 
-    self.header.frame = CGRectMake(0, top, w, 120);
+    static const CGFloat kHeaderH = 76.0;
+    self.header.frame = CGRectMake(0, top, w, kHeaderH);
 
-    // year centered, arrows next to it (left/right)
-    self.yearLabel.frame = CGRectMake(16, 38, w - 32, 62);
-    CGSize yearFit = [self.yearLabel sizeThatFits:CGSizeMake(w - 32, 62)];
+    self.yearLabel.frame = CGRectMake(16, 10, w - 32, 48);
+    CGSize yearFit = [self.yearLabel sizeThatFits:CGSizeMake(w - 32, 48)];
     CGFloat yearW = MIN(yearFit.width, w - 32);
     CGFloat yearX = (w - yearW) / 2.0;
-    self.yearLabel.frame = CGRectMake(yearX, 38, yearW, 62);
+    self.yearLabel.frame = CGRectMake(yearX, 12, yearW, 48);
 
-    CGFloat btn = 40;
-    CGFloat gap = 8;
-    self.prevButton.frame = CGRectMake(MAX(12, yearX - gap - btn), 46, btn, btn);
-    self.nextButton.frame = CGRectMake(MIN(w - 12 - btn, CGRectGetMaxX(self.yearLabel.frame) + gap), 46, btn, btn);
+    CGFloat btn = 36;
+    CGFloat gap = 6;
+    CGFloat btnY = 18;
+    self.prevButton.frame = CGRectMake(MAX(10, yearX - gap - btn), btnY, btn, btn);
+    self.nextButton.frame = CGRectMake(MIN(w - 10 - btn, CGRectGetMaxX(self.yearLabel.frame) + gap), btnY, btn, btn);
 
     CGFloat listY = CGRectGetMaxY(self.header.frame);
     self.collectionView.frame = CGRectMake(0, listY, w, self.bounds.size.height - listY);
@@ -131,6 +159,8 @@
 }
 
 - (void)yearTapped {
+    NSSet *set = self.yearsWithContent ?: [NSSet set];
+    if (![set containsObject:@(self.year)]) return;
     if ([self.delegate respondsToSelector:@selector(memoryViewDidTapYear:)]) {
         [self.delegate memoryViewDidTapYear:self];
     }

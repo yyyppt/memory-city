@@ -6,8 +6,9 @@
 //
 
 #import "YALReleaseController.h"
+#import "YALCalendarController.h"
 
-@interface YALReleaseController ()
+@interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate>
 
 @property (nonatomic, strong, nullable) UIImage *editCoverImage;
 @property (nonatomic, copy, nullable) NSString *editDateText;
@@ -19,6 +20,8 @@
 @property (nonatomic, strong) UIImageView *coverImageView;
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UITextView *textView;
+
+@property (nonatomic, strong, nullable) NSDate *selectedDate;
 
 @end
 
@@ -65,6 +68,13 @@
 
     [self buildUI];
     [self applyPrefillIfNeeded];
+
+    // 点击空白收起键盘
+    UITapGestureRecognizer *tap =
+        [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
+    tap.cancelsTouchesInView = NO;
+    tap.delegate = self;
+    [self.view addGestureRecognizer:tap];
 }
 
 #pragma mark - UI
@@ -95,10 +105,22 @@
   self.coverImageView.layer.masksToBounds = YES;
   [card addSubview:self.coverImageView];
 
+  self.coverImageView.userInteractionEnabled = YES;
+  UITapGestureRecognizer *imgTap =
+      [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(chooseCoverFromLibrary)];
+  imgTap.cancelsTouchesInView = NO;
+  [self.coverImageView addGestureRecognizer:imgTap];
+
   self.dateLabel = [[UILabel alloc] initWithFrame:CGRectZero];
   self.dateLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
   self.dateLabel.textColor = [UIColor secondaryLabelColor];
   [card addSubview:self.dateLabel];
+
+  self.dateLabel.userInteractionEnabled = YES;
+  UITapGestureRecognizer *dateTap =
+      [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(chooseDate)];
+  dateTap.cancelsTouchesInView = NO;
+  [self.dateLabel addGestureRecognizer:dateTap];
 
   self.textView = [[UITextView alloc] initWithFrame:CGRectZero];
   self.textView.backgroundColor = [UIColor clearColor];
@@ -143,12 +165,19 @@
   }
 
   self.dateLabel.text = self.editDateText.length > 0 ? self.editDateText : @"选择日期";
+  if (self.editDateText.length > 0) {
+      NSDate *parsed = [self dateFromDateText:self.editDateText];
+      self.selectedDate = parsed;
+  } else {
+      self.selectedDate = nil;
+  }
   self.textView.text = self.editBody.length > 0 ? self.editBody : @"写下此刻的心情…";
 }
 
 #pragma mark - Actions
 
 - (void)submitTapped {
+  self.editBody = self.textView.text ?: @"";
   BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
   NSString *title = isEdit ? @"已重新发布（示例）" : @"已发布（示例）";
   UIAlertController *alert =
@@ -157,6 +186,91 @@
                                  preferredStyle:UIAlertControllerStyleAlert];
   [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
   [self presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - Keyboard
+
+- (void)dismissKeyboard {
+  [self.view endEditing:YES];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
+    shouldReceiveTouch:(UITouch *)touch {
+  UIView *v = touch.view;
+  if (!v) return YES;
+  while (v && v != self.view) {
+    if ([v isKindOfClass:[UIControl class]] ||
+        [v isKindOfClass:[UITextView class]] ||
+        [v isKindOfClass:[UIImageView class]] ||
+        [v isKindOfClass:[UILabel class]]) {
+      return NO; // 交给自身控件手势/交互处理
+    }
+    v = v.superview;
+  }
+  return YES;
+}
+
+#pragma mark - Date & Image
+
+- (NSString *)dateStringFromDate:(NSDate *)date {
+  NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+  fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+  fmt.dateFormat = @"yyyy.MM.dd";
+  return [fmt stringFromDate:date ?: [NSDate date]];
+}
+
+- (NSDate *)dateFromDateText:(NSString *)text {
+  if (text.length == 0) return nil;
+  NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+  fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+  fmt.dateFormat = @"yyyy.MM.dd";
+  return [fmt dateFromString:text];
+}
+
+- (void)chooseDate {
+  [self.view endEditing:YES];
+  YALCalendarController *cal = [[YALCalendarController alloc] init];
+  cal.selectedDate = self.selectedDate ?: [NSDate date];
+  __weak typeof(self) ws = self;
+  cal.onDatePicked = ^(NSDate *date) {
+    __strong typeof(ws) ss = ws;
+    if (!ss) return;
+    ss.selectedDate = date;
+    ss.editDateText = [ss dateStringFromDate:date];
+    ss.dateLabel.text = ss.editDateText;
+  };
+  [self.navigationController pushViewController:cal animated:YES];
+}
+
+- (void)chooseCoverFromLibrary {
+  [self.view endEditing:YES];
+
+  if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+    return;
+  }
+
+  UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+  picker.delegate = self;
+  picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+  picker.allowsEditing = NO;
+  [self presentViewController:picker animated:YES completion:nil];
+}
+
+#pragma mark - UIImagePickerControllerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker
+    didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
+  UIImage *img = info[UIImagePickerControllerOriginalImage];
+  if (img) {
+    self.editCoverImage = img;
+    self.coverImageView.image = img;
+    self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+  }
+  [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+  [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
 /*

@@ -8,6 +8,7 @@
 #import <UIKit/UIKit.h>
 
 typedef void(^TapLoginBlock)(void);
+typedef void(^TapRegisterBlock)(void);
 
 @interface YALLoginView : UIView
 
@@ -22,5 +23,6 @@ typedef void(^TapLoginBlock)(void);
 @property(nonatomic,strong)UIButton *wechatButton;
 
 @property (nonatomic, copy) TapLoginBlock tapLoginBlock;
+@property (nonatomic, copy, nullable) TapRegisterBlock tapRegisterBlock;
 
 @end

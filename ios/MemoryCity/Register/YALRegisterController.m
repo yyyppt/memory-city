@@ -1,0 +1,75 @@
+#import "YALRegisterController.h"
+#import "YALRegisterView.h"
+
+@interface YALRegisterController () <UIGestureRecognizerDelegate>
+
+@property (nonatomic, strong) YALRegisterView *registerView;
+
+@end
+
+@implementation YALRegisterController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"注册";
+    self.view.backgroundColor = [UIColor systemBackgroundColor];
+
+    UIColor *accent = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+    self.navigationController.navigationBar.tintColor = accent;
+
+    self.registerView = [[YALRegisterView alloc] initWithFrame:self.view.bounds];
+    self.registerView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    __weak typeof(self) ws = self;
+    self.registerView.submitBlock = ^(NSString *phone, NSString *password, NSString *nickname) {
+        __strong typeof(ws) ss = ws;
+        if (!ss) return;
+        NSString *trimPhone = [phone stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *trimPw = [password stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *trimName = [nickname stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (trimPhone.length < 11) {
+            [ss showAlert:@"请输入有效手机号"];
+            return;
+        }
+        if (trimPw.length < 6) {
+            [ss showAlert:@"密码至少 6 位"];
+            return;
+        }
+        if (trimName.length == 0) {
+            [ss showAlert:@"请输入昵称"];
+            return;
+        }
+        // TODO: 接入注册接口
+        [ss showAlert:@"注册请求已记录（后续接网络）"];
+    };
+    [self.view addSubview:self.registerView];
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
+    tap.cancelsTouchesInView = NO;
+    tap.delegate = self;
+    [self.view addGestureRecognizer:tap];
+}
+
+- (void)showAlert:(NSString *)msg {
+    UIAlertController *a = [UIAlertController alertControllerWithTitle:nil message:msg preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+}
+
+- (void)dismissKeyboard {
+    [self.view endEditing:YES];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    UIView *v = touch.view;
+    while (v && v != self.view) {
+        if ([v isKindOfClass:[UITextField class]] ||
+            [v isKindOfClass:[UITextView class]] ||
+            [v isKindOfClass:[UIControl class]]) {
+            return NO;
+        }
+        v = v.superview;
+    }
+    return YES;
+}
+
+@end

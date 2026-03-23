@@ -11,6 +11,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface YALSearchController : UIViewController <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate>
 
+@property (nonatomic, copy, nullable) NSString *keyword;
+
 @end
 
 NS_ASSUME_NONNULL_END

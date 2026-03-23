@@ -6,15 +6,12 @@
 //
 
 #import "YALTimeLineController.h"
-#import "YALTimeLineView.h"
 #import "YALTimeLineDetailController.h"
 #import "YALTimeLineDayCell.h"
 
-@interface YALTimeLineController () <YALTimeLineViewDelegate, UITableViewDataSource, UITableViewDelegate>
+@interface YALTimeLineController () <UITableViewDataSource, UITableViewDelegate>
 
-@property (nonatomic, strong) YALTimeLineView *timeLineView;
 @property (nonatomic, strong) UITableView *dayTableView;
-@property (nonatomic, strong) NSMutableArray<YALTimeLineSectionModel *> *sections;
 @property (nonatomic, strong) NSArray<YALTimeLineEntryModel *> *monthDayEntries;
 
 @end
@@ -38,30 +35,30 @@
                                             action:@selector(backTapped)];
     }
 
-    BOOL monthMode = (self.displayYear > 0 && self.displayMonth >= 1 && self.displayMonth <= 12);
-    if (monthMode) {
-        self.title = [NSString stringWithFormat:@"%ld · %02ld", (long)self.displayYear, (long)self.displayMonth];
-        self.monthDayEntries = [self buildSortedMonthEntries];
-        self.dayTableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
-        self.dayTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        self.dayTableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
-        self.dayTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-        self.dayTableView.dataSource = self;
-        self.dayTableView.delegate = self;
-        self.dayTableView.rowHeight = 108;
-        self.dayTableView.contentInset = UIEdgeInsetsMake(8, 0, 24, 0);
-        [self.dayTableView registerClass:[YALTimeLineDayCell class] forCellReuseIdentifier:@"YALTimeLineDayCell"];
-        [self.view addSubview:self.dayTableView];
-    } else {
-        self.title = @"回忆记线";
-        self.timeLineView = [[YALTimeLineView alloc] initWithFrame:self.view.bounds];
-        self.timeLineView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        self.timeLineView.delegate = self;
-        [self.view addSubview:self.timeLineView];
-
-        self.sections = [[self buildDemoSections] mutableCopy];
-        self.timeLineView.sections = self.sections;
+    // 只保留“月份日列表”，避免出现你不想要的曲线/多月份回忆记线界面。
+    BOOL validMonth = (self.displayYear > 0 && self.displayMonth >= 1 && self.displayMonth <= 12);
+    if (!validMonth) {
+        NSDateComponents *dc =
+            [[NSCalendar currentCalendar] components:NSCalendarUnitYear | NSCalendarUnitMonth
+                                              fromDate:[NSDate date]];
+        self.displayYear = dc.year;
+        self.displayMonth = dc.month;
     }
+
+    self.title = [NSString stringWithFormat:@"%ld · %02ld", (long)self.displayYear, (long)self.displayMonth];
+    self.monthDayEntries = [self buildSortedMonthEntries];
+
+    self.dayTableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
+    self.dayTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.dayTableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    self.dayTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.dayTableView.dataSource = self;
+    self.dayTableView.delegate = self;
+    // `YALTimeLineDayCell` 目前是基于固定布局的 frame 模式，不依赖 Auto Layout，自定义高度由 rowHeight 控制。
+    self.dayTableView.rowHeight = 108;
+    self.dayTableView.contentInset = UIEdgeInsetsMake(8, 0, 24, 0);
+    [self.dayTableView registerClass:[YALTimeLineDayCell class] forCellReuseIdentifier:@"YALTimeLineDayCell"];
+    [self.view addSubview:self.dayTableView];
 }
 
 #pragma mark - Month list (daily cells)
@@ -148,92 +145,10 @@
     [self.navigationController pushViewController:detail animated:YES];
 }
 
-#pragma mark - Demo Data (multi-month curve mode)
-
-- (NSArray<YALTimeLineSectionModel *> *)buildDemoSections {
-    NSMutableArray<YALTimeLineSectionModel *> *result = [NSMutableArray array];
-
-    NSDate *now = [NSDate date];
-    NSCalendar *cal = [NSCalendar currentCalendar];
-    NSDateComponents *base = [cal components:NSCalendarUnitYear | NSCalendarUnitMonth fromDate:now];
-
-    for (NSInteger i = 0; i < 6; i++) {
-        NSDateComponents *c = [[NSDateComponents alloc] init];
-        c.year = base.year;
-        c.month = base.month - i;
-        c.day = 1;
-        NSDate *monthDate = [cal dateFromComponents:c] ?: now;
-
-        NSDateFormatter *monthFmt = [[NSDateFormatter alloc] init];
-        monthFmt.dateFormat = @"yyyy.MM";
-
-        NSDateFormatter *dayFmt = [[NSDateFormatter alloc] init];
-        dayFmt.dateFormat = @"yyyy.MM.dd";
-
-        YALTimeLineSectionModel *section = [[YALTimeLineSectionModel alloc] init];
-        section.monthText = [monthFmt stringFromDate:monthDate];
-        section.expanded = (i == 0);
-
-        NSInteger count = 4 + (arc4random_uniform(2));
-        NSMutableArray<YALTimeLineEntryModel *> *entries = [NSMutableArray array];
-        for (NSInteger d = 0; d < count; d++) {
-            NSDateComponents *dc = [[NSDateComponents alloc] init];
-            dc.year = c.year;
-            dc.month = c.month;
-            dc.day = 3 + d * 5;
-            NSDate *dayDate = [cal dateFromComponents:dc] ?: monthDate;
-
-            YALTimeLineEntryModel *e = [[YALTimeLineEntryModel alloc] init];
-            e.dateText = [dayFmt stringFromDate:dayDate];
-            e.image = nil;
-            switch (d % 4) {
-                case 0:
-                    e.titleText = @"Rainy Afternoon";
-                    e.subtitleText = @"Old street, soft drizzle";
-                    break;
-                case 1:
-                    e.titleText = @"Grandma's Garden";
-                    e.subtitleText = @"Blooming memories";
-                    break;
-                case 2:
-                    e.titleText = @"Summer Solstice";
-                    e.subtitleText = @"July 21 · Seaside";
-                    break;
-                default:
-                    e.titleText = @"Autumn Leaves";
-                    e.subtitleText = @"Nov 05 · Theater Hill Park";
-                    break;
-            }
-            [entries addObject:e];
-        }
-        section.entries = entries;
-        [result addObject:section];
-    }
-    return result;
-}
-
 #pragma mark - Actions
 
 - (void)backTapped {
     [self.navigationController popViewControllerAnimated:YES];
-}
-
-#pragma mark - YALTimeLineViewDelegate
-
-- (void)timeLineView:(YALTimeLineView *)view didToggleSectionAtIndex:(NSInteger)sectionIndex {
-    if (sectionIndex < 0 || sectionIndex >= self.sections.count) return;
-
-    YALTimeLineSectionModel *section = self.sections[sectionIndex];
-    section.expanded = !section.isExpanded;
-    [view reloadDataAnimated:YES];
-}
-
-- (void)timeLineView:(YALTimeLineView *)view didSelectEntry:(YALTimeLineEntryModel *)entry {
-    YALTimeLineDetailController *detail = [[YALTimeLineDetailController alloc] init];
-    detail.dateText = entry.dateText ?: @"";
-    detail.coverImage = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
-    detail.hidesBottomBarWhenPushed = YES;
-    [self.navigationController pushViewController:detail animated:YES];
 }
 
 @end

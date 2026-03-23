@@ -6,7 +6,7 @@
 //
 
 #import "YALMineController.h"
-#import "YALTimeLineController.h"
+#import "YALMemoryController.h"
 #import "YALMapController.h"
 #import "YALMessageController.h"
 #import "YALReleaseController.h"
@@ -566,7 +566,8 @@
 - (void)quickActionTapped:(UIButton *)sender {
     switch (sender.tag) {
         case 0: {
-            YALTimeLineController *controller = [[YALTimeLineController alloc] init];
+            // "我的回忆" 入口直接进入 Memories(月/年)页
+            YALMemoryController *controller = [[YALMemoryController alloc] init];
             [self pushController:controller];
             break;
         }

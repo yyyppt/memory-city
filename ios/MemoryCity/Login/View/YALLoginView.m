@@ -78,6 +78,7 @@
     _registerButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width-70,80,60,30)];
     [_registerButton setTitle:@"注册" forState:UIControlStateNormal];
     [_registerButton setTitleColor:[UIColor orangeColor] forState:UIControlStateNormal];
+    [_registerButton addTarget:self action:@selector(pressRegister) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_registerButton];
     
     
@@ -100,6 +101,12 @@
 - (void)pressLogin {
     if (_tapLoginBlock) {
         _tapLoginBlock();
+    }
+}
+
+- (void)pressRegister {
+    if (_tapRegisterBlock) {
+        _tapRegisterBlock();
     }
 }
 

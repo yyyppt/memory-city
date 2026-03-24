@@ -6,6 +6,7 @@
 //
 
 #import "YALSearchController.h"
+#import <Masonry/Masonry.h>
 
 @interface YALSearchController ()
 
@@ -78,6 +79,7 @@
     UIView *titleContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, titleWidth, 40.0)];
 
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 4, titleWidth, 32.0)];
+
     self.searchBar.placeholder = @"搜索记忆内容...";
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
     self.searchBar.delegate = self;
@@ -128,8 +130,7 @@
 }
 
 - (void)setupTableView {
-    self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
-    self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
@@ -139,6 +140,9 @@
         self.tableView.backgroundColor = [UIColor colorWithWhite:0.97 alpha:1.0];
     }
     [self.view addSubview:self.tableView];
+    [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 }
 
 - (void)setupAIHeaderView {
@@ -146,7 +150,7 @@
     self.aiHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 0.01)];
     self.aiHeaderView.backgroundColor = [UIColor clearColor];
 
-    self.aiCardView = [[UIView alloc] initWithFrame:CGRectMake(16.0, 12.0, width - 32.0, 0.01)];
+    self.aiCardView = [[UIView alloc] init];
     self.aiCardView.backgroundColor = [self cardBackgroundColor];
     self.aiCardView.layer.cornerRadius = 18.0;
     self.aiCardView.layer.masksToBounds = YES;
@@ -154,38 +158,58 @@
     self.aiCardView.layer.borderColor = [self borderColor].CGColor;
     [self.aiHeaderView addSubview:self.aiCardView];
 
-    UIView *iconBadge = [[UIView alloc] initWithFrame:CGRectMake(16.0, 16.0, 34.0, 34.0)];
+    UIView *iconBadge = [[UIView alloc] init];
     iconBadge.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.12];
     iconBadge.layer.cornerRadius = 17.0;
     iconBadge.layer.masksToBounds = YES;
     [self.aiCardView addSubview:iconBadge];
 
+    UIImageView *iconView = [[UIImageView alloc] init];
     if (@available(iOS 13.0, *)) {
-        UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(7.0, 7.0, 20.0, 20.0)];
         iconView.image = [UIImage systemImageNamed:@"sparkles"];
-        iconView.tintColor = [self accentColor];
-        iconView.contentMode = UIViewContentModeScaleAspectFit;
-        [iconBadge addSubview:iconView];
     }
+    iconView.tintColor = [self accentColor];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    [iconBadge addSubview:iconView];
 
-    self.aiTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(60.0, 16.0, CGRectGetWidth(self.aiCardView.bounds) - 76.0, 20.0)];
+    self.aiTitleLabel = [[UILabel alloc] init];
     self.aiTitleLabel.text = @"AI说明";
     self.aiTitleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
     self.aiTitleLabel.textColor = [UIColor labelColor];
     [self.aiCardView addSubview:self.aiTitleLabel];
 
-    self.aiDescLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    self.aiDescLabel = [[UILabel alloc] init];
     self.aiDescLabel.numberOfLines = 0;
     self.aiDescLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightRegular];
     self.aiDescLabel.textColor = [UIColor secondaryLabelColor];
     [self.aiCardView addSubview:self.aiDescLabel];
 
+    [iconBadge mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.aiCardView.mas_left).offset(16.0);
+        make.top.equalTo(self.aiCardView.mas_top).offset(16.0);
+        make.width.height.mas_equalTo(34.0);
+    }];
+    [iconView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.center.equalTo(iconBadge);
+        make.width.height.mas_equalTo(20.0);
+    }];
+    [self.aiTitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(iconBadge.mas_right).offset(10.0);
+        make.centerY.equalTo(iconBadge);
+        make.right.equalTo(self.aiCardView.mas_right).offset(-16.0);
+        make.height.mas_equalTo(20.0);
+    }];
+    [self.aiDescLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(iconBadge.mas_left);
+        make.top.equalTo(iconBadge.mas_bottom).offset(10.0);
+        make.right.equalTo(self.aiCardView.mas_right).offset(-16.0);
+    }];
+
     self.tableView.tableHeaderView = self.aiHeaderView;
 }
 
 - (void)setupEmptyState {
-    self.emptyLabel = [[UILabel alloc] initWithFrame:self.tableView.bounds];
-    self.emptyLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.emptyLabel = [[UILabel alloc] init];
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.numberOfLines = 2;
     self.emptyLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightRegular];
@@ -282,13 +306,13 @@
         return;
     }
 
+    // tableHeaderView 需要手动计算高度后更新 frame 触发 UITableView 重排
+    [self.aiCardView layoutIfNeeded];
     CGSize textSize = [self.aiDescLabel sizeThatFits:CGSizeMake(cardWidth - 32.0, CGFLOAT_MAX)];
     CGFloat descHeight = MAX(20.0, ceil(textSize.height));
-    self.aiDescLabel.frame = CGRectMake(16.0, 58.0, cardWidth - 32.0, descHeight);
-
-    CGFloat cardHeight = CGRectGetMaxY(self.aiDescLabel.frame) + 16.0;
+    // iconBadge 高度 34 + top 16 + gap 10 = 60，再加 descHeight + bottom 16
+    CGFloat cardHeight = 60.0 + descHeight + 16.0;
     self.aiCardView.frame = CGRectMake(16.0, 12.0, cardWidth, cardHeight);
-    self.aiTitleLabel.frame = CGRectMake(60.0, 16.0, cardWidth - 76.0, 20.0);
     self.aiHeaderView.frame = CGRectMake(0, 0, width, CGRectGetMaxY(self.aiCardView.frame) + 8.0);
     self.tableView.tableHeaderView = self.aiHeaderView;
 }

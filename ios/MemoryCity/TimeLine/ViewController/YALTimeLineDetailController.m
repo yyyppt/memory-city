@@ -8,6 +8,7 @@
 #import "YALTimeLineDetailController.h"
 #import "YALTimeLineDetailView.h"
 #import "YALReleaseController.h"
+#import <Masonry/Masonry.h>
 
 @interface YALTimeLineDetailController ()
 
@@ -45,9 +46,11 @@
       self.navigationItem.rightBarButtonItem = edit;
     }
 
-    self.detailView = [[YALTimeLineDetailView alloc] initWithFrame:self.view.bounds];
-    self.detailView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.detailView = [[YALTimeLineDetailView alloc] init];
     [self.view addSubview:self.detailView];
+    [self.detailView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 
     NSString *fixedBody =
       @"那天的风很轻，街角的光落在墙上像一张旧照片。我们把不舍藏进笑里，把温柔留给时间。";

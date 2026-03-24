@@ -12,6 +12,7 @@
 #import "YALMessageController.h"
 #import "YALPostDetailController.h"
 #import "YALPostManager.h"
+#import <Masonry/Masonry.h>
 
 static CGFloat const kYALPostCellTextAreaHeight = 64.0;
 static CGFloat const kYALSingleColumnItemHeight = 320.0;
@@ -62,7 +63,7 @@ static CGFloat const kYALItemSpacing = 10.0;
     self.navigationController.navigationBar.tintColor = highlightColor;
 
     // 中间搜索栏：稍微短一点、两侧圆润
-    CGFloat titleWidth = self.view.bounds.size.width - 120.0; // 两侧各预留更大空间给按钮
+    CGFloat titleWidth = self.view.bounds.size.width - 120.0;
     UIView *titleContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, titleWidth, 40.0)];
     UISearchBar *searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 4, titleWidth, 32.0)];
     searchBar.placeholder = @"探索老街记忆...";
@@ -144,10 +145,13 @@ static CGFloat const kYALItemSpacing = 10.0;
 - (void)setupCollectionView {
     UICollectionViewLayout *layout = [self currentLayout];
 
-    self.collectionView = [[UICollectionView alloc] initWithFrame:self.view.bounds
+    self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero
                                              collectionViewLayout:layout];
-    self.collectionView.backgroundColor = [UIColor colorWithWhite:0.98 alpha:1.0];
-    self.collectionView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    if (@available(iOS 13.0, *)) {
+        self.collectionView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    } else {
+        self.collectionView.backgroundColor = [UIColor colorWithWhite:0.98 alpha:1.0];
+    }
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     self.collectionView.showsVerticalScrollIndicator = NO;
@@ -156,6 +160,9 @@ static CGFloat const kYALItemSpacing = 10.0;
             forCellWithReuseIdentifier:@"YALPostCell"];
 
     [self.view addSubview:self.collectionView];
+    [self.collectionView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 }
 
 - (UICollectionViewLayout *)currentLayout {

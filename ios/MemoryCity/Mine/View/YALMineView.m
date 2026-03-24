@@ -69,31 +69,32 @@
 
 - (void)buildProfileCard {
     self.profileCard = [[UIView alloc] init];
-    self.profileCard.backgroundColor = [UIColor colorWithRed:1.0 green:0.98 blue:0.95 alpha:1.0];
+    if (@available(iOS 13.0, *)) {
+        self.profileCard.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+            if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:0.998 green:0.992 blue:0.985 alpha:1.0];
+        }];
+    } else {
+        self.profileCard.backgroundColor = [UIColor colorWithRed:0.998 green:0.992 blue:0.985 alpha:1.0];
+    }
     self.profileCard.layer.cornerRadius = 24.0;
     self.profileCard.layer.masksToBounds = YES;
     [self.contentView addSubview:self.profileCard];
 
     self.profileTintView = [[UIView alloc] init];
-    self.profileTintView.backgroundColor = [UIColor colorWithRed:0.995 green:0.945 blue:0.88 alpha:0.9];
-    self.profileTintView.alpha = 0.95;
+    self.profileTintView.backgroundColor = [self profilePanelColor];
+    self.profileTintView.layer.cornerRadius = 18.0;
+    self.profileTintView.layer.borderWidth = 1.0;
+    self.profileTintView.layer.borderColor = [self subtleAccentBorderColor].CGColor;
     [self.profileCard addSubview:self.profileTintView];
 
-    UIView *bubbleLarge = [[UIView alloc] init];
-    bubbleLarge.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.12];
-    bubbleLarge.layer.cornerRadius = 48.0;
-    [self.profileCard addSubview:bubbleLarge];
-
-    UIView *bubbleSmall = [[UIView alloc] init];
-    bubbleSmall.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
-    bubbleSmall.layer.cornerRadius = 20.0;
-    [self.profileCard addSubview:bubbleSmall];
-
     self.avatarContainer = [[UIView alloc] init];
-    self.avatarContainer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.14];
+    self.avatarContainer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.10];
     self.avatarContainer.layer.cornerRadius = 38.0;
     self.avatarContainer.layer.borderWidth = 1.0;
-    self.avatarContainer.layer.borderColor = [[self accentColor] colorWithAlphaComponent:0.18].CGColor;
+    self.avatarContainer.layer.borderColor = [[self accentColor] colorWithAlphaComponent:0.12].CGColor;
     [self.profileCard addSubview:self.avatarContainer];
 
     self.avatarImageView = [[UIImageView alloc] init];
@@ -114,7 +115,7 @@
     [self.profileCard addSubview:self.bioLabel];
 
     self.editProfileButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.editProfileButton.backgroundColor = [UIColor whiteColor];
+    self.editProfileButton.backgroundColor = [UIColor systemBackgroundColor];
     self.editProfileButton.layer.cornerRadius = 16.0;
     self.editProfileButton.layer.borderWidth = 1.0;
     self.editProfileButton.layer.borderColor = [[self accentColor] colorWithAlphaComponent:0.12].CGColor;
@@ -129,23 +130,19 @@
     UIView *publishedStat = [self makeStatViewWithTitle:@"发布" valueLabel:&_publishedValueLabel];
     UIView *memoryStat = [self makeStatViewWithTitle:@"回忆" valueLabel:&_memoryValueLabel];
     UIView *trackStat = [self makeStatViewWithTitle:@"足迹" valueLabel:&_trackValueLabel];
-    [self.profileCard addSubview:publishedStat];
-    [self.profileCard addSubview:memoryStat];
-    [self.profileCard addSubview:trackStat];
+    UIView *firstSeparator = [self makeStatSeparatorView];
+    UIView *secondSeparator = [self makeStatSeparatorView];
+    [self.profileTintView addSubview:publishedStat];
+    [self.profileTintView addSubview:memoryStat];
+    [self.profileTintView addSubview:trackStat];
+    [self.profileTintView addSubview:firstSeparator];
+    [self.profileTintView addSubview:secondSeparator];
 
     [self.profileTintView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.bottom.right.equalTo(self.profileCard);
-        make.width.equalTo(self.profileCard.mas_width).multipliedBy(0.58);
-    }];
-    [bubbleLarge mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.profileCard.mas_top).offset(16.0);
-        make.right.equalTo(self.profileCard.mas_right).offset(-22.0);
-        make.width.height.mas_equalTo(96.0);
-    }];
-    [bubbleSmall mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.profileCard.mas_top).offset(108.0);
-        make.right.equalTo(self.profileCard.mas_right).offset(-24.0);
-        make.width.height.mas_equalTo(40.0);
+        make.left.equalTo(self.profileCard.mas_left).offset(14.0);
+        make.right.equalTo(self.profileCard.mas_right).offset(-14.0);
+        make.bottom.equalTo(self.profileCard.mas_bottom).offset(-14.0);
+        make.height.mas_equalTo(64.0);
     }];
     [self.avatarContainer mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.profileCard.mas_left).offset(18.0);
@@ -173,18 +170,26 @@
         make.right.equalTo(self.profileCard.mas_right).offset(-18.0);
     }];
     [publishedStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.profileCard.mas_left).offset(18.0);
-        make.top.equalTo(self.avatarContainer.mas_bottom).offset(26.0);
-        make.bottom.equalTo(self.profileCard.mas_bottom).offset(-18.0);
+        make.left.top.bottom.equalTo(self.profileTintView);
     }];
     [memoryStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(publishedStat.mas_right).offset(10.0);
+        make.left.equalTo(firstSeparator.mas_right);
         make.top.bottom.width.equalTo(publishedStat);
     }];
     [trackStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(memoryStat.mas_right).offset(10.0);
-        make.right.equalTo(self.profileCard.mas_right).offset(-18.0);
+        make.left.equalTo(secondSeparator.mas_right);
+        make.right.top.bottom.equalTo(self.profileTintView);
         make.top.bottom.width.equalTo(publishedStat);
+    }];
+    [firstSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(publishedStat.mas_right);
+        make.width.mas_equalTo(1.0);
+        make.centerY.equalTo(self.profileTintView);
+        make.height.mas_equalTo(28.0);
+    }];
+    [secondSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(memoryStat.mas_right);
+        make.width.height.centerY.equalTo(firstSeparator);
     }];
 }
 
@@ -287,8 +292,7 @@
 
 - (UIView *)makeStatViewWithTitle:(NSString *)title valueLabel:(UILabel * __strong *)valueLabel {
     UIView *container = [[UIView alloc] init];
-    container.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
-    container.layer.cornerRadius = 16.0;
+    container.backgroundColor = [UIColor clearColor];
 
     UILabel *value = [self labelWithFont:[UIFont systemFontOfSize:20.0 weight:UIFontWeightSemibold]
                                    color:[UIColor labelColor]];
@@ -314,6 +318,12 @@
         make.bottom.equalTo(container.mas_bottom).offset(-4.0);
     }];
     return container;
+}
+
+- (UIView *)makeStatSeparatorView {
+    UIView *separatorView = [[UIView alloc] init];
+    separatorView.backgroundColor = [self borderColor];
+    return separatorView;
 }
 
 - (UIButton *)makeQuickActionButtonWithTitle:(NSString *)title
@@ -507,6 +517,22 @@
         return [UIColor secondarySystemBackgroundColor];
     }
     return [UIColor whiteColor];
+}
+
+- (UIColor *)profilePanelColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
+            if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [[UIColor tertiarySystemFillColor] colorWithAlphaComponent:0.55];
+            }
+            return [UIColor colorWithRed:0.995 green:0.972 blue:0.945 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.995 green:0.972 blue:0.945 alpha:1.0];
+}
+
+- (UIColor *)subtleAccentBorderColor {
+    return [[self accentColor] colorWithAlphaComponent:0.08];
 }
 
 - (UIColor *)borderColor {

@@ -22,7 +22,7 @@
 @property (nonatomic, strong) UIView *searchContainerView;
 @property (nonatomic, strong) UITextField *searchTextField;
 @property (nonatomic, strong) UIButton *searchButton;
-@property (nonatomic, strong) NSLayoutConstraint *searchBottomConstraint;
+@property (nonatomic, strong) MASConstraint *searchBottomConstraint;
 
 @end
 
@@ -31,7 +31,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = [UIColor whiteColor];
+    self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.extendedLayoutIncludesOpaqueBars = YES;
     [self setupNavigationBar];
 
@@ -100,7 +100,7 @@
 
 - (void)showAddMemoryHint {
     UIView *hint = [[UIView alloc] initWithFrame:CGRectZero];
-    hint.backgroundColor = [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:0.96];
+    hint.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.96];
     hint.layer.cornerRadius = 16.0;
     hint.layer.borderWidth = 1.0;
     hint.layer.borderColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:0.25].CGColor;
@@ -116,18 +116,16 @@
     [hint addSubview:label];
     [self.view addSubview:hint];
 
-    hint.translatesAutoresizingMaskIntoConstraints = NO;
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-
-    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
-    [NSLayoutConstraint activateConstraints:@[
-        [hint.centerXAnchor constraintEqualToAnchor:safe.centerXAnchor],
-        [hint.topAnchor constraintEqualToAnchor:safe.topAnchor constant:12.0],
-        [label.leadingAnchor constraintEqualToAnchor:hint.leadingAnchor constant:14.0],
-        [label.trailingAnchor constraintEqualToAnchor:hint.trailingAnchor constant:-14.0],
-        [label.topAnchor constraintEqualToAnchor:hint.topAnchor constant:8.0],
-        [label.bottomAnchor constraintEqualToAnchor:hint.bottomAnchor constant:-8.0]
-    ]];
+    [hint mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(self.view);
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(12.0);
+    }];
+    [label mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(hint.mas_left).offset(14.0);
+        make.right.equalTo(hint.mas_right).offset(-14.0);
+        make.top.equalTo(hint.mas_top).offset(8.0);
+        make.bottom.equalTo(hint.mas_bottom).offset(-8.0);
+    }];
 
     [UIView animateWithDuration:0.25 animations:^{
         hint.alpha = 1.0;
@@ -153,7 +151,7 @@
         UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
         [appearance configureWithDefaultBackground];
         appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-        appearance.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.7];
+        appearance.backgroundColor = [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.7];
         appearance.titleTextAttributes = @{
             NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold],
             NSForegroundColorAttributeName: [UIColor labelColor]
@@ -167,7 +165,7 @@
 
         self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
     } else {
-        self.navigationController.navigationBar.barTintColor = [UIColor colorWithWhite:1.0 alpha:0.7];
+        self.navigationController.navigationBar.barTintColor = [UIColor systemBackgroundColor];
         self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
         [self.navigationController.navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
         self.navigationController.navigationBar.shadowImage = [UIImage new];
@@ -177,15 +175,13 @@
 }
 - (void)setupBottomSearchBar {
     self.searchContainerView = [[UIView alloc] init];
-    self.searchContainerView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.searchContainerView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.96];
+    self.searchContainerView.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.96];
     self.searchContainerView.layer.cornerRadius = 16.0;
     self.searchContainerView.layer.masksToBounds = YES;
     self.searchContainerView.layer.borderWidth = 1.0;
-    self.searchContainerView.layer.borderColor = [UIColor colorWithWhite:0.88 alpha:1.0].CGColor;
+    self.searchContainerView.layer.borderColor = [UIColor separatorColor].CGColor;
 
     self.searchTextField = [[UITextField alloc] init];
-    self.searchTextField.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchTextField.placeholder = @"搜索地点、地址或地标";
     self.searchTextField.font = [UIFont systemFontOfSize:15 weight:UIFontWeightRegular];
     self.searchTextField.returnKeyType = UIReturnKeySearch;
@@ -197,7 +193,6 @@
     self.searchTextField.leftView = leftPadding;
 
     self.searchButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.searchButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.searchButton setTitle:@"搜索" forState:UIControlStateNormal];
     self.searchButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     [self.searchButton addTarget:self action:@selector(handleSearchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -206,16 +201,11 @@
     [self.searchContainerView addSubview:self.searchButton];
     [self.view addSubview:self.searchContainerView];
 
-    UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
-    self.searchBottomConstraint =
-    [self.searchContainerView.bottomAnchor constraintEqualToAnchor:safeArea.bottomAnchor constant:-12.0];
-    [NSLayoutConstraint activateConstraints:@[self.searchBottomConstraint]];
-
-    // 其余位置和内部布局用 Masonry，和项目整体保持一致
     [self.searchContainerView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.leading.equalTo(self.view.mas_leading).offset(14.0);
-        make.trailing.equalTo(self.view.mas_trailing).offset(-14.0);
+        make.left.equalTo(self.view.mas_left).offset(14.0);
+        make.right.equalTo(self.view.mas_right).offset(-14.0);
         make.height.mas_equalTo(54.0);
+        self.searchBottomConstraint = make.bottom.equalTo(self.view.mas_safeAreaLayoutGuideBottom).offset(-12.0);
     }];
 
     [self.searchButton mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -245,13 +235,12 @@
 
 - (void)setupLocateButton {
     self.locateButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.locateButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.locateButton.layer.cornerRadius = 26.0;
     self.locateButton.layer.masksToBounds = YES;
     self.locateButton.tintColor = [UIColor systemBlueColor];
-    self.locateButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.98];
+    self.locateButton.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.98];
     self.locateButton.layer.borderWidth = 1.0;
-    self.locateButton.layer.borderColor = [UIColor colorWithWhite:0.88 alpha:1.0].CGColor;
+    self.locateButton.layer.borderColor = [UIColor separatorColor].CGColor;
 
     if (@available(iOS 13.0, *)) {
         [self.locateButton setImage:[UIImage systemImageNamed:@"location.fill"] forState:UIControlStateNormal];
@@ -265,18 +254,14 @@
 
     [self.view addSubview:self.locateButton];
 
-    UILayoutGuide *safeArea = self.view.safeAreaLayoutGuide;
-    NSLayoutYAxisAnchor *bottomAnchorTarget = self.searchContainerView ? self.searchContainerView.topAnchor : safeArea.bottomAnchor;
-    CGFloat bottomConstant = self.searchContainerView ? -12.0 : -24.0;
-    // 底部约束保持用系统 anchor，保证和 safeArea 行为一致
-    [NSLayoutConstraint activateConstraints:@[
-        [self.locateButton.bottomAnchor constraintEqualToAnchor:bottomAnchorTarget constant:bottomConstant]
-    ]];
-
-    // 其余宽高与水平位置使用 Masonry
     [self.locateButton mas_makeConstraints:^(MASConstraintMaker *make) {
         make.trailing.equalTo(self.view.mas_trailing).offset(-16.0);
         make.width.height.mas_equalTo(52.0);
+        if (self.searchContainerView) {
+            make.bottom.equalTo(self.searchContainerView.mas_top).offset(-12.0);
+        } else {
+            make.bottom.equalTo(self.view.mas_safeAreaLayoutGuideBottom).offset(-24.0);
+        }
     }];
 }
 
@@ -337,7 +322,9 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self
                                                     name:UIKeyboardWillChangeFrameNotification
                                                   object:nil];
-    self.searchBottomConstraint.constant = -12.0;
+    [self.searchContainerView mas_updateConstraints:^(MASConstraintMaker *make) {
+        self.searchBottomConstraint = make.bottom.equalTo(self.view.mas_safeAreaLayoutGuideBottom).offset(-12.0);
+    }];
     [UIView animateWithDuration:0.25 animations:^{
         [self.view layoutIfNeeded];
     }];
@@ -586,7 +573,10 @@ calloutAccessoryControlTapped:(UIControl *)control {
     // Map 里搜索条更贴近键盘一点
     CGFloat gap = 4.0;
     CGFloat offset = -MAX(0, keyboardHeightInView - safeBottom + gap);
-    self.searchBottomConstraint.constant = offset - 12.0;
+
+    [self.searchContainerView mas_updateConstraints:^(MASConstraintMaker *make) {
+        self.searchBottomConstraint = make.bottom.equalTo(self.view.mas_safeAreaLayoutGuideBottom).offset(offset - 12.0);
+    }];
 
     [UIView beginAnimations:nil context:NULL];
     [UIView setAnimationDuration:duration];

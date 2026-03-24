@@ -1,5 +1,6 @@
 #import "YALMemoryView.h"
 #import "YALMemoryMonthCell.h"
+#import <Masonry/Masonry.h>
 
 @interface YALMemoryView () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
 
@@ -24,63 +25,95 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        if (@available(iOS 13.0, *)) {
-            self.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-                if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-                    return [UIColor systemBackgroundColor];
-                }
-                return [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:1.0];
-            }];
-        } else {
-            self.backgroundColor = [UIColor whiteColor];
-        }
-
-        _header = [[UIView alloc] initWithFrame:CGRectZero];
-        _header.backgroundColor = [UIColor clearColor];
-        [self addSubview:_header];
-
-        _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _titleLabel.text = @"";
-
-        _yearLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _yearLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightHeavy];
-        _yearLabel.textColor = [UIColor labelColor];
-        _yearLabel.textAlignment = NSTextAlignmentCenter;
-        _yearLabel.userInteractionEnabled = YES;
-        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(yearTapped)];
-        [_yearLabel addGestureRecognizer:tap];
-        [_header addSubview:_yearLabel];
-
-        _prevButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        _prevButton.tintColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
-        if (@available(iOS 13.0, *)) {
-            [_prevButton setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
-        }
-        [_prevButton addTarget:self action:@selector(prevTapped) forControlEvents:UIControlEventTouchUpInside];
-        [_header addSubview:_prevButton];
-
-        _nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        _nextButton.tintColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
-        if (@available(iOS 13.0, *)) {
-            [_nextButton setImage:[UIImage systemImageNamed:@"chevron.right"] forState:UIControlStateNormal];
-        }
-        [_nextButton addTarget:self action:@selector(nextTapped) forControlEvents:UIControlEventTouchUpInside];
-        [_header addSubview:_nextButton];
-
-        UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
-        layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-        layout.minimumLineSpacing = 16;
-        layout.sectionInset = UIEdgeInsetsMake(10, 16, 24, 16);
-
-        _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
-        _collectionView.backgroundColor = [UIColor clearColor];
-        _collectionView.showsVerticalScrollIndicator = NO;
-        _collectionView.dataSource = self;
-        _collectionView.delegate = self;
-        [_collectionView registerClass:[YALMemoryMonthCell class] forCellWithReuseIdentifier:@"YALMemoryMonthCell"];
-        [self addSubview:_collectionView];
+        self.backgroundColor = [UIColor systemGroupedBackgroundColor];
+        [self buildUI];
     }
     return self;
+}
+
+- (instancetype)init {
+    return [self initWithFrame:CGRectZero];
+}
+
+- (void)buildUI {
+    _header = [[UIView alloc] init];
+    _header.backgroundColor = [UIColor clearColor];
+    [self addSubview:_header];
+
+    _titleLabel = [[UILabel alloc] init];
+    _titleLabel.text = @"";
+
+    _yearLabel = [[UILabel alloc] init];
+    _yearLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightHeavy];
+    _yearLabel.textColor = [UIColor labelColor];
+    _yearLabel.textAlignment = NSTextAlignmentCenter;
+    _yearLabel.userInteractionEnabled = YES;
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(yearTapped)];
+    [_yearLabel addGestureRecognizer:tap];
+    [_header addSubview:_yearLabel];
+
+    _prevButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _prevButton.tintColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+    if (@available(iOS 13.0, *)) {
+        [_prevButton setImage:[UIImage systemImageNamed:@"chevron.left"] forState:UIControlStateNormal];
+    }
+    [_prevButton addTarget:self action:@selector(prevTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_header addSubview:_prevButton];
+
+    _nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _nextButton.tintColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+    if (@available(iOS 13.0, *)) {
+        [_nextButton setImage:[UIImage systemImageNamed:@"chevron.right"] forState:UIControlStateNormal];
+    }
+    [_nextButton addTarget:self action:@selector(nextTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_header addSubview:_nextButton];
+
+    UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
+    layout.scrollDirection = UICollectionViewScrollDirectionVertical;
+    layout.minimumLineSpacing = 16;
+    layout.sectionInset = UIEdgeInsetsMake(10, 16, 24, 16);
+
+    _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    _collectionView.backgroundColor = [UIColor clearColor];
+    _collectionView.showsVerticalScrollIndicator = NO;
+    _collectionView.dataSource = self;
+    _collectionView.delegate = self;
+    [_collectionView registerClass:[YALMemoryMonthCell class] forCellWithReuseIdentifier:@"YALMemoryMonthCell"];
+    [self addSubview:_collectionView];
+
+    // Masonry 约束
+    [_header mas_makeConstraints:^(MASConstraintMaker *make) {
+        if (@available(iOS 11.0, *)) {
+            make.top.equalTo(self.mas_safeAreaLayoutGuideTop).offset(10);
+        } else {
+            make.top.equalTo(self.mas_top).offset(10);
+        }
+        make.left.right.equalTo(self);
+        make.height.mas_equalTo(76.0);
+    }];
+
+    [_yearLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(_header);
+        make.top.equalTo(_header.mas_top).offset(12);
+        make.height.mas_equalTo(48);
+    }];
+
+    [_prevButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.right.equalTo(_yearLabel.mas_left).offset(-6);
+        make.centerY.equalTo(_yearLabel);
+        make.width.height.mas_equalTo(36);
+    }];
+
+    [_nextButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(_yearLabel.mas_right).offset(6);
+        make.centerY.equalTo(_yearLabel);
+        make.width.height.mas_equalTo(36);
+    }];
+
+    [_collectionView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_header.mas_bottom);
+        make.left.right.bottom.equalTo(self);
+    }];
 }
 
 - (void)setYear:(NSInteger)year {
@@ -116,32 +149,6 @@
     self.nextButton.enabled = canNext;
     self.prevButton.alpha = canPrev ? 1.0 : 0.35;
     self.nextButton.alpha = canNext ? 1.0 : 0.35;
-}
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-
-    CGFloat w = self.bounds.size.width;
-    CGFloat top = 10;
-    if (@available(iOS 11.0, *)) top += self.safeAreaInsets.top;
-
-    static const CGFloat kHeaderH = 76.0;
-    self.header.frame = CGRectMake(0, top, w, kHeaderH);
-
-    self.yearLabel.frame = CGRectMake(16, 10, w - 32, 48);
-    CGSize yearFit = [self.yearLabel sizeThatFits:CGSizeMake(w - 32, 48)];
-    CGFloat yearW = MIN(yearFit.width, w - 32);
-    CGFloat yearX = (w - yearW) / 2.0;
-    self.yearLabel.frame = CGRectMake(yearX, 12, yearW, 48);
-
-    CGFloat btn = 36;
-    CGFloat gap = 6;
-    CGFloat btnY = 18;
-    self.prevButton.frame = CGRectMake(MAX(10, yearX - gap - btn), btnY, btn, btn);
-    self.nextButton.frame = CGRectMake(MIN(w - 10 - btn, CGRectGetMaxX(self.yearLabel.frame) + gap), btnY, btn, btn);
-
-    CGFloat listY = CGRectGetMaxY(self.header.frame);
-    self.collectionView.frame = CGRectMake(0, listY, w, self.bounds.size.height - listY);
 }
 
 #pragma mark - Actions
@@ -196,4 +203,3 @@
 }
 
 @end
-

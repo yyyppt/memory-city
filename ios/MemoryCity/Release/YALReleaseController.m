@@ -7,6 +7,7 @@
 
 #import "YALReleaseController.h"
 #import "YALCalendarController.h"
+#import <Masonry/Masonry.h>
 
 @interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate>
 
@@ -80,26 +81,29 @@
 #pragma mark - UI
 
 - (void)buildUI {
-  self.scrollView = [[UIScrollView alloc] initWithFrame:self.view.bounds];
+  self.scrollView = [[UIScrollView alloc] init];
   self.scrollView.alwaysBounceVertical = YES;
   self.scrollView.showsVerticalScrollIndicator = NO;
-  self.scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   [self.view addSubview:self.scrollView];
+  [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.edges.equalTo(self.view);
+  }];
 
-  self.contentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 1)];
+  self.contentView = [[UIView alloc] init];
   self.contentView.backgroundColor = [UIColor clearColor];
   [self.scrollView addSubview:self.contentView];
+  [self.contentView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.edges.equalTo(self.scrollView);
+    make.width.equalTo(self.scrollView);
+  }];
 
-  CGFloat width = CGRectGetWidth(self.view.bounds);
-  CGFloat side = 16.0;
-
-  UIView *card = [[UIView alloc] initWithFrame:CGRectMake(side, 14.0, width - side * 2, 10)];
+  UIView *card = [[UIView alloc] init];
   card.backgroundColor = [UIColor secondarySystemBackgroundColor];
   card.layer.cornerRadius = 18.0;
   card.layer.masksToBounds = YES;
   [self.contentView addSubview:card];
 
-  self.coverImageView = [[UIImageView alloc] initWithFrame:CGRectZero];
+  self.coverImageView = [[UIImageView alloc] init];
   self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
   self.coverImageView.layer.cornerRadius = 14.0;
   self.coverImageView.layer.masksToBounds = YES;
@@ -111,7 +115,7 @@
   imgTap.cancelsTouchesInView = NO;
   [self.coverImageView addGestureRecognizer:imgTap];
 
-  self.dateLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+  self.dateLabel = [[UILabel alloc] init];
   self.dateLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
   self.dateLabel.textColor = [UIColor secondaryLabelColor];
   [card addSubview:self.dateLabel];
@@ -122,31 +126,38 @@
   dateTap.cancelsTouchesInView = NO;
   [self.dateLabel addGestureRecognizer:dateTap];
 
-  self.textView = [[UITextView alloc] initWithFrame:CGRectZero];
+  self.textView = [[UITextView alloc] init];
   self.textView.backgroundColor = [UIColor clearColor];
   self.textView.textColor = [UIColor labelColor];
   self.textView.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
   self.textView.textContainerInset = UIEdgeInsetsMake(8, 6, 8, 6);
   [card addSubview:self.textView];
 
-  // layout
-  CGFloat inner = 14.0;
-  CGFloat cardW = CGRectGetWidth(card.bounds);
-  CGFloat imageH = MIN(260.0, width * 0.68);
-  self.coverImageView.frame = CGRectMake(inner, inner, cardW - inner * 2, imageH);
-  self.dateLabel.frame = CGRectMake(inner, CGRectGetMaxY(self.coverImageView.frame) + 10.0, cardW - inner * 2, 18.0);
-  self.textView.frame = CGRectMake(inner,
-                                   CGRectGetMaxY(self.dateLabel.frame) + 8.0,
-                                   cardW - inner * 2,
-                                   220.0);
-  CGFloat cardH = CGRectGetMaxY(self.textView.frame) + inner;
-  CGRect cardFrame = card.frame;
-  cardFrame.size.height = cardH;
-  card.frame = cardFrame;
+  CGFloat imageH = MIN(260.0, [UIScreen mainScreen].bounds.size.width * 0.68);
 
-  CGFloat contentH = CGRectGetMaxY(card.frame) + 18.0;
-  self.contentView.frame = CGRectMake(0, 0, width, contentH);
-  self.scrollView.contentSize = CGSizeMake(width, contentH);
+  [card mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.contentView.mas_top).offset(14);
+    make.left.equalTo(self.contentView.mas_left).offset(16);
+    make.right.equalTo(self.contentView.mas_right).offset(-16);
+    make.bottom.equalTo(self.contentView.mas_bottom).offset(-18);
+  }];
+  [self.coverImageView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(card.mas_top).offset(14);
+    make.left.equalTo(card.mas_left).offset(14);
+    make.right.equalTo(card.mas_right).offset(-14);
+    make.height.mas_equalTo(imageH);
+  }];
+  [self.dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.coverImageView.mas_bottom).offset(10);
+    make.left.right.equalTo(self.coverImageView);
+    make.height.mas_equalTo(18);
+  }];
+  [self.textView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.dateLabel.mas_bottom).offset(8);
+    make.left.right.equalTo(self.coverImageView);
+    make.height.mas_equalTo(220);
+    make.bottom.equalTo(card.mas_bottom).offset(-14);
+  }];
 }
 
 - (void)applyPrefillIfNeeded {

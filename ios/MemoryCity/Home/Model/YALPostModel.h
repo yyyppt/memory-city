@@ -13,6 +13,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface YALPostModel : NSObject
 
 @property (nonatomic, strong) UIImage *image;
+@property (nonatomic, copy) NSString *imageURLString;
 @property (nonatomic, assign) CGFloat imageWidth;
 @property (nonatomic, assign) CGFloat imageHeight;
 

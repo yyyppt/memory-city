@@ -131,13 +131,7 @@
 
     // 底部工具栏：评论输入 + 点赞 / 收藏 / 评论数
     self.bottomBar = [[UIView alloc] init];
-    if (@available(iOS 13.0, *)) {
-        self.bottomBar.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-            return trait.userInterfaceStyle == UIUserInterfaceStyleDark ? [UIColor blackColor] : [UIColor secondarySystemBackgroundColor];
-        }];
-    } else {
-        self.bottomBar.backgroundColor = [UIColor blackColor];
-    }
+    self.bottomBar.backgroundColor = [UIColor secondarySystemBackgroundColor];
     [self.view addSubview:self.bottomBar];
 
     // 左侧：可增长的评论输入区

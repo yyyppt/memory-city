@@ -160,7 +160,7 @@
     titleLabel.text = item[@"title"];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-    titleLabel.textColor = [UIColor labelColor];
+    titleLabel.textColor = [UIColor colorWithRed:0.34 green:0.28 blue:0.20 alpha:1.0];
 
     [iconBadge addSubview:iconView];
     [card addSubview:iconBadge];

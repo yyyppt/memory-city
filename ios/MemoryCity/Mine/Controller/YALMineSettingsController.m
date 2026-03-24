@@ -5,6 +5,7 @@
 //  Created by yyyyy on 2026/3/11.
 //
 #import "YALMineSettingsController.h"
+#import <Masonry/Masonry.h>
 
 static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
 
@@ -42,13 +43,9 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
     self.tableView.rowHeight = 56.0;
     self.tableView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.tableView];
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor]
-    ]];
+    [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -224,23 +221,21 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
         }
         self.appearanceButtons = [buttons copy];
 
-        titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        stackView.translatesAutoresizingMaskIntoConstraints = NO;
-        [NSLayoutConstraint activateConstraints:@[
-            [titleLabel.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:14.0],
-            [titleLabel.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:18.0],
-            [titleLabel.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-18.0],
-
-            [detailLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:4.0],
-            [detailLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
-            [detailLabel.trailingAnchor constraintEqualToAnchor:titleLabel.trailingAnchor],
-
-            [stackView.topAnchor constraintEqualToAnchor:detailLabel.bottomAnchor constant:14.0],
-            [stackView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:18.0],
-            [stackView.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-18.0],
-            [stackView.heightAnchor constraintEqualToConstant:40.0]
-        ]];
+        [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(cell.contentView.mas_top).offset(14.0);
+            make.left.equalTo(cell.contentView.mas_left).offset(18.0);
+            make.right.equalTo(cell.contentView.mas_right).offset(-18.0);
+        }];
+        [detailLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(titleLabel.mas_bottom).offset(4.0);
+            make.left.right.equalTo(titleLabel);
+        }];
+        [stackView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(detailLabel.mas_bottom).offset(14.0);
+            make.left.equalTo(cell.contentView.mas_left).offset(18.0);
+            make.right.equalTo(cell.contentView.mas_right).offset(-18.0);
+            make.height.mas_equalTo(40.0);
+        }];
     }
 
     [self updateAppearanceButtons];

@@ -1,4 +1,5 @@
 #import "YALCalendarController.h"
+#import <Masonry/Masonry.h>
 
 @interface YALCalendarController ()
 
@@ -22,13 +23,13 @@
                                         action:@selector(doneTapped)];
     self.navigationItem.rightBarButtonItem.tintColor = accent;
 
-    UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
+    UIView *card = [[UIView alloc] init];
     card.backgroundColor = [UIColor secondarySystemBackgroundColor];
     card.layer.cornerRadius = 18;
     card.layer.masksToBounds = YES;
     [self.view addSubview:card];
 
-    _datePicker = [[UIDatePicker alloc] initWithFrame:CGRectZero];
+    _datePicker = [[UIDatePicker alloc] init];
     _datePicker.datePickerMode = UIDatePickerModeDate;
     _datePicker.maximumDate = [NSDate date];
     _datePicker.backgroundColor = [UIColor clearColor];
@@ -43,18 +44,17 @@
         }
     }
     [card addSubview:_datePicker];
-
     _datePicker.layer.masksToBounds = NO;
-}
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    CGFloat side = 16;
-    CGFloat top = self.view.safeAreaInsets.top + 12;
-    CGFloat w = self.view.bounds.size.width;
-    UIView *card = self.view.subviews.firstObject;
-    card.frame = CGRectMake(side, top, w - side * 2, 370);
-    self.datePicker.frame = CGRectMake(0, 0, card.bounds.size.width, card.bounds.size.height);
+    [card mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(12);
+        make.left.equalTo(self.view.mas_left).offset(16);
+        make.right.equalTo(self.view.mas_right).offset(-16);
+        make.height.mas_equalTo(370);
+    }];
+    [_datePicker mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(card);
+    }];
 }
 
 - (void)doneTapped {

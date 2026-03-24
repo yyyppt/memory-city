@@ -1,5 +1,6 @@
 #import "YALTimeLineView.h"
 #import "YALTimeLineCardView.h"
+#import <Masonry/Masonry.h>
 
 static const CGFloat kCurveX        = 36.0;
 static const CGFloat kCardLeft      = 62.0;
@@ -32,13 +33,15 @@ static const CGFloat kBottomPad     = 50.0;
     if (self) {
         self.backgroundColor = [UIColor systemGroupedBackgroundColor];
 
-        _scrollView = [[UIScrollView alloc] initWithFrame:self.bounds];
+        _scrollView = [[UIScrollView alloc] init];
         _scrollView.showsVerticalScrollIndicator = NO;
         _scrollView.alwaysBounceVertical = YES;
-        _scrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [self addSubview:_scrollView];
+        [_scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self);
+        }];
 
-        _contentView = [[UIView alloc] initWithFrame:self.bounds];
+        _contentView = [[UIView alloc] init];
         [_scrollView addSubview:_contentView];
 
         _curveLayer = [CAShapeLayer layer];

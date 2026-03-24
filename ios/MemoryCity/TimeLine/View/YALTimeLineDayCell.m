@@ -1,4 +1,5 @@
 #import "YALTimeLineDayCell.h"
+#import <Masonry/Masonry.h>
 
 @interface YALTimeLineDayCell ()
 
@@ -58,32 +59,52 @@
         _subtitleLabel.textColor = [UIColor secondaryLabelColor];
         _subtitleLabel.numberOfLines = 2;
         [_card addSubview:_subtitleLabel];
+
+        // Masonry 约束
+        [_dayNumLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.contentView.mas_left).offset(16);
+            make.top.equalTo(self.contentView.mas_top).offset(8);
+            make.width.mas_equalTo(44);
+            make.height.mas_equalTo(34);
+        }];
+
+        [_weekdayLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.width.equalTo(_dayNumLabel);
+            make.top.equalTo(_dayNumLabel.mas_bottom).offset(-2);
+            make.height.mas_equalTo(16);
+        }];
+
+        [_card mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(_dayNumLabel.mas_right).offset(8);
+            make.top.equalTo(self.contentView.mas_top).offset(6);
+            make.right.equalTo(self.contentView.mas_right).offset(-16);
+            make.bottom.equalTo(self.contentView.mas_bottom).offset(-6);
+        }];
+
+        [_thumbView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(_card.mas_left).offset(12);
+            make.top.equalTo(_card.mas_top).offset(12);
+            make.width.height.mas_equalTo(72);
+        }];
+
+        [_titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(_thumbView.mas_right).offset(12);
+            make.top.equalTo(_card.mas_top).offset(14);
+            make.right.equalTo(_card.mas_right).offset(-12);
+            make.height.mas_equalTo(40);
+        }];
+
+        [_subtitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.right.equalTo(_titleLabel);
+            make.top.equalTo(_titleLabel.mas_bottom).offset(4);
+            make.height.mas_equalTo(36);
+        }];
     }
     return self;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    CGFloat w = self.contentView.bounds.size.width;
-    CGFloat leftW = 52;
-    CGFloat pad = 16;
-    CGFloat cardX = leftW + 8;
-    CGFloat cardW = w - cardX - pad;
-    CGFloat rowH = self.contentView.bounds.size.height;
-    CGFloat cardH = rowH - 12;
-
-    self.dayNumLabel.frame = CGRectMake(pad, 8, leftW - 8, 34);
-    self.weekdayLabel.frame = CGRectMake(pad, CGRectGetMaxY(self.dayNumLabel.frame) - 2, leftW - 8, 16);
-
-    self.card.frame = CGRectMake(cardX, 6, cardW, cardH);
-    CGFloat inner = 12;
-    CGFloat thumb = 72;
-    self.thumbView.frame = CGRectMake(inner, inner, thumb, thumb);
-    CGFloat textX = CGRectGetMaxX(self.thumbView.frame) + 12;
-    CGFloat textW = cardW - textX - inner;
-    self.titleLabel.frame = CGRectMake(textX, inner + 2, textW, 40);
-    self.subtitleLabel.frame = CGRectMake(textX, CGRectGetMaxY(self.titleLabel.frame) + 4, textW, 36);
-
     self.card.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.card.bounds cornerRadius:16].CGPath;
 }
 

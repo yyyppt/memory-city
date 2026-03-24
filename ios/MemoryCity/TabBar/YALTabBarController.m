@@ -136,11 +136,11 @@
   CGFloat centerX = tabBarWidth / 2.0;
 
   CALayer *leftLine = [CALayer layer];
-  leftLine.backgroundColor = [UIColor colorWithWhite:0.85 alpha:1.0].CGColor;
+  leftLine.backgroundColor = [UIColor separatorColor].CGColor;
   leftLine.frame = CGRectMake(0, 0, centerX - gapWidth / 2.0, 0.5);
 
   CALayer *rightLine = [CALayer layer];
-  rightLine.backgroundColor = [UIColor colorWithWhite:0.85 alpha:1.0].CGColor;
+  rightLine.backgroundColor = [UIColor separatorColor].CGColor;
   rightLine.frame = CGRectMake(centerX + gapWidth / 2.0,
                                0,
                                tabBarWidth - (centerX + gapWidth / 2.0),

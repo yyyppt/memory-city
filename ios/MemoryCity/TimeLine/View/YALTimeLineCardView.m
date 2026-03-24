@@ -6,6 +6,7 @@
 //
 
 #import "YALTimeLineCardView.h"
+#import <Masonry/Masonry.h>
 
 @interface YALTimeLineCardView ()
 
@@ -13,6 +14,7 @@
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UIView *moreDot;
+@property (nonatomic, strong) MASConstraint *imageHeightConstraint;
 
 @end
 
@@ -54,6 +56,33 @@
         [self addSubview:_moreDot];
 
         [self addTarget:self action:@selector(cardTapped) forControlEvents:UIControlEventTouchUpInside];
+
+        // Masonry 约束
+        [_imageView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.mas_top).offset(10);
+            make.left.equalTo(self.mas_left).offset(10);
+            make.right.equalTo(self.mas_right).offset(-10);
+            self.imageHeightConstraint = make.height.mas_equalTo(0);
+        }];
+
+        [_titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(_imageView.mas_bottom).offset(8);
+            make.left.equalTo(self.mas_left).offset(12);
+            make.right.equalTo(self.mas_right).offset(-24);
+            make.height.mas_equalTo(20);
+        }];
+
+        [_dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(_titleLabel.mas_bottom).offset(4);
+            make.left.right.equalTo(_titleLabel);
+            make.height.mas_equalTo(16);
+        }];
+
+        [_moreDot mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.right.equalTo(self.mas_right).offset(-12);
+            make.top.equalTo(self.mas_top).offset(14);
+            make.width.height.mas_equalTo(6);
+        }];
     }
     return self;
 }
@@ -67,44 +96,28 @@
 + (CGFloat)cardHeightForEntry:(YALTimeLineEntryModel *)entry width:(CGFloat)cardWidth {
     UIImage *img = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
     CGFloat imageH = [self imageHeightForImage:img fitWidth:cardWidth - 20];
-    // 10(top) + image + 8(gap) + 20(title) + 4(gap) + 16(date) + 10(bottom)
     return 10 + imageH + 8 + 20 + 4 + 16 + 10;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-
-    CGFloat w = self.bounds.size.width;
-
-    CGFloat imageH = [[self class] imageHeightForImage:_imageView.image fitWidth:w - 20];
-
-    _imageView.frame = CGRectMake(10, 10, w - 20, imageH);
-
-    _titleLabel.frame = CGRectMake(12,
-                                  CGRectGetMaxY(_imageView.frame) + 8,
-                                  w - 24,
-                                  20);
-
-    _dateLabel.frame = CGRectMake(12,
-                                 CGRectGetMaxY(_titleLabel.frame) + 4,
-                                 w - 24,
-                                 16);
-
-    _moreDot.frame = CGRectMake(w - 18, 14, 6, 6);
-
-    self.layer.shadowPath =
-        [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:14].CGPath;
+    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:14].CGPath;
 }
 
 - (void)setEntry:(YALTimeLineEntryModel *)entry {
     _entry = entry;
     _titleLabel.text = entry.titleText.length > 0 ? entry.titleText : entry.dateText;
     _dateLabel.text = entry.subtitleText.length > 0 ? entry.subtitleText : entry.dateText;
-    if (entry.image) {
-        _imageView.image = entry.image;
-    } else {
-        _imageView.image = [UIImage imageNamed:@"WechatIMG395 1.jpg"];
-    }
+
+    UIImage *img = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
+    _imageView.image = img;
+
+    // 根据图片更新高度约束
+    CGFloat imgH = [[self class] imageHeightForImage:img fitWidth:self.bounds.size.width - 20];
+    [self.imageHeightConstraint uninstall];
+    [_imageView mas_updateConstraints:^(MASConstraintMaker *make) {
+        self.imageHeightConstraint = make.height.mas_equalTo(imgH > 0 ? imgH : 160.0);
+    }];
 }
 
 - (void)cardTapped {

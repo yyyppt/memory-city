@@ -2,6 +2,7 @@
 #import "YALMemoryView.h"
 #import "YALMemoryMonthModel.h"
 #import "YALTimeLineController.h"
+#import <Masonry/Masonry.h>
 
 @interface YALMemoryController () <YALMemoryViewDelegate, UITableViewDataSource, UITableViewDelegate>
 
@@ -29,13 +30,15 @@
 
     self.view.backgroundColor = [UIColor systemBackgroundColor];
 
-    self.memoryView = [[YALMemoryView alloc] initWithFrame:self.view.bounds];
-    self.memoryView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.memoryView = [[YALMemoryView alloc] init];
     self.memoryView.delegate = self;
     self.memoryView.rangeFirstYear = self.firstPublishYear;
     self.memoryView.rangeLastYear = self.calendarYearNow;
     self.memoryView.yearsWithContent = self.yearsWithContent;
     [self.view addSubview:self.memoryView];
+    [self.memoryView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 
     [self setupYearTable];
 
@@ -93,15 +96,7 @@
 
 - (void)setupYearTable {
     self.yearTable = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    if (@available(iOS 13.0, *)) {
-        self.yearTable.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-            return trait.userInterfaceStyle == UIUserInterfaceStyleDark
-                ? [UIColor secondarySystemBackgroundColor]
-                : [UIColor whiteColor];
-        }];
-    } else {
-        self.yearTable.backgroundColor = [UIColor whiteColor];
-    }
+    self.yearTable.backgroundColor = [UIColor secondarySystemBackgroundColor];
     self.yearTable.layer.cornerRadius = 12;
     self.yearTable.clipsToBounds = YES;
     self.yearTable.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
@@ -188,12 +183,16 @@
 
     CGFloat w = self.view.bounds.size.width;
     CGFloat tableW = MIN(200, w - 48);
-    CGFloat x = (w - tableW) / 2.0;
     CGFloat top = self.view.safeAreaInsets.top + 10 + 76;
     CGFloat maxH = self.view.bounds.size.height - top - 24;
     CGFloat h = MIN(maxH, (CGFloat)self.yearOptions.count * 44 + 8);
 
-    self.yearTable.frame = CGRectMake(x, top, tableW, h);
+    [self.yearTable mas_remakeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(self.view);
+        make.width.mas_equalTo(tableW);
+        make.top.equalTo(self.view.mas_top).offset(top);
+        make.height.mas_equalTo(h);
+    }];
 
     self.yearPickerVisible = !self.yearPickerVisible;
     [UIView animateWithDuration:0.25 animations:^{
@@ -225,11 +224,7 @@
     cell.textLabel.text = [NSString stringWithFormat:@"%ld", (long)year];
     cell.userInteractionEnabled = has;
 
-    if (self.view.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-        cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    } else {
-        cell.backgroundColor = [UIColor whiteColor];
-    }
+    cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
 
     UIColor *accent = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
     if (has) {

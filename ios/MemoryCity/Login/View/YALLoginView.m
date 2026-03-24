@@ -6,96 +6,158 @@
 //
 
 #import "YALLoginView.h"
+#import <Masonry/Masonry.h>
 
 @implementation YALLoginView
 
-- (instancetype)initWithFrame:(CGRect)frame
-{
+- (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
-    
     if (self) {
-        self.backgroundColor = [UIColor whiteColor];
         self.backgroundColor = [UIColor systemBackgroundColor];
         [self setupUI];
     }
-    
     return self;
 }
 
 - (void)setupUI {
-    UIImageView *logo = [[UIImageView alloc] initWithFrame:CGRectMake(0,120,80,80)];
-    logo.center = CGPointMake(self.center.x,160);
+    UIImageView *logo = [[UIImageView alloc] init];
     logo.image = [UIImage imageNamed:@"logo"];
     logo.layer.cornerRadius = 20;
     logo.clipsToBounds = YES;
     [self addSubview:logo];
-    
-    
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0,220,self.frame.size.width,40)];
+
+    UILabel *title = [[UILabel alloc] init];
     title.text = @"拾光";
     title.font = [UIFont boldSystemFontOfSize:30];
     title.textAlignment = NSTextAlignmentCenter;
     [self addSubview:title];
-    
-    
-    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(0,260,self.frame.size.width,30)];
+
+    UILabel *sub = [[UILabel alloc] init];
     sub.text = @"记录每一个温润如玉的瞬间";
     sub.font = [UIFont systemFontOfSize:14];
-    sub.textColor = [UIColor grayColor];
+    sub.textColor = [UIColor secondaryLabelColor];
     sub.textAlignment = NSTextAlignmentCenter;
     [self addSubview:sub];
-    
-    _accountField = [[UITextField alloc] initWithFrame:CGRectMake(40,320,self.frame.size.width-80,50)];
+
+    _accountField = [[UITextField alloc] init];
     _accountField.placeholder = @"请输入您的联系方式";
-    _accountField.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1];
+    _accountField.backgroundColor = [UIColor secondarySystemBackgroundColor];
     _accountField.layer.cornerRadius = 25;
-    _accountField.leftView = [[UIView alloc]initWithFrame:CGRectMake(0,0,15,0)];
+    _accountField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
     _accountField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_accountField];
-    
-    _passwordField = [[UITextField alloc] initWithFrame:CGRectMake(40,390,self.frame.size.width-80,50)];
+
+    _passwordField = [[UITextField alloc] init];
     _passwordField.placeholder = @"请输入密码";
     _passwordField.secureTextEntry = YES;
-    _passwordField.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1];
+    _passwordField.backgroundColor = [UIColor secondarySystemBackgroundColor];
     _passwordField.layer.cornerRadius = 25;
-    _passwordField.leftView = [[UIView alloc]initWithFrame:CGRectMake(0,0,15,0)];
+    _passwordField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
     _passwordField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_passwordField];
-    
-    _loginButton = [[UIButton alloc] initWithFrame:CGRectMake(40,470,self.frame.size.width-80,55)];
+
+    _loginButton = [[UIButton alloc] init];
     _loginButton.backgroundColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
     [_loginButton setTitle:@"登录" forState:UIControlStateNormal];
     _loginButton.layer.cornerRadius = 28;
     [_loginButton addTarget:self action:@selector(pressLogin) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_loginButton];
-    
-    _forgetButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width - 120,440,100,30)];
+
+    _forgetButton = [[UIButton alloc] init];
     [_forgetButton setTitle:@"忘记密码?" forState:UIControlStateNormal];
     [_forgetButton setTitleColor:[UIColor orangeColor] forState:UIControlStateNormal];
     _forgetButton.titleLabel.font = [UIFont systemFontOfSize:13];
     [self addSubview:_forgetButton];
-    
-    _registerButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width-70,80,60,30)];
+
+    _registerButton = [[UIButton alloc] init];
     [_registerButton setTitle:@"注册" forState:UIControlStateNormal];
     [_registerButton setTitleColor:[UIColor orangeColor] forState:UIControlStateNormal];
     [_registerButton addTarget:self action:@selector(pressRegister) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_registerButton];
-    
-    
-    UILabel *other = [[UILabel alloc] initWithFrame:CGRectMake(0,560,self.frame.size.width,30)];
+
+    UILabel *other = [[UILabel alloc] init];
     other.text = @"其他登录方式";
-    other.textColor = [UIColor grayColor];
+    other.textColor = [UIColor secondaryLabelColor];
     other.font = [UIFont systemFontOfSize:14];
     other.textAlignment = NSTextAlignmentCenter;
     [self addSubview:other];
-    
-    _appleButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width/2-80,610,60,60)];
+
+    _appleButton = [[UIButton alloc] init];
     [_appleButton setImage:[UIImage imageNamed:@"apple.png"] forState:UIControlStateNormal];
     [self addSubview:_appleButton];
-    
-    _wechatButton = [[UIButton alloc] initWithFrame:CGRectMake(self.frame.size.width/2+20,610,60,60)];
+
+    _wechatButton = [[UIButton alloc] init];
     [_wechatButton setImage:[UIImage imageNamed:@"wechat.png"] forState:UIControlStateNormal];
     [self addSubview:_wechatButton];
+
+    // Masonry 约束
+    [logo mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.mas_top).offset(120);
+        make.centerX.equalTo(self);
+        make.width.height.mas_equalTo(80);
+    }];
+
+    [title mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(logo.mas_bottom).offset(20);
+        make.left.right.equalTo(self);
+        make.height.mas_equalTo(40);
+    }];
+
+    [sub mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(title.mas_bottom).offset(4);
+        make.left.right.equalTo(self);
+        make.height.mas_equalTo(30);
+    }];
+
+    [_accountField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(sub.mas_bottom).offset(30);
+        make.left.equalTo(self.mas_left).offset(40);
+        make.right.equalTo(self.mas_right).offset(-40);
+        make.height.mas_equalTo(50);
+    }];
+
+    [_passwordField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_accountField.mas_bottom).offset(16);
+        make.left.right.height.equalTo(_accountField);
+    }];
+
+    [_forgetButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_passwordField.mas_bottom).offset(8);
+        make.right.equalTo(self.mas_right).offset(-40);
+        make.width.mas_equalTo(100);
+        make.height.mas_equalTo(30);
+    }];
+
+    [_loginButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_forgetButton.mas_bottom).offset(8);
+        make.left.right.equalTo(_accountField);
+        make.height.mas_equalTo(55);
+    }];
+
+    [other mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_loginButton.mas_bottom).offset(40);
+        make.left.right.equalTo(self);
+        make.height.mas_equalTo(30);
+    }];
+
+    [_appleButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(other.mas_bottom).offset(16);
+        make.centerX.equalTo(self.mas_centerX).offset(-50);
+        make.width.height.mas_equalTo(60);
+    }];
+
+    [_wechatButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_appleButton.mas_top);
+        make.centerX.equalTo(self.mas_centerX).offset(50);
+        make.width.height.mas_equalTo(60);
+    }];
+
+    [_registerButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.mas_top).offset(80);
+        make.right.equalTo(self.mas_right).offset(-10);
+        make.width.mas_equalTo(60);
+        make.height.mas_equalTo(30);
+    }];
 }
 
 - (void)pressLogin {

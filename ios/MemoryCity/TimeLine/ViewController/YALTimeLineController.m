@@ -8,6 +8,7 @@
 #import "YALTimeLineController.h"
 #import "YALTimeLineDetailController.h"
 #import "YALTimeLineDayCell.h"
+#import <Masonry/Masonry.h>
 
 @interface YALTimeLineController () <UITableViewDataSource, UITableViewDelegate>
 
@@ -48,17 +49,18 @@
     self.title = [NSString stringWithFormat:@"%ld · %02ld", (long)self.displayYear, (long)self.displayMonth];
     self.monthDayEntries = [self buildSortedMonthEntries];
 
-    self.dayTableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
-    self.dayTableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.dayTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.dayTableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
     self.dayTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.dayTableView.dataSource = self;
     self.dayTableView.delegate = self;
-    // `YALTimeLineDayCell` 目前是基于固定布局的 frame 模式，不依赖 Auto Layout，自定义高度由 rowHeight 控制。
     self.dayTableView.rowHeight = 108;
     self.dayTableView.contentInset = UIEdgeInsetsMake(8, 0, 24, 0);
     [self.dayTableView registerClass:[YALTimeLineDayCell class] forCellReuseIdentifier:@"YALTimeLineDayCell"];
     [self.view addSubview:self.dayTableView];
+    [self.dayTableView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 }
 
 #pragma mark - Month list (daily cells)

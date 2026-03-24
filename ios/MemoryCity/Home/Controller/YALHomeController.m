@@ -11,6 +11,7 @@
 #import "YALSearchController.h"
 #import "YALMessageController.h"
 #import "YALPostDetailController.h"
+#import "YALPostManager.h"
 
 static CGFloat const kYALPostCellTextAreaHeight = 64.0;
 static CGFloat const kYALSingleColumnItemHeight = 320.0;
@@ -112,20 +113,32 @@ static CGFloat const kYALItemSpacing = 10.0;
         self.navigationItem.rightBarButtonItem = messageItem;
     }
 
-    // 示例数据：不同高度比例，模拟后端返回的宽高
+    // 先置空等待后端数据刷新
     self.data = [NSMutableArray array];
-    for (NSInteger i = 0; i < 20; i++) {
-        YALPostModel *model = [[YALPostModel alloc] init];
-        UIImage *image = [UIImage systemImageNamed:@"photo"] ?: [[UIImage alloc] init];
-        model.image = image;
-        model.imageWidth = 100.0;
-        model.imageHeight = (CGFloat)(arc4random_uniform(100) + 100); // 100~199 随机高度
-        model.title = @"Memory";
-        model.desc = @"记录今天的瞬间";
-        [self.data addObject:model];
-    }
 
     [self setupCollectionView];
+    [self loadPosts];
+}
+
+- (void)loadPosts {
+    __weak typeof(self) ws = self;
+    [[YALPostManager shareManager] getPosts:^(NSArray<YALPostModel *> *posts, NSError *error) {
+        if (!ws) return;
+
+        if (posts && posts.count > 0) {
+            ws.data = [posts mutableCopy];
+        } else {
+            // 拉取失败时保底显示一条占位数据，避免页面完全空白
+            YALPostModel *placeholder = [[YALPostModel alloc] init];
+            placeholder.image = [UIImage systemImageNamed:@"photo"] ?: [[UIImage alloc] init];
+            placeholder.imageWidth = 300.0;
+            placeholder.imageHeight = 400.0;
+            placeholder.title = @"加载失败";
+            placeholder.desc = (error.localizedDescription.length > 0) ? error.localizedDescription : @"请检查网络或接口地址。";
+            ws.data = [@[placeholder] mutableCopy];
+        }
+        [ws.collectionView reloadData];
+    }];
 }
 
 - (void)setupCollectionView {

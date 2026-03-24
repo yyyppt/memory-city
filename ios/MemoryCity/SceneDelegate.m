@@ -15,6 +15,8 @@
 #import "SceneDelegate.h"
 #import "YALLoginController.h"
 
+static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
+
 @interface SceneDelegate ()
 
 @end
@@ -25,6 +27,14 @@
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
     UIWindowScene *windowScene = (UIWindowScene *)scene;
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
+    if (@available(iOS 13.0, *)) {
+        NSInteger style = [[NSUserDefaults standardUserDefaults] integerForKey:kYALAppAppearanceStyleKey];
+        if (style == UIUserInterfaceStyleDark || style == UIUserInterfaceStyleLight) {
+            self.window.overrideUserInterfaceStyle = (UIUserInterfaceStyle)style;
+        } else {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+        }
+    }
 
     YALLoginController *loginVC = [[YALLoginController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loginVC];

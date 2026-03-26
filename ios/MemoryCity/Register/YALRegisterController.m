@@ -6,6 +6,8 @@
 //
 #import "YALRegisterController.h"
 #import "YALRegisterView.h"
+#import "YALAuthManager.h"
+#import "YALTabBarController.h"
 
 @interface YALRegisterController () <UIGestureRecognizerDelegate>
 
@@ -44,8 +46,18 @@
             [ss showAlert:@"请输入昵称"];
             return;
         }
-        // TODO: 接入注册接口
-        [ss showAlert:@"注册请求已记录（后续接网络）"];
+
+        [[YALAuthManager sharedManager] registerWithUsername:trimPhone
+                                                     password:trimPw
+                                                      nickname:trimName
+                                                    completion:^(YALAuthUserModel *user, NSError *error) {
+            if (user) {
+                [ss showAlert:@"注册成功，请重新登录"];
+                [ss.navigationController popViewControllerAnimated:YES];
+            } else {
+                [ss showAlert:@"注册失败，请稍后重试"];
+            }
+        }];
     };
     [self.view addSubview:self.registerView];
 
@@ -63,6 +75,35 @@
 
 - (void)dismissKeyboard {
     [self.view endEditing:YES];
+}
+
+- (void)enterMainInterface {
+    YALTabBarController *tabBarController = [[YALTabBarController alloc] init];
+    UIWindow *window = self.view.window;
+    if (!window) {
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if (![scene isKindOfClass:[UIWindowScene class]]) { continue; }
+            UIWindowScene *windowScene = (UIWindowScene *)scene;
+            if (windowScene.activationState != UISceneActivationStateForegroundActive &&
+                windowScene.activationState != UISceneActivationStateForegroundInactive) {
+                continue;
+            }
+            window = windowScene.windows.firstObject;
+            if (window) { break; }
+        }
+    }
+    if (!window) { return; }
+
+    [UIView transitionWithView:window
+                      duration:0.25
+                       options:UIViewAnimationOptionTransitionCrossDissolve
+                    animations:^{
+        BOOL oldState = [UIView areAnimationsEnabled];
+        [UIView setAnimationsEnabled:NO];
+        window.rootViewController = tabBarController;
+        [UIView setAnimationsEnabled:oldState];
+    } completion:nil];
+    [window makeKeyAndVisible];
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {

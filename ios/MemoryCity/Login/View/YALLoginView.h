@@ -19,9 +19,6 @@ typedef void(^TapRegisterBlock)(void);
 @property(nonatomic,strong)UIButton *registerButton;
 @property(nonatomic,strong)UIButton *forgetButton;
 
-@property(nonatomic,strong)UIButton *appleButton;
-@property(nonatomic,strong)UIButton *wechatButton;
-
 @property (nonatomic, copy) TapLoginBlock tapLoginBlock;
 @property (nonatomic, copy, nullable) TapRegisterBlock tapRegisterBlock;
 

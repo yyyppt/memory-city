@@ -14,8 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 @protocol YALMineViewDelegate <NSObject>
 @optional
 - (void)mineViewDidTapEditProfile:(YALMineView *)view;
-- (void)mineView:(YALMineView *)view didTapQuickActionAtIndex:(NSInteger)index;
-- (void)mineView:(YALMineView *)view didTapServiceAtIndex:(NSInteger)index;
+- (void)mineView:(YALMineView *)view didTapWorkspaceItemAtIndex:(NSInteger)index;
+- (void)mineView:(YALMineView *)view didTapStatAtIndex:(NSInteger)index;
+- (void)mineView:(YALMineView *)view didTapPersonalItemAtIndex:(NSInteger)index;
 @end
 
 @interface YALMineView : UIView

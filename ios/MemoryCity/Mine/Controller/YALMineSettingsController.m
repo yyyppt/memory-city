@@ -75,23 +75,18 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
     return 1;
 }
 
+// Replaced implementation as per instructions
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     (void)tableView;
-    if (section == YALMineSettingsSectionCommon) {
-        return @"常用操作";
-    }
-    if (section == YALMineSettingsSectionAccount) {
-        return @"账号";
-    }
-    return @"";
+    (void)section;
+    return nil;
 }
 
+// Replaced implementation as per instructions
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     (void)tableView;
-    if (section == YALMineSettingsSectionAccount) {
-        return @"退出后将返回登录页。";
-    }
-    return @"";
+    (void)section;
+    return nil;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -125,22 +120,18 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
         switch (indexPath.row) {
             case YALMineSettingsCommonRowShuffleProfile:
                 cell.textLabel.text = @"切换昵称风格";
-                cell.detailTextLabel.text = @"快速换一组昵称、简介和统计数据";
                 break;
             case YALMineSettingsCommonRowShareApp:
                 cell.textLabel.text = @"分享 MemoryCity";
-                cell.detailTextLabel.text = @"通过系统分享面板发送给朋友";
                 break;
             case YALMineSettingsCommonRowClearBadge:
                 cell.textLabel.text = @"清空消息提醒";
-                cell.detailTextLabel.text = @"重置应用图标角标";
                 break;
             default:
                 break;
         }
     } else {
         cell.textLabel.text = @"退出登录";
-        cell.detailTextLabel.text = @"切换到登录页";
         cell.textLabel.textColor = [UIColor systemRedColor];
         cell.accessoryType = UITableViewCellAccessoryNone;
     }
@@ -192,12 +183,6 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
         titleLabel.text = @"外观模式";
         [cell.contentView addSubview:titleLabel];
 
-        UILabel *detailLabel = [[UILabel alloc] init];
-        detailLabel.tag = 1002;
-        detailLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular];
-        detailLabel.textColor = [UIColor secondaryLabelColor];
-        detailLabel.text = @"只影响 MemoryCity，退出登录后会恢复跟随系统。";
-        [cell.contentView addSubview:detailLabel];
 
         UIStackView *stackView = [[UIStackView alloc] init];
         stackView.tag = 1003;
@@ -226,12 +211,8 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
             make.left.equalTo(cell.contentView.mas_left).offset(18.0);
             make.right.equalTo(cell.contentView.mas_right).offset(-18.0);
         }];
-        [detailLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(titleLabel.mas_bottom).offset(4.0);
-            make.left.right.equalTo(titleLabel);
-        }];
         [stackView mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(detailLabel.mas_bottom).offset(14.0);
+            make.top.equalTo(titleLabel.mas_bottom).offset(14.0);
             make.left.equalTo(cell.contentView.mas_left).offset(18.0);
             make.right.equalTo(cell.contentView.mas_right).offset(-18.0);
             make.height.mas_equalTo(40.0);

@@ -13,22 +13,23 @@
 @property (nonatomic, strong) UIView *contentView;
 
 @property (nonatomic, strong) UIView *profileCard;
-@property (nonatomic, strong) UIView *profileTintView;
 @property (nonatomic, strong) UIView *avatarContainer;
 @property (nonatomic, strong) UIImageView *avatarImageView;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *bioLabel;
 @property (nonatomic, strong) UIButton *editProfileButton;
 
-@property (nonatomic, strong) UILabel *publishedValueLabel;
-@property (nonatomic, strong) UILabel *memoryValueLabel;
-@property (nonatomic, strong) UILabel *trackValueLabel;
+@property (nonatomic, strong) UILabel *workspaceSectionLabel;
+@property (nonatomic, strong) NSArray<UIButton *> *workspaceButtons;
 
-@property (nonatomic, strong) UILabel *quickSectionLabel;
-@property (nonatomic, strong) NSArray<UIButton *> *quickActionButtons;
+@property (nonatomic, strong) UILabel *statsSectionLabel;
+@property (nonatomic, strong) UIView *statsCardView;
+@property (nonatomic, strong) UILabel *publicValueLabel;
+@property (nonatomic, strong) UILabel *privateValueLabel;
+@property (nonatomic, strong) UILabel *draftValueLabel;
 
-@property (nonatomic, strong) UILabel *serviceSectionLabel;
-@property (nonatomic, strong) NSArray<UIButton *> *serviceButtons;
+@property (nonatomic, strong) UILabel *personalSectionLabel;
+@property (nonatomic, strong) NSArray<UIButton *> *personalButtons;
 
 @end
 
@@ -62,37 +63,22 @@
     }];
 
     [self buildProfileCard];
-    [self buildQuickSection];
-    [self buildServiceSection];
+    [self buildWorkspaceSection];
+    [self buildStatsSection];
+    [self buildPersonalSection];
     [self setupMainConstraints];
 }
 
 - (void)buildProfileCard {
     self.profileCard = [[UIView alloc] init];
-    if (@available(iOS 13.0, *)) {
-        self.profileCard.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-            if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-                return [UIColor secondarySystemBackgroundColor];
-            }
-            return [UIColor colorWithRed:0.998 green:0.992 blue:0.985 alpha:1.0];
-        }];
-    } else {
-        self.profileCard.backgroundColor = [UIColor colorWithRed:0.998 green:0.992 blue:0.985 alpha:1.0];
-    }
+    self.profileCard.backgroundColor = [self warmCardBackgroundColor];
     self.profileCard.layer.cornerRadius = 24.0;
     self.profileCard.layer.masksToBounds = YES;
     [self.contentView addSubview:self.profileCard];
 
-    self.profileTintView = [[UIView alloc] init];
-    self.profileTintView.backgroundColor = [self profilePanelColor];
-    self.profileTintView.layer.cornerRadius = 18.0;
-    self.profileTintView.layer.borderWidth = 1.0;
-    self.profileTintView.layer.borderColor = [self subtleAccentBorderColor].CGColor;
-    [self.profileCard addSubview:self.profileTintView];
-
     self.avatarContainer = [[UIView alloc] init];
     self.avatarContainer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.10];
-    self.avatarContainer.layer.cornerRadius = 38.0;
+    self.avatarContainer.layer.cornerRadius = 34.0;
     self.avatarContainer.layer.borderWidth = 1.0;
     self.avatarContainer.layer.borderColor = [[self accentColor] colorWithAlphaComponent:0.12].CGColor;
     [self.profileCard addSubview:self.avatarContainer];
@@ -127,101 +113,133 @@
                      forControlEvents:UIControlEventTouchUpInside];
     [self.profileCard addSubview:self.editProfileButton];
 
-    UIView *publishedStat = [self makeStatViewWithTitle:@"发布" valueLabel:&_publishedValueLabel];
-    UIView *memoryStat = [self makeStatViewWithTitle:@"回忆" valueLabel:&_memoryValueLabel];
-    UIView *trackStat = [self makeStatViewWithTitle:@"足迹" valueLabel:&_trackValueLabel];
-    UIView *firstSeparator = [self makeStatSeparatorView];
-    UIView *secondSeparator = [self makeStatSeparatorView];
-    [self.profileTintView addSubview:publishedStat];
-    [self.profileTintView addSubview:memoryStat];
-    [self.profileTintView addSubview:trackStat];
-    [self.profileTintView addSubview:firstSeparator];
-    [self.profileTintView addSubview:secondSeparator];
-
-    [self.profileTintView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.profileCard.mas_left).offset(14.0);
-        make.right.equalTo(self.profileCard.mas_right).offset(-14.0);
-        make.bottom.equalTo(self.profileCard.mas_bottom).offset(-14.0);
-        make.height.mas_equalTo(64.0);
-    }];
     [self.avatarContainer mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.profileCard.mas_left).offset(18.0);
-        make.top.equalTo(self.profileCard.mas_top).offset(22.0);
-        make.width.height.mas_equalTo(76.0);
+        make.top.equalTo(self.profileCard.mas_top).offset(20.0);
+        make.width.height.mas_equalTo(68.0);
     }];
     [self.avatarImageView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.center.equalTo(self.avatarContainer);
-        make.width.height.mas_equalTo(48.0);
+        make.width.height.mas_equalTo(42.0);
     }];
     [self.editProfileButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.profileCard.mas_top).offset(24.0);
+        make.top.equalTo(self.profileCard.mas_top).offset(20.0);
         make.right.equalTo(self.profileCard.mas_right).offset(-18.0);
         make.width.mas_equalTo(84.0);
         make.height.mas_equalTo(32.0);
     }];
     [self.nameLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.avatarContainer.mas_right).offset(14.0);
-        make.top.equalTo(self.profileCard.mas_top).offset(28.0);
-        make.right.lessThanOrEqualTo(self.editProfileButton.mas_left).offset(-12.0);
+        make.top.equalTo(self.profileCard.mas_top).offset(24.0);
+        make.right.lessThanOrEqualTo(self.editProfileButton.mas_left).offset(-10.0);
     }];
     [self.bioLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.nameLabel);
         make.top.equalTo(self.nameLabel.mas_bottom).offset(4.0);
         make.right.equalTo(self.profileCard.mas_right).offset(-18.0);
     }];
-    [publishedStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.top.bottom.equalTo(self.profileTintView);
-    }];
-    [memoryStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(firstSeparator.mas_right);
-        make.top.bottom.width.equalTo(publishedStat);
-    }];
-    [trackStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(secondSeparator.mas_right);
-        make.right.top.bottom.equalTo(self.profileTintView);
-        make.top.bottom.width.equalTo(publishedStat);
-    }];
-    [firstSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(publishedStat.mas_right);
-        make.width.mas_equalTo(1.0);
-        make.centerY.equalTo(self.profileTintView);
-        make.height.mas_equalTo(28.0);
-    }];
-    [secondSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(memoryStat.mas_right);
-        make.width.height.centerY.equalTo(firstSeparator);
-    }];
 }
 
-- (void)buildQuickSection {
-    self.quickSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
-                                           color:[UIColor labelColor]];
-    self.quickSectionLabel.text = @"常用入口";
-    [self.contentView addSubview:self.quickSectionLabel];
+- (void)buildWorkspaceSection {
+    self.workspaceSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
+                                               color:[UIColor labelColor]];
+    self.workspaceSectionLabel.text = @"创作工作台";
+    [self.contentView addSubview:self.workspaceSectionLabel];
 
-    self.quickActionButtons = @[
-        [self makeQuickActionButtonWithTitle:@"我的回忆" subtitle:@"回看时间线" iconName:@"wand.and.stars" tag:0],
-        [self makeQuickActionButtonWithTitle:@"地图足迹" subtitle:@"继续探索地点" iconName:@"location.fill" tag:1],
-        [self makeQuickActionButtonWithTitle:@"消息中心" subtitle:@"查看互动提醒" iconName:@"envelope.fill" tag:2],
-        [self makeQuickActionButtonWithTitle:@"继续发布" subtitle:@"记录新的瞬间" iconName:@"plus.circle.fill" tag:3]
+    self.workspaceButtons = @[
+        [self makeListButtonWithTitle:@"我的发布"
+                             subtitle:@"集中管理公开、私密和已发布内容"
+                             iconName:@"square.and.pencil"
+                                  tag:0
+                               action:@selector(workspaceTapped:)],
+        [self makeListButtonWithTitle:@"草稿箱"
+                             subtitle:@"继续编辑暂未发出的内容"
+                             iconName:@"doc.text.fill"
+                                  tag:1
+                               action:@selector(workspaceTapped:)],
+        [self makeListButtonWithTitle:@"新建发布"
+                             subtitle:@"快速记录新的城市瞬间"
+                             iconName:@"plus.circle.fill"
+                                  tag:2
+                               action:@selector(workspaceTapped:)]
     ];
-    for (UIButton *button in self.quickActionButtons) {
+    for (UIButton *button in self.workspaceButtons) {
         [self.contentView addSubview:button];
     }
 }
 
-- (void)buildServiceSection {
-    self.serviceSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
-                                             color:[UIColor labelColor]];
-    self.serviceSectionLabel.text = @"更多服务";
-    [self.contentView addSubview:self.serviceSectionLabel];
+- (void)buildStatsSection {
+    self.statsSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
+                                           color:[UIColor labelColor]];
+    self.statsSectionLabel.text = @"创作者数据";
+    [self.contentView addSubview:self.statsSectionLabel];
 
-    self.serviceButtons = @[
-        [self makeServiceButtonWithTitle:@"收藏灵感" subtitle:@"把喜欢的城市碎片先收起来" iconName:@"heart.fill" tag:0],
-        [self makeServiceButtonWithTitle:@"草稿箱" subtitle:@"发布前先留一份待编辑草稿" iconName:@"doc.text.fill" tag:1],
-        [self makeServiceButtonWithTitle:@"账号与设置" subtitle:@"通知、隐私和账号管理" iconName:@"gearshape.fill" tag:2]
+    self.statsCardView = [[UIView alloc] init];
+    self.statsCardView.backgroundColor = [self cardBackgroundColor];
+    self.statsCardView.layer.cornerRadius = 18.0;
+    self.statsCardView.layer.borderWidth = 1.0;
+    self.statsCardView.layer.borderColor = [self borderColor].CGColor;
+    [self.contentView addSubview:self.statsCardView];
+
+    UIControl *publicStat = [self makeStatViewWithTitle:@"公开中" valueLabel:&_publicValueLabel tag:0];
+    UIControl *privateStat = [self makeStatViewWithTitle:@"私密中" valueLabel:&_privateValueLabel tag:1];
+    UIControl *draftStat = [self makeStatViewWithTitle:@"草稿数" valueLabel:&_draftValueLabel tag:2];
+    UIView *firstSeparator = [self makeStatSeparatorView];
+    UIView *secondSeparator = [self makeStatSeparatorView];
+    [self.statsCardView addSubview:publicStat];
+    [self.statsCardView addSubview:privateStat];
+    [self.statsCardView addSubview:draftStat];
+    [self.statsCardView addSubview:firstSeparator];
+    [self.statsCardView addSubview:secondSeparator];
+
+    [publicStat mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.top.bottom.equalTo(self.statsCardView);
+    }];
+    [privateStat mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(firstSeparator.mas_right);
+        make.top.bottom.width.equalTo(publicStat);
+    }];
+    [draftStat mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(secondSeparator.mas_right);
+        make.right.top.bottom.equalTo(self.statsCardView);
+        make.top.bottom.width.equalTo(publicStat);
+    }];
+    [firstSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(publicStat.mas_right);
+        make.width.mas_equalTo(1.0);
+        make.centerY.equalTo(self.statsCardView);
+        make.height.mas_equalTo(32.0);
+    }];
+    [secondSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(privateStat.mas_right);
+        make.width.height.centerY.equalTo(firstSeparator);
+    }];
+}
+
+- (void)buildPersonalSection {
+    self.personalSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
+                                              color:[UIColor labelColor]];
+    self.personalSectionLabel.text = @"个人内容";
+    [self.contentView addSubview:self.personalSectionLabel];
+
+    self.personalButtons = @[
+        [self makeListButtonWithTitle:@"我的回忆"
+                             subtitle:@"回看时间线和记忆碎片"
+                             iconName:@"clock.arrow.circlepath"
+                                  tag:0
+                               action:@selector(personalTapped:)],
+        [self makeListButtonWithTitle:@"地图足迹"
+                             subtitle:@"继续探索去过的地点"
+                             iconName:@"location.fill"
+                                  tag:1
+                               action:@selector(personalTapped:)],
+        [self makeListButtonWithTitle:@"消息中心"
+                             subtitle:@"查看互动提醒和系统消息"
+                             iconName:@"envelope.fill"
+                                  tag:2
+                               action:@selector(personalTapped:)]
     ];
-    for (UIButton *button in self.serviceButtons) {
+    for (UIButton *button in self.personalButtons) {
         [self.contentView addSubview:button];
     }
 }
@@ -231,173 +249,83 @@
         make.top.equalTo(self.contentView.mas_top).offset(12.0);
         make.left.equalTo(self.contentView.mas_left).offset(16.0);
         make.right.equalTo(self.contentView.mas_right).offset(-16.0);
-        make.height.mas_equalTo(190.0);
+        make.height.mas_equalTo(112.0);
     }];
-    [self.quickSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+
+    [self.workspaceSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.profileCard.mas_bottom).offset(26.0);
         make.left.equalTo(self.contentView.mas_left).offset(16.0);
         make.right.equalTo(self.contentView.mas_right).offset(-16.0);
     }];
 
-    UIButton *quickFirst = self.quickActionButtons.firstObject;
-    UIButton *quickSecond = self.quickActionButtons.count > 1 ? self.quickActionButtons[1] : nil;
-    UIButton *quickThird = self.quickActionButtons.count > 2 ? self.quickActionButtons[2] : nil;
-    UIButton *quickFourth = self.quickActionButtons.count > 3 ? self.quickActionButtons[3] : nil;
+    UIButton *workspaceFirst = self.workspaceButtons.firstObject;
+    UIButton *workspaceSecond = self.workspaceButtons.count > 1 ? self.workspaceButtons[1] : nil;
+    UIButton *workspaceThird = self.workspaceButtons.count > 2 ? self.workspaceButtons[2] : nil;
 
-    [quickFirst mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.quickSectionLabel.mas_bottom).offset(14.0);
-        make.left.equalTo(self.contentView.mas_left).offset(16.0);
-        make.height.mas_equalTo(94.0);
-    }];
-    [quickSecond mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.height.width.equalTo(quickFirst);
-        make.left.equalTo(quickFirst.mas_right).offset(12.0);
-        make.right.equalTo(self.contentView.mas_right).offset(-16.0);
-    }];
-    [quickThird mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(quickFirst.mas_bottom).offset(12.0);
-        make.left.height.width.equalTo(quickFirst);
-    }];
-    [quickFourth mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.height.width.equalTo(quickThird);
-        make.left.equalTo(quickThird.mas_right).offset(12.0);
-        make.right.equalTo(self.contentView.mas_right).offset(-16.0);
-    }];
-
-    [self.serviceSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(quickThird.mas_bottom).offset(26.0);
-        make.left.right.equalTo(self.quickSectionLabel);
-    }];
-
-    UIButton *firstService = self.serviceButtons.firstObject;
-    UIButton *secondService = self.serviceButtons.count > 1 ? self.serviceButtons[1] : nil;
-    UIButton *thirdService = self.serviceButtons.count > 2 ? self.serviceButtons[2] : nil;
-
-    [firstService mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.serviceSectionLabel.mas_bottom).offset(14.0);
+    [workspaceFirst mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.workspaceSectionLabel.mas_bottom).offset(14.0);
         make.left.equalTo(self.contentView.mas_left).offset(16.0);
         make.right.equalTo(self.contentView.mas_right).offset(-16.0);
         make.height.mas_equalTo(72.0);
     }];
-    [secondService mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(firstService.mas_bottom).offset(10.0);
-        make.left.right.height.equalTo(firstService);
+    [workspaceSecond mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(workspaceFirst.mas_bottom).offset(10.0);
+        make.left.right.height.equalTo(workspaceFirst);
     }];
-    [thirdService mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(secondService.mas_bottom).offset(10.0);
-        make.left.right.height.equalTo(firstService);
+    [workspaceThird mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(workspaceSecond.mas_bottom).offset(10.0);
+        make.left.right.height.equalTo(workspaceFirst);
+    }];
+
+    [self.statsSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(workspaceThird.mas_bottom).offset(26.0);
+        make.left.right.equalTo(self.workspaceSectionLabel);
+    }];
+    [self.statsCardView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.statsSectionLabel.mas_bottom).offset(14.0);
+        make.left.equalTo(self.contentView.mas_left).offset(16.0);
+        make.right.equalTo(self.contentView.mas_right).offset(-16.0);
+        make.height.mas_equalTo(82.0);
+    }];
+
+    [self.personalSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.statsCardView.mas_bottom).offset(26.0);
+        make.left.right.equalTo(self.statsSectionLabel);
+    }];
+
+    UIButton *personalFirst = self.personalButtons.firstObject;
+    UIButton *personalSecond = self.personalButtons.count > 1 ? self.personalButtons[1] : nil;
+    UIButton *personalThird = self.personalButtons.count > 2 ? self.personalButtons[2] : nil;
+
+    [personalFirst mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.personalSectionLabel.mas_bottom).offset(14.0);
+        make.left.equalTo(self.contentView.mas_left).offset(16.0);
+        make.right.equalTo(self.contentView.mas_right).offset(-16.0);
+        make.height.mas_equalTo(72.0);
+    }];
+    [personalSecond mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(personalFirst.mas_bottom).offset(10.0);
+        make.left.right.height.equalTo(personalFirst);
+    }];
+    [personalThird mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(personalSecond.mas_bottom).offset(10.0);
+        make.left.right.height.equalTo(personalFirst);
         make.bottom.equalTo(self.contentView.mas_bottom).offset(-24.0);
     }];
 }
 
-- (UIView *)makeStatViewWithTitle:(NSString *)title valueLabel:(UILabel * __strong *)valueLabel {
-    UIView *container = [[UIView alloc] init];
-    container.backgroundColor = [UIColor clearColor];
-
-    UILabel *value = [self labelWithFont:[UIFont systemFontOfSize:20.0 weight:UIFontWeightSemibold]
-                                   color:[UIColor labelColor]];
-    value.textAlignment = NSTextAlignmentCenter;
-    [container addSubview:value];
-    if (valueLabel) {
-        *valueLabel = value;
-    }
-
-    UILabel *titleLabel = [self labelWithFont:[UIFont systemFontOfSize:12.0 weight:UIFontWeightMedium]
-                                        color:[UIColor secondaryLabelColor]];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    titleLabel.text = title;
-    [container addSubview:titleLabel];
-
-    [value mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(container.mas_top);
-        make.left.right.equalTo(container);
-    }];
-    [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(value.mas_bottom).offset(2.0);
-        make.left.right.equalTo(container);
-        make.bottom.equalTo(container.mas_bottom).offset(-4.0);
-    }];
-    return container;
-}
-
-- (UIView *)makeStatSeparatorView {
-    UIView *separatorView = [[UIView alloc] init];
-    separatorView.backgroundColor = [self borderColor];
-    return separatorView;
-}
-
-- (UIButton *)makeQuickActionButtonWithTitle:(NSString *)title
-                                    subtitle:(NSString *)subtitle
-                                    iconName:(NSString *)iconName
-                                         tag:(NSInteger)tag {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-    button.tag = tag;
-    button.backgroundColor = [self cardBackgroundColor];
-    button.layer.cornerRadius = 20.0;
-    button.layer.borderWidth = 1.0;
-    button.layer.borderColor = [self borderColor].CGColor;
-    [button addTarget:self action:@selector(quickActionTapped:) forControlEvents:UIControlEventTouchUpInside];
-
-    UIView *iconBadge = [[UIView alloc] init];
-    iconBadge.userInteractionEnabled = NO;
-    iconBadge.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.12];
-    iconBadge.layer.cornerRadius = 18.0;
-    [button addSubview:iconBadge];
-
-    UIImageView *iconView = [[UIImageView alloc] init];
-    iconView.userInteractionEnabled = NO;
-    iconView.tintColor = [self accentColor];
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    if (@available(iOS 13.0, *)) {
-        iconView.image = [UIImage systemImageNamed:iconName];
-    }
-    [iconBadge addSubview:iconView];
-
-    UILabel *titleLabel = [self labelWithFont:[UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold]
-                                        color:[UIColor labelColor]];
-    titleLabel.userInteractionEnabled = NO;
-    titleLabel.text = title;
-    [button addSubview:titleLabel];
-
-    UILabel *subtitleLabel = [self labelWithFont:[UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular]
-                                           color:[UIColor secondaryLabelColor]];
-    subtitleLabel.userInteractionEnabled = NO;
-    subtitleLabel.text = subtitle;
-    [button addSubview:subtitleLabel];
-
-    [iconBadge mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(button.mas_left).offset(14.0);
-        make.top.equalTo(button.mas_top).offset(16.0);
-        make.width.height.mas_equalTo(36.0);
-    }];
-    [iconView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.center.equalTo(iconBadge);
-        make.width.height.mas_equalTo(18.0);
-    }];
-    [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(button.mas_left).offset(14.0);
-        make.right.equalTo(button.mas_right).offset(-14.0);
-        make.top.equalTo(iconBadge.mas_bottom).offset(6.0);
-    }];
-    [subtitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.right.equalTo(titleLabel);
-        make.top.equalTo(titleLabel.mas_bottom).offset(1.0);
-    }];
-
-    return button;
-}
-
-- (UIButton *)makeServiceButtonWithTitle:(NSString *)title
-                                subtitle:(NSString *)subtitle
-                                iconName:(NSString *)iconName
-                                     tag:(NSInteger)tag {
+- (UIButton *)makeListButtonWithTitle:(NSString *)title
+                             subtitle:(NSString *)subtitle
+                             iconName:(NSString *)iconName
+                                  tag:(NSInteger)tag
+                               action:(SEL)action {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.tag = tag;
     button.backgroundColor = [self cardBackgroundColor];
     button.layer.cornerRadius = 18.0;
     button.layer.borderWidth = 1.0;
     button.layer.borderColor = [self borderColor].CGColor;
-    [button addTarget:self action:@selector(serviceTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
 
     UIView *iconBadge = [[UIView alloc] init];
     iconBadge.userInteractionEnabled = NO;
@@ -464,6 +392,46 @@
     return button;
 }
 
+- (UIControl *)makeStatViewWithTitle:(NSString *)title
+                          valueLabel:(UILabel * __strong *)valueLabel
+                                 tag:(NSInteger)tag {
+    UIControl *container = [[UIControl alloc] init];
+    container.backgroundColor = [UIColor clearColor];
+    container.tag = tag;
+    [container addTarget:self action:@selector(statTapped:) forControlEvents:UIControlEventTouchUpInside];
+
+    UILabel *value = [self labelWithFont:[UIFont systemFontOfSize:20.0 weight:UIFontWeightSemibold]
+                                   color:[UIColor labelColor]];
+    value.textAlignment = NSTextAlignmentCenter;
+    [container addSubview:value];
+    if (valueLabel) {
+        *valueLabel = value;
+    }
+
+    UILabel *titleLabel = [self labelWithFont:[UIFont systemFontOfSize:12.0 weight:UIFontWeightMedium]
+                                        color:[UIColor secondaryLabelColor]];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.text = title;
+    [container addSubview:titleLabel];
+
+    [value mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(container.mas_top).offset(14.0);
+        make.left.right.equalTo(container);
+    }];
+    [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(value.mas_bottom).offset(2.0);
+        make.left.right.equalTo(container);
+        make.bottom.equalTo(container.mas_bottom).offset(-12.0);
+    }];
+    return container;
+}
+
+- (UIView *)makeStatSeparatorView {
+    UIView *separatorView = [[UIView alloc] init];
+    separatorView.backgroundColor = [self borderColor];
+    return separatorView;
+}
+
 - (UILabel *)labelWithFont:(UIFont *)font color:(UIColor *)color {
     UILabel *label = [[UILabel alloc] init];
     label.font = font;
@@ -479,24 +447,36 @@
     }
 }
 
-- (void)quickActionTapped:(UIButton *)sender {
-    if ([self.delegate respondsToSelector:@selector(mineView:didTapQuickActionAtIndex:)]) {
-        [self.delegate mineView:self didTapQuickActionAtIndex:sender.tag];
+- (void)workspaceTapped:(UIButton *)sender {
+    if ([self.delegate respondsToSelector:@selector(mineView:didTapWorkspaceItemAtIndex:)]) {
+        [self.delegate mineView:self didTapWorkspaceItemAtIndex:sender.tag];
     }
 }
 
-- (void)serviceTapped:(UIButton *)sender {
-    if ([self.delegate respondsToSelector:@selector(mineView:didTapServiceAtIndex:)]) {
-        [self.delegate mineView:self didTapServiceAtIndex:sender.tag];
+- (void)statTapped:(UIControl *)sender {
+    if ([self.delegate respondsToSelector:@selector(mineView:didTapStatAtIndex:)]) {
+        [self.delegate mineView:self didTapStatAtIndex:sender.tag];
+    }
+}
+
+- (void)personalTapped:(UIButton *)sender {
+    if ([self.delegate respondsToSelector:@selector(mineView:didTapPersonalItemAtIndex:)]) {
+        [self.delegate mineView:self didTapPersonalItemAtIndex:sender.tag];
     }
 }
 
 - (void)applyProfile:(YALMineProfileModel *)profile {
     self.nameLabel.text = profile.name;
     self.bioLabel.text = profile.bio;
-    self.publishedValueLabel.text = profile.publishedCount;
-    self.memoryValueLabel.text = profile.memoryCount;
-    self.trackValueLabel.text = profile.trackCount;
+
+    NSInteger publishedCount = MAX(profile.publishedCount.integerValue, 6);
+    NSInteger privateCount = MAX(2, MIN(8, publishedCount / 4));
+    NSInteger draftCount = MAX(1, MIN(5, publishedCount / 6));
+    NSInteger publicCount = MAX(publishedCount - privateCount, 0);
+
+    self.publicValueLabel.text = [NSString stringWithFormat:@"%ld", (long)publicCount];
+    self.privateValueLabel.text = [NSString stringWithFormat:@"%ld", (long)privateCount];
+    self.draftValueLabel.text = [NSString stringWithFormat:@"%ld", (long)draftCount];
 }
 
 #pragma mark - Colors
@@ -519,20 +499,16 @@
     return [UIColor whiteColor];
 }
 
-- (UIColor *)profilePanelColor {
+- (UIColor *)warmCardBackgroundColor {
     if (@available(iOS 13.0, *)) {
         return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
             if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-                return [[UIColor tertiarySystemFillColor] colorWithAlphaComponent:0.55];
+                return [UIColor secondarySystemBackgroundColor];
             }
-            return [UIColor colorWithRed:0.995 green:0.972 blue:0.945 alpha:1.0];
+            return [UIColor colorWithRed:0.998 green:0.992 blue:0.985 alpha:1.0];
         }];
     }
-    return [UIColor colorWithRed:0.995 green:0.972 blue:0.945 alpha:1.0];
-}
-
-- (UIColor *)subtleAccentBorderColor {
-    return [[self accentColor] colorWithAlphaComponent:0.08];
+    return [UIColor colorWithRed:0.998 green:0.992 blue:0.985 alpha:1.0];
 }
 
 - (UIColor *)borderColor {

@@ -10,11 +10,12 @@
 #import <AFNetworking/AFNetworking.h>
 
 #import "YALNetworkManager.h"
+#import "../../Login/Model/YALAuthUserModel.h"
 
 static NSString * const accessTokenKey = @"YALAccessToken";
 static NSString * const refreshTokenKey = @"YALRefreshToken";
 
-static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
+static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 
 @implementation YALAuthManager
 
@@ -236,7 +237,8 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
                                  @"password": p2,
                                  @"nickname": n2};
 
-    NSDictionary *headers = [self authHeadersForLoginRequiredRequest];
+    // 注册时不需要认证 headers
+    NSDictionary *headers = nil;
 
     [network POST:url
         parameters:parameters

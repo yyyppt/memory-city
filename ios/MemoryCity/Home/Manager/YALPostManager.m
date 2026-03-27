@@ -20,7 +20,7 @@
 
 - (void)getPosts:(void(^)(NSArray<YALPostModel *> *posts, NSError *error))completion {
     YALNetworkManager *manager = [YALNetworkManager shareManager];
-    NSString *url = @"http://192.168.1.65:9000/api/content/list";
+    NSString *url = @"http://8.137.158.7:9000/api/content/list";
     NSDictionary *parameters = @{@"limit": @10};
     [manager GET:url parameters:parameters headers:nil progress:nil success:^(NSURLSessionDataTask *task, id responseObject) {
         if (![responseObject isKindOfClass:[NSDictionary class]]) {

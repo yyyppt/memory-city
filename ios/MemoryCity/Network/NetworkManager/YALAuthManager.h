@@ -6,7 +6,7 @@
 //
 
 #import <Foundation/Foundation.h>
-#import "YALAuthUserModel.h"
+#import "../../Login/Model/YALAuthUserModel.h"
 
 
 @interface YALAuthManager : NSObject

@@ -3,6 +3,13 @@
 
 @implementation YALRegisterView
 
+- (void)styleTextField:(UITextField *)tf {
+    tf.backgroundColor = [UIColor colorWithRed:1.0 green:0.97 blue:0.92 alpha:1.0];
+    tf.layer.borderWidth = 1.0;
+    tf.layer.borderColor = [UIColor colorWithRed:1.0 green:0.85 blue:0.6 alpha:1.0].CGColor;
+    tf.layer.cornerRadius = 25;
+}
+
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
@@ -35,8 +42,7 @@
     _phoneField = [[UITextField alloc] init];
     _phoneField.placeholder = @"请输入手机号";
     _phoneField.keyboardType = UIKeyboardTypePhonePad;
-    _phoneField.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    _phoneField.layer.cornerRadius = 25;
+    [self styleTextField:_phoneField];
     _phoneField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
     _phoneField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_phoneField];
@@ -44,16 +50,14 @@
     _passwordField = [[UITextField alloc] init];
     _passwordField.placeholder = @"请输入密码";
     _passwordField.secureTextEntry = YES;
-    _passwordField.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    _passwordField.layer.cornerRadius = 25;
+    [self styleTextField:_passwordField];
     _passwordField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
     _passwordField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_passwordField];
 
     _nicknameField = [[UITextField alloc] init];
     _nicknameField.placeholder = @"请输入昵称";
-    _nicknameField.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    _nicknameField.layer.cornerRadius = 25;
+    [self styleTextField:_nicknameField];
     _nicknameField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
     _nicknameField.leftViewMode = UITextFieldViewModeAlways;
     [self addSubview:_nicknameField];

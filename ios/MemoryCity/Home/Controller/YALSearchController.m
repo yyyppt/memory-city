@@ -69,7 +69,6 @@
     self.tabBarController.tabBar.hidden = NO;
 }
 
-#pragma mark - Setup
 
 - (void)setupNavigationBar {
     UIColor *highlightColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];

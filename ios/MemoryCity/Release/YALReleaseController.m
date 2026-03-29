@@ -7,6 +7,7 @@
 
 #import "YALReleaseController.h"
 #import "YALCalendarController.h"
+#import "../Network/NetworkManager/YALContentManager.h"
 #import <Masonry/Masonry.h>
 
 @interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate>
@@ -190,13 +191,81 @@
 - (void)submitTapped {
   self.editBody = self.textView.text ?: @"";
   BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
-  NSString *title = isEdit ? @"已重新发布（示例）" : @"已发布（示例）";
-  UIAlertController *alert =
-    [UIAlertController alertControllerWithTitle:title
-                                        message:@"这里后续接发布/保存接口。"
-                                 preferredStyle:UIAlertControllerStyleAlert];
-  [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
-  [self presentViewController:alert animated:YES completion:nil];
+  
+  // 收集发布参数（这里使用固定值，实际应用中应该从用户输入获取）
+  NSString *title = isEdit ? @"编辑后的标题" : @"新发布的标题";
+  NSString *content = self.editBody;
+  NSString *city = @"北京";
+  NSString *year = @"2026";
+  NSString *mood = @"开心";
+  NSString *locationName = @"北京市海淀区";
+  double latitude = 39.9042;
+  double longitude = 116.4074;
+  BOOL isPublic = YES;
+  
+  // 打印发布参数
+  NSLog(@"🚀 开始发布内容：");
+  NSLog(@"📝 标题: %@", title);
+  NSLog(@"📄 内容: %@", content);
+  NSLog(@"🏙️ 城市: %@", city);
+  NSLog(@"📅 年代: %@", year);
+  NSLog(@"😊 情绪: %@", mood);
+  NSLog(@"📍 地点: %@", locationName);
+  NSLog(@"🌍 经纬度: %f, %f", latitude, longitude);
+  NSLog(@"🔓 公开: %@", isPublic ? @"是" : @"否");
+  
+  // 图片URL数组（暂时为空，后续可添加图片上传功能）
+  NSArray *images = @[];
+  NSLog(@"🖼️ 图片: %@", images);
+  
+  // 显示加载提示
+  UIAlertController *loadingAlert = [UIAlertController alertControllerWithTitle:@"发布中" message:@"正在发送网络请求，请稍候..." preferredStyle:UIAlertControllerStyleAlert];
+  [self presentViewController:loadingAlert animated:YES completion:nil];
+  
+  // 调用发布接口
+  NSLog(@"📡 发送网络请求到 /content/publish");
+  [[YALContentManager sharedManager] publishContentWithTitle:title
+                                                     content:content
+                                                        city:city
+                                                        year:year
+                                                        mood:mood
+                                                      images:images
+                                                locationName:locationName
+                                                    latitude:latitude
+                                                   longitude:longitude
+                                                    isPublic:isPublic
+                                                      userId:nil
+                                                   completion:^(BOOL success, NSString *message, NSNumber * _Nullable contentId, NSError * _Nullable error) {
+    dispatch_async(dispatch_get_main_queue(), ^{  
+      // 关闭加载提示
+      [loadingAlert dismissViewControllerAnimated:YES completion:^{  
+        if (success) {
+          // 打印发布成功日志
+          NSLog(@"✅ 发布成功！");
+          NSLog(@"📌 内容ID: %@", contentId);
+          NSLog(@"💬 服务器消息: %@", message);
+          NSLog(@"🎯 发布内容已保存到服务器");
+          
+          UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"发布成功" message:[NSString stringWithFormat:@"%@\n内容ID: %@\n\n发布内容已保存到服务器", message, contentId] preferredStyle:UIAlertControllerStyleAlert];
+          [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            // 发布成功后返回上一页
+            [self.navigationController popViewControllerAnimated:YES];
+          }]];
+          [self presentViewController:successAlert animated:YES completion:nil];
+        } else {
+          // 打印发布失败日志
+          NSString *errorMsg = error ? error.localizedDescription : message;
+          NSLog(@"❌ 发布失败！");
+          NSLog(@"💥 错误: %@", error);
+          NSLog(@"💬 错误消息: %@", message);
+          
+          UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"发布失败" message:[NSString stringWithFormat:@"%@\n\n请检查网络连接或稍后重试", errorMsg] preferredStyle:UIAlertControllerStyleAlert];
+          [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+          [self presentViewController:errorAlert animated:YES completion:nil];
+        }
+      }];
+    });
+  }];
 }
 
 #pragma mark - Keyboard

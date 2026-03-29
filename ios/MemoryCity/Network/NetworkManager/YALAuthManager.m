@@ -313,8 +313,19 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     }
 
     YALAuthUserModel *user = [[YALAuthUserModel alloc] init];
-    [self applyUserIdentifierFromData:data toUser:user];
-    NSDictionary *nestedUser = [data[@"user"] isKindOfClass:[NSDictionary class]] ? data[@"user"] : nil;
+  id userIdObj = data[@"user_id"] ?: data[@"id"];
+
+  if ([userIdObj respondsToSelector:@selector(integerValue)]) {
+      user.userId = [userIdObj integerValue];
+      NSLog(@"✅ 成功解析用户 ID: %ld", (long)user.userId);
+  } else {
+      NSLog(@"⚠️ 无法在数据源中找到有效的用户 ID");
+  }
+  NSDictionary *nestedUser = [data[@"user"] isKindOfClass:[NSDictionary class]] ? data[@"user"] : nil;
+  if (nestedUser) {
+    // 这里可以继续调用你封装的解析方法，保持网络层的简洁
+       [self applyUserFieldsFromDictionary:nestedUser toUser:user];
+  }
 
     id nicknameObj = YALJSONObjectForKeys(data, @[ @"nickname" ]);
     if (!nicknameObj && nestedUser) {
@@ -338,6 +349,13 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     if (outUser) {
         *outUser = user;
     }
+
+    // ✅ 关键修复：登录成功后必须保存 currentUser（否则 userId 为空/脏数据）
+    if (isLogin) {
+        self.currentUser = user;
+        NSLog(@"✅ 登录成功，保存 userId = %ld", (long)user.userId);
+    }
+
     return YES;
 }
 

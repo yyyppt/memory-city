@@ -14,6 +14,8 @@
 
 #import "SceneDelegate.h"
 #import "YALLoginController.h"
+#import "YALTabBarController.h"
+#import "YALAuthManager.h"
 
 static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
 
@@ -36,9 +38,13 @@ static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
         }
     }
 
-    YALLoginController *loginVC = [[YALLoginController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loginVC];
-    self.window.rootViewController = nav;
+    if ([[YALAuthManager sharedManager] hasLoggedInSession]) {
+        self.window.rootViewController = [[YALTabBarController alloc] init];
+    } else {
+        YALLoginController *loginVC = [[YALLoginController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loginVC];
+        self.window.rootViewController = nav;
+    }
     [self.window makeKeyAndVisible];
 }
 

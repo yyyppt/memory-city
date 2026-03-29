@@ -15,6 +15,10 @@
 static NSString * const accessTokenKey = @"YALAccessToken";
 static NSString * const refreshTokenKey = @"YALRefreshToken";
 
+static NSString * const userProfileUserIdKey = @"YALAuthUserProfileUserId";
+static NSString * const userProfileNicknameKey = @"YALAuthUserProfileNickname";
+static NSString * const userProfileAvatarKey = @"YALAuthUserProfileAvatar";
+
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 
 @implementation YALAuthManager
@@ -26,6 +30,80 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
         authManager = [[YALAuthManager alloc] init];
     });
     return authManager;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        [self loadCachedUserIfHasAccessToken];
+    }
+    return self;
+}
+
+- (BOOL)hasLoggedInSession {
+    NSString *accessToken = [[NSUserDefaults standardUserDefaults] objectForKey:accessTokenKey];
+    return [accessToken isKindOfClass:[NSString class]] && accessToken.length > 0;
+}
+
+- (void)clearPersistedUserProfileOnly {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults removeObjectForKey:userProfileUserIdKey];
+    [defaults removeObjectForKey:userProfileNicknameKey];
+    [defaults removeObjectForKey:userProfileAvatarKey];
+}
+
+- (void)loadCachedUserIfHasAccessToken {
+    if (![self hasLoggedInSession]) {
+        _currentUser = nil;
+        return;
+    }
+    NSString *accessToken = [[NSUserDefaults standardUserDefaults] objectForKey:accessTokenKey];
+    NSInteger uid = [[NSUserDefaults standardUserDefaults] integerForKey:userProfileUserIdKey];
+    NSString *nickname = [[NSUserDefaults standardUserDefaults] objectForKey:userProfileNicknameKey];
+    NSString *avatar = [[NSUserDefaults standardUserDefaults] objectForKey:userProfileAvatarKey];
+    if (![nickname isKindOfClass:[NSString class]]) {
+        nickname = nil;
+    }
+    if (![avatar isKindOfClass:[NSString class]]) {
+        avatar = nil;
+    }
+    YALAuthUserModel *user = [[YALAuthUserModel alloc] init];
+    user.userId = uid;
+    user.nickname = nickname;
+    user.avatar = avatar;
+    user.token = [accessToken isKindOfClass:[NSString class]] ? accessToken : nil;
+    _currentUser = user;
+}
+
+- (void)setCurrentUser:(YALAuthUserModel *)currentUser {
+    _currentUser = currentUser;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (!currentUser) {
+        [self clearPersistedUserProfileOnly];
+        [defaults synchronize];
+        return;
+    }
+    [defaults setInteger:currentUser.userId forKey:userProfileUserIdKey];
+    if (currentUser.nickname.length > 0) {
+        [defaults setObject:currentUser.nickname forKey:userProfileNicknameKey];
+    } else {
+        [defaults removeObjectForKey:userProfileNicknameKey];
+    }
+    if (currentUser.avatar.length > 0) {
+        [defaults setObject:currentUser.avatar forKey:userProfileAvatarKey];
+    } else {
+        [defaults removeObjectForKey:userProfileAvatarKey];
+    }
+    [defaults synchronize];
+}
+
+- (void)clearAuthSession {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults removeObjectForKey:accessTokenKey];
+    [defaults removeObjectForKey:refreshTokenKey];
+    [self clearPersistedUserProfileOnly];
+    [defaults synchronize];
+    _currentUser = nil;
 }
 
 

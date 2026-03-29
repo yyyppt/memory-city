@@ -10,10 +10,12 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class YALMineView;
+@class YALAuthUserModel;
 
 @protocol YALMineViewDelegate <NSObject>
 @optional
 - (void)mineViewDidTapEditProfile:(YALMineView *)view;
+- (void)mineViewDidTapLogin:(YALMineView *)view;
 - (void)mineView:(YALMineView *)view didTapWorkspaceItemAtIndex:(NSInteger)index;
 - (void)mineView:(YALMineView *)view didTapStatAtIndex:(NSInteger)index;
 - (void)mineView:(YALMineView *)view didTapPersonalItemAtIndex:(NSInteger)index;
@@ -24,6 +26,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, weak, nullable) id<YALMineViewDelegate> delegate;
 
 - (void)applyProfile:(YALMineProfileModel *)profile;
+- (void)applyAuthUser:(YALAuthUserModel *)user;
+- (void)setGuestLoginModeEnabled:(BOOL)enabled;
 
 @end
 

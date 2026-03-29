@@ -55,8 +55,6 @@
                 [ss showAlert:@"注册成功，请重新登录"];
                 [ss.navigationController popViewControllerAnimated:YES];
             } else {
-                // 打印错误信息以便调试
-                NSLog(@"注册失败错误：%@", error);
                 [ss showAlert:[NSString stringWithFormat:@"注册失败：%@", error.localizedDescription]];
             }
         }];

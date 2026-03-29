@@ -494,10 +494,14 @@
         return;
     }
     [self setGuestLoginModeEnabled:NO];
+    
+    // 设置显示名称：显示nickname，如果没有则显示"用户"
     NSString *name = user.nickname.length > 0 ? user.nickname : @"用户";
     self.nameLabel.text = name;
+    
+    // 设置bio显示：显示用户ID（因为username可能没有返回）
     if (user.userId > 0) {
-        self.bioLabel.text = [NSString stringWithFormat:@"用户 ID：%ld", (long)user.userId];
+        self.bioLabel.text = [NSString stringWithFormat:@"用户ID：%ld", (long)user.userId];
     } else {
         self.bioLabel.text = @"已登录，双 token 已就绪";
     }

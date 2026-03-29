@@ -16,10 +16,31 @@ static NSString * const accessTokenKey = @"YALAccessToken";
 static NSString * const refreshTokenKey = @"YALRefreshToken";
 
 static NSString * const userProfileUserIdKey = @"YALAuthUserProfileUserId";
+static NSString * const userProfileUserIdStringKey = @"YALAuthUserProfileUserIdString";
 static NSString * const userProfileNicknameKey = @"YALAuthUserProfileNickname";
 static NSString * const userProfileAvatarKey = @"YALAuthUserProfileAvatar";
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
+
+static id YALJSONNonNull(id obj) {
+    if (obj == nil || obj == (id)[NSNull null]) {
+        return nil;
+    }
+    return obj;
+}
+
+static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = YALJSONNonNull(dict[key]);
+        if (value) {
+            return value;
+        }
+    }
+    return nil;
+}
 
 @implementation YALAuthManager
 
@@ -35,6 +56,13 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 - (instancetype)init {
     self = [super init];
     if (self) {
+        // 开发模式下：每次启动应用都清除之前的登录状态
+        // 这样在重新运行项目时不会保持登录状态
+        #if DEBUG
+        [self clearAuthSession];
+        #endif
+        
+        // 然后尝试加载缓存用户（在生产环境中保持正常）
         [self loadCachedUserIfHasAccessToken];
     }
     return self;
@@ -48,6 +76,7 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 - (void)clearPersistedUserProfileOnly {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults removeObjectForKey:userProfileUserIdKey];
+    [defaults removeObjectForKey:userProfileUserIdStringKey];
     [defaults removeObjectForKey:userProfileNicknameKey];
     [defaults removeObjectForKey:userProfileAvatarKey];
 }
@@ -59,6 +88,10 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     }
     NSString *accessToken = [[NSUserDefaults standardUserDefaults] objectForKey:accessTokenKey];
     NSInteger uid = [[NSUserDefaults standardUserDefaults] integerForKey:userProfileUserIdKey];
+    NSString *uidString = [[NSUserDefaults standardUserDefaults] objectForKey:userProfileUserIdStringKey];
+    if (![uidString isKindOfClass:[NSString class]]) {
+        uidString = nil;
+    }
     NSString *nickname = [[NSUserDefaults standardUserDefaults] objectForKey:userProfileNicknameKey];
     NSString *avatar = [[NSUserDefaults standardUserDefaults] objectForKey:userProfileAvatarKey];
     if (![nickname isKindOfClass:[NSString class]]) {
@@ -69,6 +102,7 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     }
     YALAuthUserModel *user = [[YALAuthUserModel alloc] init];
     user.userId = uid;
+    user.username = uidString.length > 0 ? uidString : (uid > 0 ? [NSString stringWithFormat:@"%ld", (long)uid] : nil);
     user.nickname = nickname;
     user.avatar = avatar;
     user.token = [accessToken isKindOfClass:[NSString class]] ? accessToken : nil;
@@ -84,6 +118,13 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
         return;
     }
     [defaults setInteger:currentUser.userId forKey:userProfileUserIdKey];
+    if (currentUser.username.length > 0) {
+        [defaults setObject:currentUser.username forKey:userProfileUserIdStringKey];
+    } else if (currentUser.userId > 0) {
+        [defaults setObject:[NSString stringWithFormat:@"%ld", (long)currentUser.userId] forKey:userProfileUserIdStringKey];
+    } else {
+        [defaults removeObjectForKey:userProfileUserIdStringKey];
+    }
     if (currentUser.nickname.length > 0) {
         [defaults setObject:currentUser.nickname forKey:userProfileNicknameKey];
     } else {
@@ -95,6 +136,44 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
         [defaults removeObjectForKey:userProfileAvatarKey];
     }
     [defaults synchronize];
+}
+
+- (void)applyUserIdentifierFromData:(NSDictionary *)data toUser:(YALAuthUserModel *)user {
+    if (!user || ![data isKindOfClass:[NSDictionary class]]) {
+        return;
+    }
+    
+    // 先尝试获取 username
+    id usernameObj = YALJSONObjectForKeys(data, @[ @"username", @"user_name", @"account", @"name" ]);
+    NSDictionary *nestedUser = [data[@"user"] isKindOfClass:[NSDictionary class]] ? data[@"user"] : nil;
+    if (!usernameObj && nestedUser) {
+        usernameObj = YALJSONObjectForKeys(nestedUser, @[ @"username", @"user_name", @"account", @"name" ]);
+    }
+    if ([usernameObj isKindOfClass:[NSString class]]) {
+        NSString *s = [((NSString *)usernameObj) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (s.length > 0) {
+            user.username = [s copy];
+        }
+    }
+    
+    // 再获取 userId
+    id raw = YALJSONObjectForKeys(data, @[ @"user_id", @"userId", @"id" ]);
+    if (!raw && nestedUser) {
+        raw = YALJSONObjectForKeys(nestedUser, @[ @"user_id", @"userId", @"id" ]);
+    }
+    if (!raw) {
+        return;
+    }
+    if ([raw isKindOfClass:[NSString class]]) {
+        NSString *s = [((NSString *)raw) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (s.length == 0) {
+            return;
+        }
+        user.userId = [s integerValue];
+    } else if ([raw isKindOfClass:[NSNumber class]]) {
+        NSNumber *num = (NSNumber *)raw;
+        user.userId = num.integerValue;
+    }
 }
 
 - (void)clearAuthSession {
@@ -129,13 +208,45 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     return [self getAuthHeadersWithToken];
 }
 
-//- (void)saveTokensFromLoginData:(NSDictionary *)data {
-//    NSString *token = nil;
-//    if ([data[@"token"] isKindOfClass:[NSString class]]) {
-//        token = data[@"token"];
-//    }
-//    if (!data[@"])
-//}
+- (void)refreshAccessTokenWithCompletion:(void (^)(BOOL success))completion {
+    NSString *refreshToken = [[NSUserDefaults standardUserDefaults] objectForKey:refreshTokenKey];
+    if (refreshToken.length == 0) {
+        if (completion) completion(NO);
+        return;
+    }
+
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/user/refresh", kYALAPIBaseURL];
+
+    NSDictionary *headers = @{
+        @"Refresh-Authorization": [NSString stringWithFormat:@"Bearer %@", refreshToken]
+    };
+
+    [network POST:url
+        parameters:nil
+           headers:headers
+           progress:nil
+            success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+
+        if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *dic = (NSDictionary *)responseObject;
+            NSDictionary *data = dic[@"data"];
+            NSString *newToken = data[@"token"];
+
+            if ([newToken isKindOfClass:[NSString class]] && newToken.length > 0) {
+                [[NSUserDefaults standardUserDefaults] setObject:newToken forKey:accessTokenKey];
+                [[NSUserDefaults standardUserDefaults] synchronize];
+                if (completion) completion(YES);
+                return;
+            }
+        }
+
+        if (completion) completion(NO);
+
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) completion(NO);
+    }];
+}
 
 - (void)saveTokensFromLoginData:(NSDictionary *)data {
     id tokenObj = data[@"token"];
@@ -202,23 +313,30 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     }
 
     YALAuthUserModel *user = [[YALAuthUserModel alloc] init];
-    id userIdObj = data[@"user_id"];
-    NSString *sourceField = @"user_id";
-    if (!userIdObj) {
-        userIdObj = data[@"id"];
-        sourceField = @"id";
-    }
-    if ([userIdObj respondsToSelector:@selector(integerValue)]) {
-        user.userId = [userIdObj integerValue];
-        NSLog(@"✅ 解析到用户ID: %ld, 来源字段: %@", (long)user.userId, sourceField);
-    } else {
-        NSLog(@"❌ 无法解析用户ID，userIdObj: %@, 类型: %@", userIdObj, userIdObj ? NSStringFromClass([userIdObj class]) : @"nil");
-    }
+  id userIdObj = data[@"user_id"] ?: data[@"id"];
 
-    id nicknameObj = data[@"nickname"];
+  if ([userIdObj respondsToSelector:@selector(integerValue)]) {
+      user.userId = [userIdObj integerValue];
+      NSLog(@"✅ 成功解析用户 ID: %ld", (long)user.userId);
+  } else {
+      NSLog(@"⚠️ 无法在数据源中找到有效的用户 ID");
+  }
+  NSDictionary *nestedUser = [data[@"user"] isKindOfClass:[NSDictionary class]] ? data[@"user"] : nil;
+  if (nestedUser) {
+    // 这里可以继续调用你封装的解析方法，保持网络层的简洁
+       [self applyUserFieldsFromDictionary:nestedUser toUser:user];
+  }
+
+    id nicknameObj = YALJSONObjectForKeys(data, @[ @"nickname" ]);
+    if (!nicknameObj && nestedUser) {
+        nicknameObj = YALJSONObjectForKeys(nestedUser, @[ @"nickname" ]);
+    }
     user.nickname = [nicknameObj isKindOfClass:[NSString class]] ? nicknameObj : nil;
 
-    id avatarObj = data[@"avatar"];
+    id avatarObj = YALJSONObjectForKeys(data, @[ @"avatar" ]);
+    if (!avatarObj && nestedUser) {
+        avatarObj = YALJSONObjectForKeys(nestedUser, @[ @"avatar" ]);
+    }
     user.avatar = [avatarObj isKindOfClass:[NSString class]] ? avatarObj : nil;
 
     // 只有登录时才设置token和保存token
@@ -271,7 +389,7 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
                                  @"password": p};
 
     // 登录接口通常不需要 Authorization，但你要求“先写上双 token”，这里仍会带上已存在的 tokens（若无则不带）。
-    NSDictionary *headers = [self authHeadersForLoginRequiredRequest];
+    NSDictionary *headers = nil;
 
     [network POST:url
         parameters:parameters
@@ -283,6 +401,7 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
         BOOL ok = [self handleAuthResponse:responseObject successData:&user error:&error isLogin:YES];
         if (completion) {
             if (ok) {
+                self.currentUser = user;
                 completion(user, nil);
             } else {
                 completion(nil, error);

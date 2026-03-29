@@ -14,7 +14,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype _Nonnull)sharedManager;
 
-/// 已在登录接口解析并落库双 token 后的用户信息；冷启动时会根据 access token 尝试从缓存恢复。
+// 已在登录接口解析并落库双 token 后的用户信息；冷启动时会根据 access token 尝试从缓存恢复。
 @property (nonatomic, strong, nullable) YALAuthUserModel *currentUser;
 
 /// access token 存在（与 `saveTokensFromLoginData:` 写入的 key 一致）即视为已登录会话。

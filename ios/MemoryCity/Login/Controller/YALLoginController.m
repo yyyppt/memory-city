@@ -45,12 +45,15 @@
         [[YALAuthManager sharedManager] loginWithUsername:username
                                                 password:password
                                               completion:^(YALAuthUserModel *user, NSError *error) {
-            if (user) {
-                [strongSelf enterMainInterface];
-            } else {
-                // error 的内容在 showAlert 里更合适，但这里先保持简洁
-                [strongSelf showAlert:@"登录失败，请稍后重试"];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (user) {
+                    [[YALAuthManager sharedManager] setCurrentUser:user];
+                    [strongSelf enterMainInterface];
+                } else {
+                    NSString *msg = error.localizedDescription.length > 0 ? error.localizedDescription : @"登录失败，请稍后重试";
+                    [strongSelf showAlert:msg];
+                }
+            });
         }];
     };
 }

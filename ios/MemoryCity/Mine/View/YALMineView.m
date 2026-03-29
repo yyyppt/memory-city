@@ -5,9 +5,13 @@
 //  Created by yyyyy on 2026/3/11.
 //
 #import "YALMineView.h"
+#import "YALAuthUserModel.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 @interface YALMineView ()
+
+@property (nonatomic, assign) BOOL guestLoginMode;
 
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIView *contentView;
@@ -442,6 +446,12 @@
 #pragma mark - Actions
 
 - (void)editProfileTapped {
+    if (self.guestLoginMode) {
+        if ([self.delegate respondsToSelector:@selector(mineViewDidTapLogin:)]) {
+            [self.delegate mineViewDidTapLogin:self];
+        }
+        return;
+    }
     if ([self.delegate respondsToSelector:@selector(mineViewDidTapEditProfile:)]) {
         [self.delegate mineViewDidTapEditProfile:self];
     }
@@ -477,6 +487,68 @@
     self.publicValueLabel.text = [NSString stringWithFormat:@"%ld", (long)publicCount];
     self.privateValueLabel.text = [NSString stringWithFormat:@"%ld", (long)privateCount];
     self.draftValueLabel.text = [NSString stringWithFormat:@"%ld", (long)draftCount];
+}
+
+- (void)applyAuthUser:(YALAuthUserModel *)user {
+    if (!user) {
+        return;
+    }
+    [self setGuestLoginModeEnabled:NO];
+    NSString *name = user.nickname.length > 0 ? user.nickname : @"用户";
+    self.nameLabel.text = name;
+    if (user.userId > 0) {
+        self.bioLabel.text = [NSString stringWithFormat:@"用户 ID：%ld", (long)user.userId];
+    } else {
+        self.bioLabel.text = @"已登录，双 token 已就绪";
+    }
+
+    NSURL *avatarURL = nil;
+    if (user.avatar.length > 0) {
+        avatarURL = [NSURL URLWithString:user.avatar];
+    }
+    if (avatarURL && avatarURL.scheme.length > 0) {
+        self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
+        self.avatarImageView.tintColor = nil;
+        self.avatarImageView.layer.cornerRadius = 21.0;
+        self.avatarImageView.clipsToBounds = YES;
+        UIImage *placeholder = nil;
+        if (@available(iOS 13.0, *)) {
+            placeholder = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+        }
+        [self.avatarImageView sd_setImageWithURL:avatarURL
+                                placeholderImage:placeholder
+                                         options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+    } else {
+        [self.avatarImageView sd_cancelCurrentImageLoad];
+        self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.avatarImageView.layer.cornerRadius = 0.0;
+        self.avatarImageView.clipsToBounds = NO;
+        self.avatarImageView.tintColor = [self accentColor];
+        if (@available(iOS 13.0, *)) {
+            self.avatarImageView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+        } else {
+            self.avatarImageView.image = nil;
+        }
+    }
+}
+
+- (void)setGuestLoginModeEnabled:(BOOL)enabled {
+    self.guestLoginMode = enabled;
+    if (enabled) {
+        [self.avatarImageView sd_cancelCurrentImageLoad];
+        self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.avatarImageView.layer.cornerRadius = 0.0;
+        self.avatarImageView.clipsToBounds = NO;
+        self.avatarImageView.tintColor = [self accentColor];
+        if (@available(iOS 13.0, *)) {
+            self.avatarImageView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+        }
+        self.nameLabel.text = @"未登录";
+        self.bioLabel.text = @"登录后可同步资料，请求将自动携带双 token";
+        [self.editProfileButton setTitle:@"立即登录" forState:UIControlStateNormal];
+    } else {
+        [self.editProfileButton setTitle:@"编辑资料" forState:UIControlStateNormal];
+    }
 }
 
 #pragma mark - Colors

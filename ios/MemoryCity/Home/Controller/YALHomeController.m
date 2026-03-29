@@ -22,7 +22,7 @@ static CGFloat const kYALItemSpacing = 10.0;
 @interface YALHomeController ()
 
 @property (nonatomic, strong) UICollectionView *collectionView;
-@property (nonatomic, assign) BOOL useWaterfall;              // YES: 瀑布流, NO: 单列
+@property (nonatomic, assign) BOOL useWaterfall;            
 @property (nonatomic, strong) NSMutableArray<YALPostModel *> *data;
 @property (nonatomic, strong) UIView *titleSearchContainer;
 @property (nonatomic, strong) UISearchBar *titleSearchBar;
@@ -33,6 +33,7 @@ static CGFloat const kYALItemSpacing = 10.0;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    
 
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"Home";
@@ -106,10 +107,7 @@ static CGFloat const kYALItemSpacing = 10.0;
     if (@available(iOS 13.0, *)) {
         UIImage *messageIcon = [UIImage systemImageNamed:@"envelope"];
         UIBarButtonItem *messageItem =
-        [[UIBarButtonItem alloc] initWithImage:messageIcon
-                                         style:UIBarButtonItemStylePlain
-                                        target:self
-                                        action:@selector(messageTapped)];
+        [[UIBarButtonItem alloc] initWithImage:messageIcon style:UIBarButtonItemStylePlain target:self action:@selector(messageTapped)];
         messageItem.tintColor = highlightColor;
         self.navigationItem.rightBarButtonItem = messageItem;
     }

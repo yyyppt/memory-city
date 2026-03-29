@@ -13,6 +13,7 @@
 #import "YALMessageController.h"
 #import "YALReleaseController.h"
 #import "YALLoginController.h"
+#import "YALAuthManager.h"
 #import <UserNotifications/UserNotifications.h>
 
 static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
@@ -365,6 +366,11 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     [self setupData];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self refreshLoginState];
+}
+
 - (void)setupNavigationItems {
     if (@available(iOS 13.0, *)) {
         UIImage *settingsImage = [UIImage systemImageNamed:@"slider.horizontal.3"];
@@ -397,6 +403,16 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     self.currentProfileIndex = 0;
     if (self.profiles.count > 0) {
         [self.mineView applyProfile:self.profiles.firstObject];
+    }
+    [self refreshLoginState];
+}
+
+- (void)refreshLoginState {
+    YALAuthManager *auth = [YALAuthManager sharedManager];
+    if ([auth hasLoggedInSession] && auth.currentUser) {
+        [self updateUIWithUser:auth.currentUser];
+    } else {
+        [self showNotLoggedInState];
     }
 }
 
@@ -450,6 +466,12 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     }
     self.currentProfileIndex = nextIndex;
     [self.mineView applyProfile:self.profiles[nextIndex]];
+    YALAuthManager *auth = [YALAuthManager sharedManager];
+    if ([auth hasLoggedInSession] && auth.currentUser) {
+        [self updateUIWithUser:auth.currentUser];
+    } else {
+        [self showNotLoggedInState];
+    }
 }
 
 - (void)shareAppFromController:(UIViewController *)controller {
@@ -506,6 +528,7 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     }
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:kYALAppAppearanceStyleKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
+    [[YALAuthManager sharedManager] clearAuthSession];
     YALLoginController *loginVC = [[YALLoginController alloc] init];
     UINavigationController *loginNav = [[UINavigationController alloc] initWithRootViewController:loginVC];
     [UIView transitionWithView:window
@@ -550,9 +573,20 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
 
 - (void)mineViewDidTapEditProfile:(YALMineView *)view {
     (void)view;
+    if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
+        [self mineViewDidTapLogin:view];
+        return;
+    }
     [self showPlaceholderAlertOnController:self
                                      title:@"编辑资料"
                                    message:@"这里可以继续接昵称、头像和个性签名编辑。"];
+}
+
+- (void)mineViewDidTapLogin:(YALMineView *)view {
+    (void)view;
+    YALLoginController *loginVC = [[YALLoginController alloc] init];
+    loginVC.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:loginVC animated:YES];
 }
 
 - (void)mineView:(YALMineView *)view didTapWorkspaceItemAtIndex:(NSInteger)index {
@@ -636,6 +670,16 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
 
 - (UIColor *)accentColor {
     return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+}
+
+#pragma mark - Login State Handling
+
+- (void)updateUIWithUser:(YALAuthUserModel *)user {
+    [self.mineView applyAuthUser:user];
+}
+
+- (void)showNotLoggedInState {
+    [self.mineView setGuestLoginModeEnabled:YES];
 }
 
 @end

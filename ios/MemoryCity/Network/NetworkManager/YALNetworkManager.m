@@ -22,7 +22,7 @@
     if (self = [super init]) {
         self.sessionManager = [AFHTTPSessionManager manager];
         self.sessionManager.requestSerializer = [AFJSONRequestSerializer serializer];
-        self.sessionManager.requestSerializer.timeoutInterval = 15.0;
+        self.sessionManager.requestSerializer.timeoutInterval = 30.0;
         self.sessionManager.responseSerializer = [AFJSONResponseSerializer serializer];
         //self.sessionManager.requestSerializer = [AFHTTPRequestSerializer serializer];
         self.sessionManager.responseSerializer.acceptableContentTypes = [NSSet setWithObjects:@"application/json", @"text/plain", @"text/html", nil];

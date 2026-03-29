@@ -203,8 +203,16 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 
     YALAuthUserModel *user = [[YALAuthUserModel alloc] init];
     id userIdObj = data[@"user_id"];
+    NSString *sourceField = @"user_id";
+    if (!userIdObj) {
+        userIdObj = data[@"id"];
+        sourceField = @"id";
+    }
     if ([userIdObj respondsToSelector:@selector(integerValue)]) {
         user.userId = [userIdObj integerValue];
+        NSLog(@"✅ 解析到用户ID: %ld, 来源字段: %@", (long)user.userId, sourceField);
+    } else {
+        NSLog(@"❌ 无法解析用户ID，userIdObj: %@, 类型: %@", userIdObj, userIdObj ? NSStringFromClass([userIdObj class]) : @"nil");
     }
 
     id nicknameObj = data[@"nickname"];
@@ -223,6 +231,13 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     if (outUser) {
         *outUser = user;
     }
+
+    // ✅ 关键修复：登录成功后必须保存 currentUser（否则 userId 为空/脏数据）
+    if (isLogin) {
+        self.currentUser = user;
+        NSLog(@"✅ 登录成功，保存 userId = %ld", (long)user.userId);
+    }
+
     return YES;
 }
 

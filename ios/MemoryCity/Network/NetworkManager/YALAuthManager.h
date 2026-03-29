@@ -8,10 +8,11 @@
 #import <Foundation/Foundation.h>
 #import "../../Login/Model/YALAuthUserModel.h"
 
+NS_ASSUME_NONNULL_BEGIN
 
 @interface YALAuthManager : NSObject
 
-+ (instancetype)sharedManager;
++ (instancetype _Nonnull)sharedManager;
 
 /// 已在登录接口解析并落库双 token 后的用户信息；冷启动时会根据 access token 尝试从缓存恢复。
 @property (nonatomic, strong, nullable) YALAuthUserModel *currentUser;
@@ -22,7 +23,15 @@
 /// 清除 access / refresh token、本地缓存的用户资料与 `currentUser`。
 - (void)clearAuthSession;
 
-- (void)loginWithUsername:(NSString *)userName password:(NSString *)password completion:(void(^)(YALAuthUserModel *user, NSError *error))completion;
-- (void)registerWithUsername:(NSString *)username password:(NSString *)password nickname:(NSString *)nickname completion:(void (^)(YALAuthUserModel *user, NSError *error))completion;
+/// 获取认证headers（包含token）
+- (NSDictionary * _Nullable)getAuthHeadersWithToken;
+
+/// 获取登录请求所需的认证headers
+- (NSDictionary * _Nullable)authHeadersForLoginRequiredRequest;
+
+- (void)loginWithUsername:(NSString * _Nonnull)userName password:(NSString * _Nonnull)password completion:(void(^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
+- (void)registerWithUsername:(NSString * _Nonnull)username password:(NSString * _Nonnull)password nickname:(NSString * _Nonnull)nickname completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
 
 @end
+
+NS_ASSUME_NONNULL_END

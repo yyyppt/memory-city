@@ -14,8 +14,8 @@
 #import "YALPostManager.h"
 #import <Masonry/Masonry.h>
 
-static CGFloat const kYALPostCellTextAreaHeight = 64.0;
-static CGFloat const kYALSingleColumnItemHeight = 320.0;
+static CGFloat const kYALPostCellTextAreaHeight = 80.0;  // 增加文本区域高度
+static CGFloat const kYALSingleColumnItemHeight = 380.0;  // 增加单列高度
 static CGFloat const kYALHorizontalInset = 12.0;
 static CGFloat const kYALItemSpacing = 10.0;
 
@@ -223,10 +223,10 @@ static CGFloat const kYALItemSpacing = 10.0;
                                               forIndexPath:indexPath];
 
     YALPostModel *model = self.data[indexPath.item];
-    CGFloat fixedImageHeight = kYALSingleColumnItemHeight - kYALPostCellTextAreaHeight;
+    // 单列模式下不再传递固定高度，由cell内部根据图片比例动态计算
     [cell configureWithModel:model
                 useWaterfall:self.useWaterfall
-            fixedImageHeight:fixedImageHeight];
+            fixedImageHeight:0.0];  // 传递0，让cell内部计算
 
     return cell;
 }
@@ -240,10 +240,33 @@ static CGFloat const kYALItemSpacing = 10.0;
         return CGSizeMake(100, 100);
     }
 
-    // 单列模式：固定高度，保持信息流浏览节奏稳定
+    // 单列模式：根据图片比例动态计算高度
     CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
     CGFloat itemWidth = screenWidth - kYALHorizontalInset * 2;
-    return CGSizeMake(itemWidth, kYALSingleColumnItemHeight);
+    
+    // 获取当前模型
+    YALPostModel *model = self.data[indexPath.item];
+    CGFloat imageRatio = 0.75;  // 默认4:3比例
+    
+    if (model.imageWidth > 0 && model.imageHeight > 0) {
+        imageRatio = model.imageHeight / model.imageWidth;
+    }
+    
+    // 限制图片比例在合理范围内
+    imageRatio = MAX(0.5, MIN(imageRatio, 1.5));
+    
+    // 计算图片高度（基于itemWidth）
+    CGFloat imageHeight = itemWidth * imageRatio;
+    
+    // 限制图片高度在合理范围内
+    CGFloat minImageHeight = 200.0;
+    CGFloat maxImageHeight = 400.0;
+    imageHeight = MAX(minImageHeight, MIN(imageHeight, maxImageHeight));
+    
+    // 总高度 = 图片高度 + 文本区域高度
+    CGFloat totalHeight = imageHeight + kYALPostCellTextAreaHeight;
+    
+    return CGSizeMake(itemWidth, totalHeight);
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {

@@ -21,6 +21,7 @@ static NSString * const userProfileNicknameKey = @"YALAuthUserProfileNickname";
 static NSString * const userProfileAvatarKey = @"YALAuthUserProfileAvatar";
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
+//static NSString * const kYALAPIBaseURL = @"http://192.168.110.174:9000/api";
 
 static id YALJSONNonNull(id obj) {
     if (obj == nil || obj == (id)[NSNull null]) {
@@ -322,10 +323,9 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
       NSLog(@"⚠️ 无法在数据源中找到有效的用户 ID");
   }
   NSDictionary *nestedUser = [data[@"user"] isKindOfClass:[NSDictionary class]] ? data[@"user"] : nil;
-  if (nestedUser) {
-    // 这里可以继续调用你封装的解析方法，保持网络层的简洁
-       [self applyUserFieldsFromDictionary:nestedUser toUser:user];
-  }
+//  if (nestedUser) {
+//       [self applyUserFieldsFromDictionary:nestedUser toUser:user];
+//  }
 
     id nicknameObj = YALJSONObjectForKeys(data, @[ @"nickname" ]);
     if (!nicknameObj && nestedUser) {

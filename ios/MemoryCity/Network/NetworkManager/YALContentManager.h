@@ -45,6 +45,22 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)getContentDetailWithId:(NSNumber *)contentId
                     completion:(void (^)(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error))completion;
 
+/// 获取我的内容列表
+/// @param page 页码（从1开始）
+/// @param pageSize 每页数量
+/// @param completion 完成回调（返回模型数组）
+- (void)getMyContentListWithPage:(NSInteger)page
+                        pageSize:(NSInteger)pageSize
+                      completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
+
+/// 获取所有内容列表（用于首页展示）
+/// @param page 页码（从1开始）
+/// @param pageSize 每页数量
+/// @param completion 完成回调（返回模型数组）
+- (void)getAllContentListWithPage:(NSInteger)page
+                         pageSize:(NSInteger)pageSize
+                       completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -10,7 +10,7 @@
 #import "YALAuthManager.h"
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-
+//static NSString * const kYALAPIBaseURL = @"http://192.168.110.174:9000/api";
 @implementation YALContentManager
 
 + (instancetype)sharedManager {
@@ -43,12 +43,24 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     parameters[@"city"] = city;
     parameters[@"year"] = year;
     parameters[@"mood"] = mood;
-    // 临时解决超时：避免大图片数据直接上传（建议后端配合改为URL上传）
+    // 处理图片上传
     if (images && [images isKindOfClass:[NSArray class]] && images.count > 0) {
-        NSLog(@"⚠️ 当前images数量: %lu，可能导致请求过大超时", (unsigned long)images.count);
-        parameters[@"images"] = @[]; // 先置空测试是否为图片导致
+        NSLog(@"📸 上传 %lu 张图片", (unsigned long)images.count);
+        parameters[@"images"] = images;
+        
+        // 如果是Base64图片，记录大小
+        if (images.count > 0 && [images.firstObject isKindOfClass:[NSString class]]) {
+            NSString *firstImage = images.firstObject;
+            if ([firstImage containsString:@"base64"] || firstImage.length > 100) {
+                NSLog(@"⚠️ 检测到Base64图片，长度: %lu 字符", (unsigned long)firstImage.length);
+                if (firstImage.length > 10000) {
+                    NSLog(@"⚠️ 图片较大，建议使用OSS上传");
+                }
+            }
+        }
     } else {
         parameters[@"images"] = @[];
+        NSLog(@"📸 没有图片需要上传");
     }
     parameters[@"latitude"] = @(latitude);
     parameters[@"longitude"] = @(longitude);
@@ -197,6 +209,87 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
         if (completion) {
             completion(NO, nil, error);
+        }
+    }];
+}
+
+#pragma mark - 获取我的内容列表
+
+- (void)getMyContentListWithPage:(NSInteger)page
+                        pageSize:(NSInteger)pageSize
+                      completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/content/my", kYALAPIBaseURL];
+    
+    // 构建请求参数
+    NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
+    parameters[@"page"] = @(page);
+    parameters[@"pageSize"] = @(pageSize);
+    
+    // 获取认证headers（需要token）
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+    
+    NSLog(@"📡 获取我的内容列表请求详情：");
+    NSLog(@"🔗 URL: %@", url);
+    NSLog(@"📦 参数: %@", parameters);
+    NSLog(@"🔑 Headers: %@", headers);
+    
+    [network GET:url
+      parameters:parameters
+         headers:headers
+        progress:nil
+         success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSLog(@"✅ 获取我的内容列表成功，收到响应：");
+        NSLog(@"📥 响应数据: %@", responseObject);
+        
+        if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *response = (NSDictionary *)responseObject;
+            NSInteger code = [response[@"code"] integerValue];
+            NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
+            NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
+            
+            NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
+            
+            if (code == 200) {
+                // 解析数据列表
+                NSArray *listData = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
+                NSMutableArray *contentList = [NSMutableArray array];
+                
+                for (NSDictionary *itemDict in listData) {
+                    if ([itemDict isKindOfClass:[NSDictionary class]]) {
+                        // 这里需要导入YALMyContentModel，但为了不破坏现有结构，我们先返回字典数组
+                        // 在实际使用中，ViewController会将其转换为模型
+                        [contentList addObject:itemDict];
+                    }
+                }
+                
+                NSLog(@"📋 解析成功，共 %lu 条内容", (unsigned long)contentList.count);
+                
+                if (completion) {
+                    completion(YES, [contentList copy], msg, nil);
+                }
+            } else {
+                NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
+                if (completion) {
+                    NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                        code:code
+                                                    userInfo:@{NSLocalizedDescriptionKey: msg}];
+                    completion(NO, nil, msg, error);
+                }
+            }
+        } else {
+            NSLog(@"❌ 无效的响应格式: %@", responseObject);
+            if (completion) {
+                NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                    code:-1
+                                                userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
+                completion(NO, nil, @"无效的响应格式", error);
+            }
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        NSLog(@"❌ 获取我的内容列表失败: %@", error);
+        if (completion) {
+            completion(NO, nil, @"网络请求失败", error);
         }
     }];
 }

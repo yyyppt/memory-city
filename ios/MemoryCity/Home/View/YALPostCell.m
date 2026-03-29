@@ -58,8 +58,10 @@
     self.fixedImageHeight = 0.0;
 
     _imageView = [[UIImageView alloc] init];
-    _imageView.contentMode = UIViewContentModeScaleAspectFit;
+    _imageView.contentMode = UIViewContentModeScaleAspectFill;  // 改为 ScaleAspectFill
     _imageView.clipsToBounds = YES;
+    _imageView.layer.cornerRadius = 8.0;  // 添加圆角
+    _imageView.layer.masksToBounds = YES;
 
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.font = [UIFont boldSystemFontOfSize:14.0];
@@ -74,14 +76,16 @@
     [self.contentView addSubview:_descLabel];
 
     [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.left.right.equalTo(self.contentView);
+        make.top.equalTo(self.contentView.mas_top).offset(8.0);  // 添加顶部间距
+        make.left.equalTo(self.contentView.mas_left).offset(8.0);  // 添加左侧间距
+        make.right.equalTo(self.contentView.mas_right).offset(-8.0);  // 添加右侧间距
         self.imageHeightConstraint = make.height.mas_equalTo(120.0);
     }];
 
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.imageView.mas_bottom).offset(6.0);
-        make.left.equalTo(self.contentView.mas_left).offset(8.0);
-        make.right.equalTo(self.contentView.mas_right).offset(-8.0);
+        make.top.equalTo(self.imageView.mas_bottom).offset(8.0);  // 增加间距
+        make.left.equalTo(self.contentView.mas_left).offset(12.0);
+        make.right.equalTo(self.contentView.mas_right).offset(-12.0);
         make.height.mas_equalTo(20.0);
     }];
 
@@ -90,6 +94,7 @@
         make.left.equalTo(self.titleLabel);
         make.right.equalTo(self.titleLabel);
         make.height.mas_equalTo(34.0);
+        make.bottom.equalTo(self.contentView.mas_bottom).offset(-12.0);  // 添加底部约束
     }];
 }
 
@@ -126,12 +131,27 @@
     self.imageRatio = MAX(ratio, 0.2);
 
     CGFloat width = CGRectGetWidth(self.bounds);
-    CGFloat imageHeight = self.useWaterfall ? (width * self.imageRatio) : self.fixedImageHeight;
-    imageHeight = MAX(120.0, imageHeight);
-    CGFloat maxAvailableHeight = CGRectGetHeight(self.bounds) - 60.0;
-    if (maxAvailableHeight > 120.0) {
-        imageHeight = MIN(imageHeight, maxAvailableHeight);
+    CGFloat imageHeight = 0.0;
+    
+    if (self.useWaterfall) {
+        // 瀑布流模式：根据图片比例计算高度，但限制在合理范围内
+        imageHeight = width * self.imageRatio;
+        // 限制图片高度在120-400之间
+        imageHeight = MAX(120.0, MIN(imageHeight, 400.0));
+    } else {
+        // 单列模式：使用动态计算的高度，基于屏幕宽度
+        CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
+        CGFloat itemWidth = screenWidth - 24.0;  // 左右边距各12
+        CGFloat baseHeight = itemWidth * 0.75;  // 使用4:3的比例
+        
+        // 如果图片比例更接近正方形，使用更高的高度
+        if (self.imageRatio > 0.8 && self.imageRatio < 1.2) {
+            baseHeight = itemWidth;  // 正方形图片使用1:1比例
+        }
+        
+        imageHeight = MAX(200.0, MIN(baseHeight, 400.0));  // 限制在200-400之间
     }
+    
     self.imageHeightConstraint.offset = imageHeight;
 
     if (model.imageURLString.length > 0) {

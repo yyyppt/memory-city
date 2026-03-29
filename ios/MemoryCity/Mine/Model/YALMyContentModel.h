@@ -1,39 +1,40 @@
 //
-//  YALPostModel.h
+//  YALMyContentModel.h
 //  MemoryCity
 //
-//  Created by yyyyy on 2026/3/11.
+//  Created by AI Assistant on 2026/3/30.
 //
 
 #import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface YALPostModel : NSObject
+/// 我的内容列表模型
+@interface YALMyContentModel : NSObject
 
-// 图片相关
-@property (nonatomic, strong) UIImage *image;
-@property (nonatomic, copy) NSString *imageURLString;
-@property (nonatomic, assign) CGFloat imageWidth;
-@property (nonatomic, assign) CGFloat imageHeight;
-
-// 内容信息
-@property (nonatomic, copy) NSString *title;
-@property (nonatomic, copy) NSString *desc;
-
-// 新增字段 - 与后端接口对应
+/// 内容ID
 @property (nonatomic, strong) NSNumber *contentId;
+/// 标题
+@property (nonatomic, copy) NSString *title;
+/// 内容正文
 @property (nonatomic, copy) NSString *content;
+/// 城市
 @property (nonatomic, copy) NSString *city;
+/// 年份
 @property (nonatomic, copy) NSString *year;
+/// 心情标签
 @property (nonatomic, copy) NSString *mood;
+/// 图片URL数组
 @property (nonatomic, strong) NSArray<NSString *> *images;
+/// 创建时间
 @property (nonatomic, copy) NSString *createTime;
 
 /// 从字典初始化模型
 /// @param dict 字典数据
 - (instancetype)initWithDictionary:(NSDictionary *)dict;
+
+/// 将模型数组转换为字典数组
++ (NSArray<NSDictionary *> *)dictionaryArrayFromModels:(NSArray<YALMyContentModel *> *)models;
 
 @end
 

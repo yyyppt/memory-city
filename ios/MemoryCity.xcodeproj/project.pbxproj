@@ -65,15 +65,11 @@
 		};
 		4BDE113C2F5EE6F000360967 /* MemoryCityTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MemoryCityTests;
 			sourceTree = "<group>";
 		};
 		4BDE11462F5EE6F000360967 /* MemoryCityUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-			);
 			path = MemoryCityUITests;
 			sourceTree = "<group>";
 		};
@@ -319,9 +315,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MemoryCity/Pods-MemoryCity-frameworks-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Embed Pods Frameworks";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-MemoryCity/Pods-MemoryCity-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;

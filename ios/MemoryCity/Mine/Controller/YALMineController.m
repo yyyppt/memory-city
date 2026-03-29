@@ -14,6 +14,7 @@
 #import "YALReleaseController.h"
 #import "YALLoginController.h"
 #import "YALAuthManager.h"
+#import "YALMyContentListController.h"
 #import <UserNotifications/UserNotifications.h>
 
 static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
@@ -593,9 +594,11 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     (void)view;
     switch (index) {
         case 0:
-            [self pushController:[[YALMinePublishedController alloc] initWithFilter:YALMinePostsFilterAll]];
+            // 使用真实的我的内容列表控制器
+            [self pushController:[[YALMyContentListController alloc] initWithTitle:@"我的发布"]];
             break;
         case 1:
+            // 草稿箱暂时使用原有实现
             [self pushController:[[YALMinePublishedController alloc] initWithFilter:YALMinePostsFilterDraft]];
             break;
         case 2: {
@@ -612,12 +615,15 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     (void)view;
     switch (index) {
         case 0:
-            [self pushController:[[YALMinePublishedController alloc] initWithFilter:YALMinePostsFilterPublic]];
+            // 公开内容
+            [self pushController:[[YALMyContentListController alloc] initWithTitle:@"公开内容"]];
             break;
         case 1:
-            [self pushController:[[YALMinePublishedController alloc] initWithFilter:YALMinePostsFilterPrivate]];
+            // 私人内容
+            [self pushController:[[YALMyContentListController alloc] initWithTitle:@"私人内容"]];
             break;
         case 2:
+            // 草稿箱
             [self pushController:[[YALMinePublishedController alloc] initWithFilter:YALMinePostsFilterDraft]];
             break;
         default:

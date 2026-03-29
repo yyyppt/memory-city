@@ -214,9 +214,25 @@
   NSLog(@"🌍 经纬度: %f, %f", latitude, longitude);
   NSLog(@"🔓 公开: %@", isPublic ? @"是" : @"否");
   
-  // 图片URL数组（暂时为空，后续可添加图片上传功能）
-  NSArray *images = @[];
-  NSLog(@"🖼️ 图片: %@", images);
+  // 图片处理：如果有选择的图片，转换为Base64
+  NSMutableArray *images = [NSMutableArray array];
+  if (self.editCoverImage) {
+      // 将图片转换为Base64字符串
+      // 先压缩图片，避免Base64字符串过大
+      UIImage *compressedImage = [self compressImage:self.editCoverImage toMaxFileSize:1024*500]; // 最大500KB
+      NSData *imageData = UIImageJPEGRepresentation(compressedImage, 0.7); // 70%质量压缩
+      if (imageData) {
+          NSString *base64String = [imageData base64EncodedStringWithOptions:0];
+          if (base64String) {
+              [images addObject:base64String];
+              NSLog(@"🖼️ 图片已转换为Base64，原始大小: %.2fKB，压缩后: %.2fKB，Base64长度: %lu字符", 
+                    UIImageJPEGRepresentation(self.editCoverImage, 1.0).length/1024.0,
+                    imageData.length/1024.0,
+                    (unsigned long)base64String.length);
+          }
+      }
+  }
+  NSLog(@"🖼️ 图片数量: %lu", (unsigned long)images.count);
   
   // 显示加载提示
   UIAlertController *loadingAlert = [UIAlertController alertControllerWithTitle:@"发布中" message:@"正在发送网络请求，请稍候..." preferredStyle:UIAlertControllerStyleAlert];
@@ -353,14 +369,36 @@
   [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
-/*
-#pragma mark - Navigation
+#pragma mark - 图片压缩工具方法
 
-// In a storyboard-based application, you will often want to do a little preparation before navigation
-- (void)prepareForSegue:(UIStoryboardSegue *)segue sender:(id)sender {
-    // Get the new view controller using [segue destinationViewController].
-    // Pass the selected object to the new view controller.
+// 压缩图片到指定文件大小
+- (UIImage *)compressImage:(UIImage *)image toMaxFileSize:(NSInteger)maxFileSize {
+    CGFloat compression = 0.9f;
+    CGFloat maxCompression = 0.1f;
+    NSData *imageData = UIImageJPEGRepresentation(image, compression);
+    
+    while ([imageData length] > maxFileSize && compression > maxCompression) {
+        compression -= 0.1;
+        imageData = UIImageJPEGRepresentation(image, compression);
+    }
+    
+    UIImage *compressedImage = [UIImage imageWithData:imageData];
+    return compressedImage;
 }
-*/
+
+// 调整图片尺寸
+- (UIImage *)resizeImage:(UIImage *)image toWidth:(CGFloat)width {
+    CGFloat oldWidth = image.size.width;
+    CGFloat scaleFactor = width / oldWidth;
+    CGFloat newHeight = image.size.height * scaleFactor;
+    CGFloat newWidth = oldWidth * scaleFactor;
+    
+    UIGraphicsBeginImageContext(CGSizeMake(newWidth, newHeight));
+    [image drawInRect:CGRectMake(0, 0, newWidth, newHeight)];
+    UIImage *newImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return newImage;
+}
 
 @end

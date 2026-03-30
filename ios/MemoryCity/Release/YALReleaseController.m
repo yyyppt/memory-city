@@ -191,7 +191,7 @@
 - (void)submitTapped {
   self.editBody = self.textView.text ?: @"";
   BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
-  
+
   // 收集发布参数（这里使用固定值，实际应用中应该从用户输入获取）
   NSString *title = isEdit ? @"编辑后的标题" : @"新发布的标题";
   NSString *content = self.editBody;
@@ -202,7 +202,7 @@
   double latitude = 39.9042;
   double longitude = 116.4074;
   BOOL isPublic = YES;
-  
+
   // 打印发布参数
   NSLog(@"🚀 开始发布内容：");
   NSLog(@"📝 标题: %@", title);
@@ -213,7 +213,7 @@
   NSLog(@"📍 地点: %@", locationName);
   NSLog(@"🌍 经纬度: %f, %f", latitude, longitude);
   NSLog(@"🔓 公开: %@", isPublic ? @"是" : @"否");
-  
+
   // 图片处理：如果有选择的图片，转换为Base64
   NSMutableArray *images = [NSMutableArray array];
   if (self.editCoverImage) {
@@ -225,7 +225,7 @@
           NSString *base64String = [imageData base64EncodedStringWithOptions:0];
           if (base64String) {
               [images addObject:base64String];
-              NSLog(@"🖼️ 图片已转换为Base64，原始大小: %.2fKB，压缩后: %.2fKB，Base64长度: %lu字符", 
+              NSLog(@"🖼️ 图片已转换为Base64，原始大小: %.2fKB，压缩后: %.2fKB，Base64长度: %lu字符",
                     UIImageJPEGRepresentation(self.editCoverImage, 1.0).length/1024.0,
                     imageData.length/1024.0,
                     (unsigned long)base64String.length);
@@ -233,11 +233,11 @@
       }
   }
   NSLog(@"🖼️ 图片数量: %lu", (unsigned long)images.count);
-  
+
   // 显示加载提示
   UIAlertController *loadingAlert = [UIAlertController alertControllerWithTitle:@"发布中" message:@"正在发送网络请求，请稍候..." preferredStyle:UIAlertControllerStyleAlert];
   [self presentViewController:loadingAlert animated:YES completion:nil];
-  
+
   // 调用发布接口
   NSLog(@"📡 发送网络请求到 /content/publish");
   [[YALContentManager sharedManager] publishContentWithTitle:title
@@ -252,16 +252,16 @@
                                                     isPublic:isPublic
                                                       userId:nil
                                                    completion:^(BOOL success, NSString *message, NSNumber * _Nullable contentId, NSError * _Nullable error) {
-    dispatch_async(dispatch_get_main_queue(), ^{  
+    dispatch_async(dispatch_get_main_queue(), ^{
       // 关闭加载提示
-      [loadingAlert dismissViewControllerAnimated:YES completion:^{  
+      [loadingAlert dismissViewControllerAnimated:YES completion:^{
         if (success) {
           // 打印发布成功日志
           NSLog(@"✅ 发布成功！");
           NSLog(@"📌 内容ID: %@", contentId);
           NSLog(@"💬 服务器消息: %@", message);
           NSLog(@"🎯 发布内容已保存到服务器");
-          
+
           UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"发布成功" message:[NSString stringWithFormat:@"%@\n内容ID: %@\n\n发布内容已保存到服务器", message, contentId] preferredStyle:UIAlertControllerStyleAlert];
           [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             // 发布成功后返回上一页
@@ -274,7 +274,7 @@
           NSLog(@"❌ 发布失败！");
           NSLog(@"💥 错误: %@", error);
           NSLog(@"💬 错误消息: %@", message);
-          
+
           UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"发布失败" message:[NSString stringWithFormat:@"%@\n\n请检查网络连接或稍后重试", errorMsg] preferredStyle:UIAlertControllerStyleAlert];
           [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
           [self presentViewController:errorAlert animated:YES completion:nil];
@@ -376,12 +376,12 @@
     CGFloat compression = 0.9f;
     CGFloat maxCompression = 0.1f;
     NSData *imageData = UIImageJPEGRepresentation(image, compression);
-    
+
     while ([imageData length] > maxFileSize && compression > maxCompression) {
         compression -= 0.1;
         imageData = UIImageJPEGRepresentation(image, compression);
     }
-    
+
     UIImage *compressedImage = [UIImage imageWithData:imageData];
     return compressedImage;
 }
@@ -392,12 +392,12 @@
     CGFloat scaleFactor = width / oldWidth;
     CGFloat newHeight = image.size.height * scaleFactor;
     CGFloat newWidth = oldWidth * scaleFactor;
-    
+
     UIGraphicsBeginImageContext(CGSizeMake(newWidth, newHeight));
     [image drawInRect:CGRectMake(0, 0, newWidth, newHeight)];
     UIImage *newImage = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
-    
+
     return newImage;
 }
 

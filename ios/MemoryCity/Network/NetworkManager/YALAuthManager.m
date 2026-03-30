@@ -1,5 +1,5 @@
-//
-//  YALAuthManager.m
+
+//@end
 //  MemoryCity
 //
 //  Created by mac on 2026/3/26.
@@ -21,7 +21,7 @@ static NSString * const userProfileNicknameKey = @"YALAuthUserProfileNickname";
 static NSString * const userProfileAvatarKey = @"YALAuthUserProfileAvatar";
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-//static NSString * const kYALAPIBaseURL = @"http://192.168.110.174:9000/api";
+//static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
 
 static id YALJSONNonNull(id obj) {
     if (obj == nil || obj == (id)[NSNull null]) {

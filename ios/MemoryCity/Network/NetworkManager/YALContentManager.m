@@ -9,8 +9,8 @@
 #import "YALNetworkManager.h"
 #import "YALAuthManager.h"
 
-static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-//static NSString * const kYALAPIBaseURL = @"http://192.168.110.174:9000/api";
+//static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
+static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
 @implementation YALContentManager
 
 + (instancetype)sharedManager {

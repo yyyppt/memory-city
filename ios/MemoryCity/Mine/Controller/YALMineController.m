@@ -14,6 +14,7 @@
 #import "YALReleaseController.h"
 #import "YALLoginController.h"
 #import "YALAuthManager.h"
+#import "YALEditProfileViewController.h"
 #import "YALMyContentListController.h"
 #import <UserNotifications/UserNotifications.h>
 
@@ -571,24 +572,45 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
 }
 
 #pragma mark - YALMineViewDelegate
-
 - (void)mineViewDidTapEditProfile:(YALMineView *)view {
-    (void)view;
     if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
         [self mineViewDidTapLogin:view];
         return;
     }
-    [self showPlaceholderAlertOnController:self
-                                     title:@"编辑资料"
-                                   message:@"这里可以继续接昵称、头像和个性签名编辑。"];
-}
 
-- (void)mineViewDidTapLogin:(YALMineView *)view {
-    (void)view;
-    YALLoginController *loginVC = [[YALLoginController alloc] init];
-    loginVC.hidesBottomBarWhenPushed = YES;
-    [self.navigationController pushViewController:loginVC animated:YES];
+    YALAuthUserModel *user = [YALAuthManager sharedManager].currentUser;
+
+    YALEditProfileViewController *vc = [[YALEditProfileViewController alloc] initWithUser:user];
+    vc.hidesBottomBarWhenPushed = YES;
+
+    __weak typeof(self) weakSelf = self;
+    vc.onEditComplete = ^(NSString * _Nullable newNickname, NSString * _Nullable newAvatar) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 刷新UI（你后面可以接接口）
+        [strongSelf refreshLoginState];
+    };
+
+    [self.navigationController pushViewController:vc animated:YES];
 }
+//- (void)mineViewDidTapEditProfile:(YALMineView *)view {
+//    (void)view;
+//    if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
+//        [self mineViewDidTapLogin:view];
+//        return;
+//    }
+//    [self showPlaceholderAlertOnController:self
+//                                     title:@"编辑资料"
+//                                   message:@"这里可以继续接昵称、头像和个性签名编辑。"];
+//}
+//
+//- (void)mineViewDidTapLogin:(YALMineView *)view {
+//    (void)view;
+//    YALLoginController *loginVC = [[YALLoginController alloc] init];
+//    loginVC.hidesBottomBarWhenPushed = YES;
+//    [self.navigationController pushViewController:loginVC animated:YES];
+//}
 
 - (void)mineView:(YALMineView *)view didTapWorkspaceItemAtIndex:(NSInteger)index {
     (void)view;
@@ -683,7 +705,6 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
 - (void)updateUIWithUser:(YALAuthUserModel *)user {
     [self.mineView applyAuthUser:user];
 }
-
 - (void)showNotLoggedInState {
     [self.mineView setGuestLoginModeEnabled:YES];
 }

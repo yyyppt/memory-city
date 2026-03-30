@@ -9,8 +9,8 @@
 #import "YALNetworkManager.h"
 #import "YALAuthManager.h"
 
-static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-//static NSString * const kYALAPIBaseURL = @"http://192.168.110.174:9000/api";
+//static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
+static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
 @implementation YALContentManager
 
 + (instancetype)sharedManager {
@@ -41,16 +41,56 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     parameters[@"title"] = title;
     parameters[@"content"] = content;
     parameters[@"city"] = city;
-    parameters[@"year"] = year;
+    // 后端如果把 year 当数字解析，避免出现 '2026-03-30' / '2026.03.30' 这类字符串导致解析失败
+    NSMutableString *yearDigits = [NSMutableString string];
+    for (NSUInteger i = 0; i < year.length; i++) {
+        unichar c = [year characterAtIndex:i];
+        if (c >= '0' && c <= '9') {
+            [yearDigits appendFormat:@"%C", c];
+        }
+    }
+    if (yearDigits.length >= 4) {
+        parameters[@"year"] = [yearDigits substringToIndex:4];
+    } else if (yearDigits.length > 0) {
+        parameters[@"year"] = yearDigits;
+    } else {
+        parameters[@"year"] = @"2026";
+    }
     parameters[@"mood"] = mood;
     // 处理图片上传
     if (images && [images isKindOfClass:[NSArray class]] && images.count > 0) {
         NSLog(@"📸 上传 %lu 张图片", (unsigned long)images.count);
-        parameters[@"images"] = images;
+        // 后端可能把传入字符串当“URL去拉取”，如果你传的是 base64（如 /9j/4AAQ...）会触发错误：
+        //   Get "/9j/4AAQ..."
+        // 因此把“看起来像 base64”的字符串补成 data URL，通常后端会据此走 base64 解码分支。
+        NSMutableArray<NSString *> *fixedImages = [NSMutableArray array];
+        for (id obj in images) {
+            if (![obj isKindOfClass:[NSString class]]) continue;
+            NSString *imgStr = (NSString *)obj;
+            if (imgStr.length == 0) continue;
+            if ([imgStr hasPrefix:@"data:image/"]) {
+                [fixedImages addObject:imgStr];
+            } else if ([imgStr hasPrefix:@"http://"] || [imgStr hasPrefix:@"https://"]) {
+                // 如果本来就是 URL，保持不变
+                [fixedImages addObject:imgStr];
+            } else if ([imgStr containsString:@"base64"]) {
+                // 如果已经包含 base64 标记但不是 data URL，就尝试补齐（尽量按 jpeg 处理）
+                if ([imgStr containsString:@","]) {
+                    // e.g. base64,... 这种形态
+                    [fixedImages addObject:imgStr];
+                } else {
+                    [fixedImages addObject:[NSString stringWithFormat:@"data:image/jpeg;base64,%@", imgStr]];
+                }
+            } else {
+                // 兜底：当作 base64 纯串处理
+                [fixedImages addObject:[NSString stringWithFormat:@"data:image/jpeg;base64,%@", imgStr]];
+            }
+        }
+        parameters[@"images"] = fixedImages;
         
         // 如果是Base64图片，记录大小
-        if (images.count > 0 && [images.firstObject isKindOfClass:[NSString class]]) {
-            NSString *firstImage = images.firstObject;
+        if (fixedImages.count > 0 && [fixedImages.firstObject isKindOfClass:[NSString class]]) {
+            NSString *firstImage = fixedImages.firstObject;
             if ([firstImage containsString:@"base64"] || firstImage.length > 100) {
                 NSLog(@"⚠️ 检测到Base64图片，长度: %lu 字符", (unsigned long)firstImage.length);
                 if (firstImage.length > 10000) {

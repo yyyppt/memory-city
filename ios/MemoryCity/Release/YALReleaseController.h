@@ -16,6 +16,12 @@ NS_ASSUME_NONNULL_BEGIN
                               dateText:(nullable NSString *)dateText
                                   body:(nullable NSString *)body;
 
+/// 编辑/重新发布模式：预填封面、标题、文字（旧构造保持兼容）
+- (instancetype)initWithEditCoverImage:(nullable UIImage *)coverImage
+                                 title:(nullable NSString *)title
+                              dateText:(nullable NSString *)dateText
+                                  body:(nullable NSString *)body;
+
 @end
 
 NS_ASSUME_NONNULL_END

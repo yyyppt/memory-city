@@ -144,8 +144,23 @@
     self.featuredLabel.text = model.featuredTitle.length > 0 ? model.featuredTitle : @"FEATURED MOMENT";
 
     UIImage *img = model.coverImage;
-    if (!img) img = [UIImage imageNamed:@"WechatIMG395 1.jpg"];
-    self.coverImageView.image = img;
+    if (img) {
+        self.coverImageView.image = img;
+        self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+        self.coverImageView.backgroundColor = [UIColor clearColor];
+    } else {
+        // 无内容 / 拉取失败 / 无图片：统一显示默认占位图（不要项目里原来的 WechatIMG395 1.jpg）
+        if (@available(iOS 13.0, *)) {
+            self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
+            self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
+            self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
+            self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+        } else {
+            self.coverImageView.image = nil;
+            self.coverImageView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
+            self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+        }
+    }
 }
 
 @end

@@ -94,7 +94,7 @@
 }
 
 + (CGFloat)cardHeightForEntry:(YALTimeLineEntryModel *)entry width:(CGFloat)cardWidth {
-    UIImage *img = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
+    UIImage *img = entry.image;
     CGFloat imageH = [self imageHeightForImage:img fitWidth:cardWidth - 20];
     return 10 + imageH + 8 + 20 + 4 + 16 + 10;
 }
@@ -109,14 +109,28 @@
     _titleLabel.text = entry.titleText.length > 0 ? entry.titleText : entry.dateText;
     _dateLabel.text = entry.subtitleText.length > 0 ? entry.subtitleText : entry.dateText;
 
-    UIImage *img = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
-    _imageView.image = img;
+    UIImage *img = entry.image;
+    if (img) {
+        _imageView.contentMode = UIViewContentModeScaleAspectFill;
+        _imageView.backgroundColor = [UIColor clearColor];
+        _imageView.image = img;
+    } else {
+        _imageView.contentMode = UIViewContentModeScaleAspectFit;
+        _imageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+        if (@available(iOS 13.0, *)) {
+            _imageView.image = [UIImage systemImageNamed:@"photo"];
+            _imageView.tintColor = [UIColor tertiaryLabelColor];
+        } else {
+            _imageView.image = nil;
+        }
+    }
 
     // 根据图片更新高度约束
     CGFloat imgH = [[self class] imageHeightForImage:img fitWidth:self.bounds.size.width - 20];
     [self.imageHeightConstraint uninstall];
     [_imageView mas_updateConstraints:^(MASConstraintMaker *make) {
-        self.imageHeightConstraint = make.height.mas_equalTo(imgH > 0 ? imgH : 160.0);
+        // 没有图片就不占高度（更符合“无内容用默认图”的紧凑显示）
+        self.imageHeightConstraint = make.height.mas_equalTo(imgH);
     }];
 }
 

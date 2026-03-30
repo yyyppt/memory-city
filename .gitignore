@@ -4,6 +4,8 @@
 # Xcode
 build/
 DerivedData/
+.DerivedData/
+ios/.DerivedData/
 
 # user data
 *.xcuserstate

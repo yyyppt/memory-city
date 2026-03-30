@@ -2,6 +2,7 @@
 #import "YALMemoryView.h"
 #import "YALMemoryMonthModel.h"
 #import "YALTimeLineController.h"
+#import "YALTimelineManager.h"
 #import <Masonry/Masonry.h>
 
 @interface YALMemoryController () <YALMemoryViewDelegate, UITableViewDataSource, UITableViewDelegate>
@@ -18,6 +19,8 @@
 @property (nonatomic, strong) NSArray<NSNumber *> *yearOptions;
 @property (nonatomic, assign) BOOL yearPickerVisible;
 
+@property (nonatomic, copy) NSDictionary<NSString *, NSArray *> *timelineGrouped; // key=YYYY-MM value=list
+
 @end
 
 @implementation YALMemoryController
@@ -26,15 +29,10 @@
     [super viewDidLoad];
     self.title = @"Memories";
 
-    [self buildYearMetadataDemo];
-
     self.view.backgroundColor = [UIColor systemBackgroundColor];
 
     self.memoryView = [[YALMemoryView alloc] init];
     self.memoryView.delegate = self;
-    self.memoryView.rangeFirstYear = self.firstPublishYear;
-    self.memoryView.rangeLastYear = self.calendarYearNow;
-    self.memoryView.yearsWithContent = self.yearsWithContent;
     [self.view addSubview:self.memoryView];
     [self.memoryView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.edges.equalTo(self.view);
@@ -42,24 +40,60 @@
 
     [self setupYearTable];
 
-    NSInteger start = [self defaultYearToShow];
-    [self reloadYear:start];
+    [self refreshTimelineAndReloadUI];
 }
 
-/// Demo：最早有发布年 ～ 今年；无发布的年份不可点（示例：2024 无内容）
-- (void)buildYearMetadataDemo {
+/// 拉取“我的时间轴”并刷新 Memory 界面（MVC：Controller 只负责拉取/组装 Model，View 只负责展示）
+- (void)refreshTimelineAndReloadUI {
     NSDateComponents *dc = [[NSCalendar currentCalendar] components:NSCalendarUnitYear fromDate:[NSDate date]];
     self.calendarYearNow = dc.year > 0 ? dc.year : 2026;
-    self.firstPublishYear = 2022;
 
-    NSMutableSet *set = [NSMutableSet set];
-    for (NSInteger y = self.firstPublishYear; y <= self.calendarYearNow; y++) {
-        if (y == 2024) {
-            continue;
+    __weak typeof(self) ws = self;
+    [[YALTimelineManager sharedManager] fetchMyTimelineWithYear:nil completion:^(BOOL success, NSDictionary<NSString *,NSArray *> * _Nullable groupedByYearMonth, NSString * _Nullable message, NSError * _Nullable error) {
+        __strong typeof(ws) ss = ws;
+        if (!ss) return;
+
+        if (!success || ![groupedByYearMonth isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"❌ 获取我的时间轴失败：%@ %@", message, error);
+            // 失败时保持空态，但仍允许显示当前年份（不可点）
+            ss.timelineGrouped = @{};
+            ss.firstPublishYear = ss.calendarYearNow;
+            ss.yearsWithContent = [NSSet set];
+            [ss applyYearMetaToViewAndReload:ss.calendarYearNow];
+            return;
         }
-        [set addObject:@(y)];
-    }
-    self.yearsWithContent = [set copy];
+
+        ss.timelineGrouped = [groupedByYearMonth copy];
+        [ss rebuildYearMetadataFromGrouped:ss.timelineGrouped];
+        NSInteger start = [ss defaultYearToShow];
+        [ss applyYearMetaToViewAndReload:start];
+    }];
+}
+
+- (void)rebuildYearMetadataFromGrouped:(NSDictionary<NSString *, NSArray *> *)grouped {
+    NSMutableSet<NSNumber *> *years = [NSMutableSet set];
+    __block NSInteger minYear = NSIntegerMax;
+    [grouped enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSArray * _Nonnull obj, BOOL * _Nonnull stop) {
+        (void)stop;
+        if (![key isKindOfClass:[NSString class]]) return;
+        if (![obj isKindOfClass:[NSArray class]] || obj.count == 0) return;
+        // key: "2024-03"
+        NSArray<NSString *> *parts = [key componentsSeparatedByString:@"-"];
+        if (parts.count < 2) return;
+        NSInteger y = [parts[0] integerValue];
+        if (y <= 0) return;
+        [years addObject:@(y)];
+        minYear = MIN(minYear, y);
+    }];
+    self.yearsWithContent = [years copy];
+    self.firstPublishYear = (minYear == NSIntegerMax) ? self.calendarYearNow : minYear;
+}
+
+- (void)applyYearMetaToViewAndReload:(NSInteger)yearToShow {
+    self.memoryView.rangeFirstYear = self.firstPublishYear;
+    self.memoryView.rangeLastYear = self.calendarYearNow;
+    self.memoryView.yearsWithContent = self.yearsWithContent ?: [NSSet set];
+    [self reloadYear:yearToShow];
 }
 
 - (NSInteger)defaultYearToShow {
@@ -67,6 +101,9 @@
         return self.calendarYearNow;
     }
     NSArray *sorted = [self sortedYearsWithContent];
+    if (sorted.count == 0) {
+        return self.calendarYearNow;
+    }
     for (NSInteger i = (NSInteger)sorted.count - 1; i >= 0; i--) {
         NSInteger y = [sorted[i] integerValue];
         if (y <= self.calendarYearNow) {
@@ -77,11 +114,17 @@
 }
 
 - (NSArray<NSNumber *> *)sortedYearsWithContent {
-    return [self.yearsWithContent.allObjects sortedArrayUsingSelector:@selector(compare:)];
+    NSSet<NSNumber *> *set = self.yearsWithContent ?: [NSSet set];
+    return [set.allObjects sortedArrayUsingSelector:@selector(compare:)];
 }
 
 - (NSInteger)clampToAvailableYear:(NSInteger)requested {
-    if ([self.yearsWithContent containsObject:@(requested)]) {
+    NSSet<NSNumber *> *set = self.yearsWithContent ?: [NSSet set];
+    if (set.count == 0) {
+        // 没有任何内容时，允许停留在当前年份（但不可点/不可切换）
+        return requested > 0 ? requested : self.calendarYearNow;
+    }
+    if ([set containsObject:@(requested)]) {
         return requested;
     }
     NSArray *sorted = [self sortedYearsWithContent];
@@ -127,9 +170,27 @@
         YALMemoryMonthModel *model = [[YALMemoryMonthModel alloc] init];
         model.year = y;
         model.month = m;
-        model.memoryCount = 6 + (arc4random_uniform(10));
-        model.featuredTitle = @"FEATURED MOMENT\nSummer Golden Hour at the Coast";
-        model.coverImage = [UIImage imageNamed:@"WechatIMG395 1.jpg"];
+        NSString *key = [NSString stringWithFormat:@"%ld-%02ld", (long)y, (long)m];
+        NSArray *list = [self.timelineGrouped[key] isKindOfClass:[NSArray class]] ? self.timelineGrouped[key] : @[];
+        model.memoryCount = (NSInteger)list.count;
+
+        // featuredTitle：尽量从第一条内容里提取 title/content，否则给默认文案
+        NSString *featured = @"FEATURED MOMENT";
+        id first = list.firstObject;
+        if ([first isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *d = (NSDictionary *)first;
+            id t = d[@"title"];
+            if (![t isKindOfClass:[NSString class]] || ((NSString *)t).length == 0) {
+                t = d[@"content"];
+            }
+            if ([t isKindOfClass:[NSString class]] && ((NSString *)t).length > 0) {
+                featured = (NSString *)t;
+            }
+        }
+        model.featuredTitle = featured;
+
+        // 目前项目里没有统一的图片 URL -> UIImage 异步加载器，这里先用占位图即可
+        model.coverImage = nil;
         [arr addObject:model];
     }
     self.months = arr;

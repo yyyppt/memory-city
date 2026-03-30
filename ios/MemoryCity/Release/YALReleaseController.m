@@ -14,6 +14,7 @@
 
 @property (nonatomic, strong, nullable) UIImage *editCoverImage;
 @property (nonatomic, copy, nullable) NSString *editDateText;
+@property (nonatomic, copy, nullable) NSString *editTitleText;
 @property (nonatomic, copy, nullable) NSString *editBody;
 
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -21,6 +22,7 @@
 
 @property (nonatomic, strong) UIImageView *coverImageView;
 @property (nonatomic, strong) UILabel *dateLabel;
+@property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
 
 @property (nonatomic, strong, nullable) NSDate *selectedDate;
@@ -32,13 +34,21 @@
 - (instancetype)initWithEditCoverImage:(UIImage *)coverImage
                               dateText:(NSString *)dateText
                                   body:(NSString *)body {
-  self = [super init];
-  if (self) {
-    _editCoverImage = coverImage;
-    _editDateText = [dateText copy];
-    _editBody = [body copy];
-  }
-  return self;
+  return [self initWithEditCoverImage:coverImage title:nil dateText:dateText body:body];
+}
+
+- (instancetype)initWithEditCoverImage:(nullable UIImage *)coverImage
+                                 title:(nullable NSString *)title
+                              dateText:(nullable NSString *)dateText
+                                  body:(nullable NSString *)body {
+    self = [super init];
+    if (self) {
+        _editCoverImage = coverImage;
+        _editTitleText = [title copy];
+        _editDateText = [dateText copy];
+        _editBody = [body copy];
+    }
+    return self;
 }
 
 - (void)viewDidLoad {
@@ -127,6 +137,18 @@
   dateTap.cancelsTouchesInView = NO;
   [self.dateLabel addGestureRecognizer:dateTap];
 
+  self.titleField = [[UITextField alloc] init];
+  self.titleField.backgroundColor = [UIColor clearColor];
+  self.titleField.textColor = [UIColor labelColor];
+  self.titleField.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+  self.titleField.placeholder = @"输入标题";
+  self.titleField.clearButtonMode = UITextFieldViewModeWhileEditing;
+  self.titleField.returnKeyType = UIReturnKeyNext;
+  if (@available(iOS 12.0, *)) {
+      self.titleField.textContentType = UITextContentTypeOneTimeCode; // 关闭自动填充/建议
+  }
+  [card addSubview:self.titleField];
+
   self.textView = [[UITextView alloc] init];
   self.textView.backgroundColor = [UIColor clearColor];
   self.textView.textColor = [UIColor labelColor];
@@ -153,8 +175,13 @@
     make.left.right.equalTo(self.coverImageView);
     make.height.mas_equalTo(18);
   }];
-  [self.textView mas_makeConstraints:^(MASConstraintMaker *make) {
+  [self.titleField mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.dateLabel.mas_bottom).offset(8);
+    make.left.right.equalTo(self.coverImageView);
+    make.height.mas_equalTo(40);
+  }];
+  [self.textView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.titleField.mas_bottom).offset(8);
     make.left.right.equalTo(self.coverImageView);
     make.height.mas_equalTo(220);
     make.bottom.equalTo(card.mas_bottom).offset(-14);
@@ -183,17 +210,22 @@
   } else {
       self.selectedDate = nil;
   }
+  self.titleField.text = self.editTitleText.length > 0 ? self.editTitleText : @"";
   self.textView.text = self.editBody.length > 0 ? self.editBody : @"写下此刻的心情…";
 }
 
 #pragma mark - Actions
 
 - (void)submitTapped {
+  self.editTitleText = self.titleField.text ?: @"";
   self.editBody = self.textView.text ?: @"";
   BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
   
   // 收集发布参数（这里使用固定值，实际应用中应该从用户输入获取）
-  NSString *title = isEdit ? @"编辑后的标题" : @"新发布的标题";
+  NSString *title = [self.editTitleText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (title.length == 0) {
+      title = isEdit ? @"编辑后的标题" : @"新发布的标题";
+  }
   NSString *content = self.editBody;
   NSString *city = @"北京";
   NSString *year = @"2026";

@@ -113,8 +113,20 @@
     self.weekdayLabel.text = weekdayText;
     self.titleLabel.text = entry.titleText ?: @"";
     self.subtitleLabel.text = entry.subtitleText ?: @"";
-    UIImage *img = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
-    self.thumbView.image = img;
+    if (entry.image) {
+        self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
+        self.thumbView.backgroundColor = [UIColor clearColor];
+        self.thumbView.image = entry.image;
+    } else {
+        self.thumbView.contentMode = UIViewContentModeScaleAspectFit;
+        self.thumbView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+        if (@available(iOS 13.0, *)) {
+            self.thumbView.image = [UIImage systemImageNamed:@"photo"];
+            self.thumbView.tintColor = [UIColor tertiaryLabelColor];
+        } else {
+            self.thumbView.image = nil;
+        }
+    }
 }
 
 @end

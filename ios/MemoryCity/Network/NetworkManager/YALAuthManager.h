@@ -32,6 +32,17 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)loginWithUsername:(NSString * _Nonnull)userName password:(NSString * _Nonnull)password completion:(void(^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
 - (void)registerWithUsername:(NSString * _Nonnull)username password:(NSString * _Nonnull)password nickname:(NSString * _Nonnull)nickname completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
 
+/// 更新用户信息
+- (void)updateUserWithNickname:(NSString * _Nonnull)nickname 
+                           bio:(NSString * _Nullable)bio 
+                    completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
+
+/// 更新用户信息（支持昵称和头像）
+- (void)updateUserInfoWithNickname:(NSString * _Nonnull)nickname
+                           avatar:(NSString * _Nonnull)avatar
+                       completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
+
 @end
 
 NS_ASSUME_NONNULL_END
+

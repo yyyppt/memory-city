@@ -53,7 +53,7 @@
     parameters:(nullable id)parameters
        headers:(nullable NSDictionary<NSString *, NSString *> *)headers
        progress:(nullable void (^)(NSProgress * _Nonnull))uploadProgress
-        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject))success
+        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
         failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
     // 注意：当前 sessionManager 统一使用 AFJSONRequestSerializer / AFJSONResponseSerializer
     [self.sessionManager POST:URLString parameters:parameters headers:headers progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
@@ -71,4 +71,26 @@
     }];
 }
 
+- (void)PUT:(NSString *_Nonnull)URLString
+ parameters:(nullable id)parameters
+    headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+    success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
+    failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
+    // 使用 AFJSONRequestSerializer / AFJSONResponseSerializer
+    [self.sessionManager PUT:URLString parameters:parameters headers:headers success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                success(task, responseObject);
+            }
+        });
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (failure) {
+                failure(task, error);
+            }
+        });
+    }];
+}
+
 @end
+

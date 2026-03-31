@@ -30,6 +30,13 @@
     success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
     failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure;
 
+/// DELETE(JSON) 请求封装
+- (void)DELETE:(NSString *_Nonnull)URLString
+    parameters:(nullable id)parameters
+       headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+       success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
+       failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure;
+
 
 @end
 

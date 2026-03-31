@@ -8,6 +8,28 @@
 #import "YALEditProfileView.h"
 #import <Masonry/Masonry.h>
 #import "YALAuthUserModel.h"
+#import <SDWebImage/SDWebImage.h>
+
+static NSString * _Nullable YALDataURLFromImage(UIImage *image) {
+    if (!image) return nil;
+    // 压缩，避免 base64 太大
+    NSData *imageData = UIImageJPEGRepresentation(image, 0.7);
+    if (!imageData || imageData.length == 0) return nil;
+    NSString *base64String = [imageData base64EncodedStringWithOptions:0];
+    if (!base64String || base64String.length == 0) return nil;
+    return [NSString stringWithFormat:@"data:image/jpeg;base64,%@", base64String];
+}
+
+static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
+    if (![dataURL isKindOfClass:[NSString class]]) return nil;
+    if (![dataURL hasPrefix:@"data:image"]) return nil;
+    NSRange commaRange = [dataURL rangeOfString:@","];
+    if (commaRange.location == NSNotFound) return nil;
+    NSString *base64Part = [dataURL substringFromIndex:commaRange.location + 1];
+    NSData *data = [[NSData alloc] initWithBase64EncodedString:base64Part options:0];
+    if (!data) return nil;
+    return [UIImage imageWithData:data];
+}
 
 @interface YALEditProfileView ()
 
@@ -29,17 +51,12 @@
 @property (nonatomic, strong) UITextView *bioTextView;
 @property (nonatomic, strong) UILabel *bioErrorLabel;
 
-@property (nonatomic, strong) UIView *passwordContainer;
-@property (nonatomic, strong) UILabel *passwordLabel;
-@property (nonatomic, strong) UIButton *changePasswordButton;
-
 @property (nonatomic, strong) UIView *buttonContainer;
 @property (nonatomic, strong) UIButton *saveButton;
 @property (nonatomic, strong) UIButton *cancelButton;
 
 // Data
 @property (nonatomic, strong) NSMutableDictionary *editedData;
-@property (nonatomic, strong) NSMutableDictionary *passwordData;
 
 @end
 
@@ -87,6 +104,8 @@
     self.avatarLabel.textColor = [UIColor systemGrayColor];
     self.avatarLabel.textAlignment = NSTextAlignmentCenter;
     [self.avatarButton addSubview:self.avatarLabel];
+    // 不显示“点击更换头像”字样，只保留可点头像区域
+    self.avatarLabel.hidden = YES;
     
     [self.contentView addSubview:self.avatarButton];
     
@@ -135,20 +154,6 @@
     self.bioErrorLabel.hidden = YES;
     [self.bioContainer addSubview:self.bioErrorLabel];
     
-    // Password Section
-    self.passwordContainer = [[UIView alloc] init];
-    [self.contentView addSubview:self.passwordContainer];
-    
-    self.passwordLabel = [[UILabel alloc] init];
-    self.passwordLabel.text = @"密码";
-    self.passwordLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    [self.passwordContainer addSubview:self.passwordLabel];
-    
-    self.changePasswordButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [self.changePasswordButton setTitle:@"修改密码" forState:UIControlStateNormal];
-    self.changePasswordButton.titleLabel.font = [UIFont systemFontOfSize:16];
-    [self.passwordContainer addSubview:self.changePasswordButton];
-    
     // Buttons
     self.buttonContainer = [[UIView alloc] init];
     [self.contentView addSubview:self.buttonContainer];
@@ -156,8 +161,8 @@
     self.saveButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.saveButton setTitle:@"保存" forState:UIControlStateNormal];
     self.saveButton.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
-    self.saveButton.backgroundColor = [UIColor systemBlueColor];
-    self.saveButton.tintColor = [UIColor whiteColor];
+    self.saveButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.93 blue:0.7 alpha:1.0];
+    self.saveButton.tintColor = [UIColor blackColor];
     self.saveButton.layer.cornerRadius = 8;
     self.saveButton.layer.masksToBounds = YES;
     [self.buttonContainer addSubview:self.saveButton];
@@ -170,7 +175,6 @@
     
     // Initialize data containers
     self.editedData = [NSMutableDictionary dictionary];
-    self.passwordData = [NSMutableDictionary dictionary];
 }
 
 - (void)setupConstraints {
@@ -243,26 +247,9 @@
         make.bottom.equalTo(self.bioContainer);
     }];
     
-    // Password
-    [self.passwordContainer mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.bioContainer.mas_bottom).offset(24);
-        make.left.right.equalTo(self.contentView).inset(20);
-    }];
-    
-    [self.passwordLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.left.equalTo(self.passwordContainer);
-    }];
-    
-    [self.changePasswordButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.passwordLabel.mas_bottom).offset(8);
-        make.left.right.equalTo(self.passwordContainer);
-        make.height.equalTo(@44);
-        make.bottom.equalTo(self.passwordContainer);
-    }];
-    
     // Buttons
     [self.buttonContainer mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.passwordContainer.mas_bottom).offset(40);
+        make.top.equalTo(self.bioContainer.mas_bottom).offset(40);
         make.left.right.equalTo(self.contentView).inset(20);
         make.bottom.equalTo(self.contentView).offset(-40);
     }];
@@ -284,7 +271,6 @@
     [self.avatarButton addTarget:self action:@selector(avatarButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.saveButton addTarget:self action:@selector(saveButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.cancelButton addTarget:self action:@selector(cancelButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.changePasswordButton addTarget:self action:@selector(changePasswordButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     
     [self.nicknameTextField addTarget:self action:@selector(textFieldDidChange:) forControlEvents:UIControlEventEditingChanged];
 }
@@ -306,12 +292,23 @@
         self.editedData[@"bio"] = user.bio;
     }
     
-    // Set avatar if available
-    // Note: This would typically be loaded from a URL
-    // For now, we'll just show a placeholder
-    if (user.avatar) {
-        // In a real app, you would load the image from the URL
-        // For now, we'll use a system image as placeholder
+    // Set avatar if available (supports URL and dataURL/base64)
+    if (user.avatar.length > 0) {
+        UIImage *decodedImage = YALImageFromDataURLString(user.avatar);
+        if (decodedImage) {
+            self.avatarImageView.image = decodedImage;
+        } else {
+            NSURL *avatarURL = [NSURL URLWithString:user.avatar];
+            if (avatarURL && avatarURL.scheme.length > 0) {
+                self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
+                self.avatarImageView.clipsToBounds = YES;
+                [self.avatarImageView sd_setImageWithURL:avatarURL
+                                            placeholderImage:[UIImage systemImageNamed:@"person.circle.fill"]];
+            } else {
+                self.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
+            }
+        }
+    } else {
         self.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
     }
 }
@@ -320,13 +317,12 @@
     return [self.editedData copy];
 }
 
-- (NSDictionary *)getPasswordData {
-    return [self.passwordData copy];
-}
-
 - (void)setAvatarImage:(UIImage *)image {
     self.avatarImageView.image = image;
-    self.editedData[@"avatar"] = image;
+    NSString *dataURL = YALDataURLFromImage(image);
+    if (dataURL.length > 0) {
+        self.editedData[@"avatar"] = dataURL;
+    }
 }
 
 - (void)showErrorMessage:(NSString *)message forField:(NSString *)field {
@@ -380,12 +376,6 @@
 - (void)cancelButtonTapped {
     if ([self.delegate respondsToSelector:@selector(editProfileViewDidTapCancel:)]) {
         [self.delegate editProfileViewDidTapCancel:self];
-    }
-}
-
-- (void)changePasswordButtonTapped {
-    if ([self.delegate respondsToSelector:@selector(editProfileViewDidTapChangePassword:)]) {
-        [self.delegate editProfileViewDidTapChangePassword:self];
     }
 }
 

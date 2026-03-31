@@ -9,6 +9,17 @@
 #import <Masonry/Masonry.h>
 #import <SDWebImage/SDWebImage.h>
 
+static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
+    if (![dataURL isKindOfClass:[NSString class]]) return nil;
+    if (![dataURL hasPrefix:@"data:image"]) return nil;
+    NSRange commaRange = [dataURL rangeOfString:@","];
+    if (commaRange.location == NSNotFound) return nil;
+    NSString *base64Part = [dataURL substringFromIndex:commaRange.location + 1];
+    NSData *data = [[NSData alloc] initWithBase64EncodedString:base64Part options:0];
+    if (!data) return nil;
+    return [UIImage imageWithData:data];
+}
+
 @interface YALMineView ()
 
 @property (nonatomic, assign) BOOL guestLoginMode;
@@ -20,6 +31,7 @@
 @property (nonatomic, strong) UIView *avatarContainer;
 @property (nonatomic, strong) UIImageView *avatarImageView;
 @property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *accountLabel;
 @property (nonatomic, strong) UILabel *bioLabel;
 @property (nonatomic, strong) UIButton *editProfileButton;
 
@@ -81,10 +93,11 @@
     [self.contentView addSubview:self.profileCard];
 
     self.avatarContainer = [[UIView alloc] init];
-    self.avatarContainer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.10];
-    self.avatarContainer.layer.cornerRadius = 34.0;
-    self.avatarContainer.layer.borderWidth = 1.0;
-    self.avatarContainer.layer.borderColor = [[self accentColor] colorWithAlphaComponent:0.12].CGColor;
+    // 淡黄色外圈，弱化装饰不抢视觉
+    self.avatarContainer.backgroundColor = [UIColor clearColor];
+    self.avatarContainer.layer.cornerRadius = 40.0;
+    self.avatarContainer.layer.borderWidth = 1.5;
+    self.avatarContainer.layer.borderColor = [[self accentColor] colorWithAlphaComponent:0.28].CGColor;
     [self.profileCard addSubview:self.avatarContainer];
 
     self.avatarImageView = [[UIImageView alloc] init];
@@ -98,6 +111,11 @@
     self.nameLabel = [self labelWithFont:[UIFont systemFontOfSize:24.0 weight:UIFontWeightSemibold]
                                    color:[UIColor labelColor]];
     [self.profileCard addSubview:self.nameLabel];
+
+    self.accountLabel = [self labelWithFont:[UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular]
+                                       color:[UIColor secondaryLabelColor]];
+    self.accountLabel.numberOfLines = 1;
+    [self.profileCard addSubview:self.accountLabel];
 
     self.bioLabel = [self labelWithFont:[UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular]
                                   color:[UIColor secondaryLabelColor]];
@@ -119,15 +137,15 @@
 
     [self.avatarContainer mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.profileCard.mas_left).offset(18.0);
-        make.top.equalTo(self.profileCard.mas_top).offset(20.0);
-        make.width.height.mas_equalTo(68.0);
+        make.centerY.equalTo(self.profileCard.mas_centerY).offset(2.0);
+        make.width.height.mas_equalTo(80.0);
     }];
     [self.avatarImageView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.center.equalTo(self.avatarContainer);
-        make.width.height.mas_equalTo(42.0);
+        make.width.height.mas_equalTo(72.0);
     }];
     [self.editProfileButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.profileCard.mas_top).offset(20.0);
+        make.centerY.equalTo(self.avatarContainer.mas_centerY);
         make.right.equalTo(self.profileCard.mas_right).offset(-18.0);
         make.width.mas_equalTo(84.0);
         make.height.mas_equalTo(32.0);
@@ -137,9 +155,14 @@
         make.top.equalTo(self.profileCard.mas_top).offset(24.0);
         make.right.lessThanOrEqualTo(self.editProfileButton.mas_left).offset(-10.0);
     }];
-    [self.bioLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    [self.accountLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.nameLabel);
         make.top.equalTo(self.nameLabel.mas_bottom).offset(4.0);
+        make.right.lessThanOrEqualTo(self.editProfileButton.mas_left).offset(-10.0);
+    }];
+    [self.bioLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.nameLabel);
+        make.top.equalTo(self.accountLabel.mas_bottom).offset(4.0);
         make.right.equalTo(self.profileCard.mas_right).offset(-18.0);
     }];
 }
@@ -253,7 +276,7 @@
         make.top.equalTo(self.contentView.mas_top).offset(12.0);
         make.left.equalTo(self.contentView.mas_left).offset(16.0);
         make.right.equalTo(self.contentView.mas_right).offset(-16.0);
-        make.height.mas_equalTo(112.0);
+        make.height.mas_equalTo(128.0);
     }];
 
     [self.workspaceSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -478,6 +501,7 @@
 - (void)applyProfile:(YALMineProfileModel *)profile {
     self.nameLabel.text = profile.name;
     self.bioLabel.text = profile.bio;
+    self.accountLabel.text = @"";
 
     NSInteger publishedCount = MAX(profile.publishedCount.integerValue, 6);
     NSInteger privateCount = MAX(2, MIN(8, publishedCount / 4));
@@ -499,40 +523,64 @@
     NSString *name = user.nickname.length > 0 ? user.nickname : @"用户";
     self.nameLabel.text = name;
     
-    // 设置bio显示：显示用户ID（因为username可能没有返回）
-    if (user.userId > 0) {
-        self.bioLabel.text = [NSString stringWithFormat:@"用户ID：%ld", (long)user.userId];
+    // 账号行：优先显示 username，并附带 userId
+    NSString *username = [user.username isKindOfClass:[NSString class]] ? [user.username stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] : @"";
+    BOOL hasUsername = (username.length > 0);
+    if (hasUsername && user.userId > 0) {
+        self.accountLabel.text = [NSString stringWithFormat:@"账号：%@", username];
+    } else if (hasUsername) {
+        self.accountLabel.text = [NSString stringWithFormat:@"账号：%@", username];
+    } else if (user.userId > 0) {
+        self.accountLabel.text = [NSString stringWithFormat:@"账号ID：%ld", (long)user.userId];
     } else {
-        self.bioLabel.text = @"已登录，双 token 已就绪";
+        self.accountLabel.text = @"账号ID：暂无";
     }
 
-    NSURL *avatarURL = nil;
-    if (user.avatar.length > 0) {
-        avatarURL = [NSURL URLWithString:user.avatar];
-    }
-    if (avatarURL && avatarURL.scheme.length > 0) {
-        self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
-        self.avatarImageView.tintColor = nil;
-        self.avatarImageView.layer.cornerRadius = 21.0;
-        self.avatarImageView.clipsToBounds = YES;
-        UIImage *placeholder = nil;
-        if (@available(iOS 13.0, *)) {
-            placeholder = [UIImage systemImageNamed:@"person.crop.circle.fill"];
-        }
-        [self.avatarImageView sd_setImageWithURL:avatarURL
-                                placeholderImage:placeholder
-                                         options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+    // bio：显示在昵称下面
+    if (user.bio.length > 0) {
+        self.bioLabel.text = user.bio;
     } else {
-        [self.avatarImageView sd_cancelCurrentImageLoad];
-        self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.avatarImageView.layer.cornerRadius = 0.0;
-        self.avatarImageView.clipsToBounds = NO;
-        self.avatarImageView.tintColor = [self accentColor];
-        if (@available(iOS 13.0, *)) {
-            self.avatarImageView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
-        } else {
-            self.avatarImageView.image = nil;
+        self.bioLabel.text = @"暂无个人简介";
+    }
+
+    if (user.avatar.length > 0) {
+        UIImage *decodedImage = YALImageFromDataURLString(user.avatar);
+        if (decodedImage) {
+            self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
+            self.avatarImageView.layer.cornerRadius = 34.0;
+            self.avatarImageView.clipsToBounds = YES;
+            self.avatarImageView.tintColor = nil;
+            self.avatarImageView.image = decodedImage;
+            return;
         }
+
+        NSURL *avatarURL = [NSURL URLWithString:user.avatar];
+        if (avatarURL && avatarURL.scheme.length > 0) {
+            self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
+            self.avatarImageView.tintColor = nil;
+            self.avatarImageView.layer.cornerRadius = 34.0;
+            self.avatarImageView.clipsToBounds = YES;
+            UIImage *placeholder = nil;
+            if (@available(iOS 13.0, *)) {
+                placeholder = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+            }
+            [self.avatarImageView sd_setImageWithURL:avatarURL
+                                    placeholderImage:placeholder
+                                             options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+            return;
+        }
+    }
+
+    // fallback
+    [self.avatarImageView sd_cancelCurrentImageLoad];
+    self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.avatarImageView.layer.cornerRadius = 34.0;
+    self.avatarImageView.clipsToBounds = YES;
+    self.avatarImageView.tintColor = [self accentColor];
+    if (@available(iOS 13.0, *)) {
+        self.avatarImageView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+    } else {
+        self.avatarImageView.image = nil;
     }
 }
 
@@ -541,13 +589,14 @@
     if (enabled) {
         [self.avatarImageView sd_cancelCurrentImageLoad];
         self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.avatarImageView.layer.cornerRadius = 0.0;
-        self.avatarImageView.clipsToBounds = NO;
+        self.avatarImageView.layer.cornerRadius = 34.0;
+        self.avatarImageView.clipsToBounds = YES;
         self.avatarImageView.tintColor = [self accentColor];
         if (@available(iOS 13.0, *)) {
             self.avatarImageView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
         }
         self.nameLabel.text = @"未登录";
+        self.accountLabel.text = @"账号ID：暂无";
         self.bioLabel.text = @"登录后可同步资料，请求将自动携带双 token";
         [self.editProfileButton setTitle:@"立即登录" forState:UIControlStateNormal];
     } else {

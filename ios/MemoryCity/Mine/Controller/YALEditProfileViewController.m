@@ -6,8 +6,9 @@
 #import "YALEditProfileViewController.h"
 #import "YALEditProfileView.h"
 #import "YALAuthUserModel.h"
+#import "YALAuthManager.h"
 
-@interface YALEditProfileViewController () <YALEditProfileViewDelegate>
+@interface YALEditProfileViewController () <YALEditProfileViewDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 
 @property (nonatomic, strong) YALEditProfileView *editView;
 @property (nonatomic, strong) YALAuthUserModel *user;
@@ -47,6 +48,13 @@
 
     NSString *nickname = data[@"nickname"];
     NSString *bio = data[@"bio"];
+    id avatarObj = data[@"avatar"];
+    NSString *avatar = ([avatarObj isKindOfClass:[NSString class]] ? avatarObj : nil);
+    nickname = [nickname stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    bio = [bio stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (avatar.length == 0) {
+        avatar = nil;
+    }
 
     // 简单校验
     if (nickname.length == 0) {
@@ -54,14 +62,28 @@
         return;
     }
 
-    // 👉 这里未来接接口
-    NSLog(@"保存数据：%@", data);
+    // 防止重复点击
+    self.view.userInteractionEnabled = NO;
 
-    if (self.onEditComplete) {
-        self.onEditComplete(nickname, nil);
-    }
+    NSLog(@"保存资料：昵称=%@ bio=%@", nickname, bio);
+    [[YALAuthManager sharedManager] updateUserInfoWithNickname:nickname
+                                                         avatar:avatar
+                                                            bio:bio
+                                                  completion:^(YALAuthUserModel * _Nullable user, NSError * _Nullable error) {
+        self.view.userInteractionEnabled = YES;
+        if (!user || error) {
+            NSString *msg = error.localizedDescription.length > 0 ? error.localizedDescription : @"保存失败";
+            NSLog(@"❌ 保存昵称失败：%@", msg);
+            [view showErrorMessage:msg forField:@"nickname"];
+            return;
+        }
 
-    [self.navigationController popViewControllerAnimated:YES];
+        self.user = user;
+        if (self.onEditComplete) {
+            self.onEditComplete(user.nickname, user.avatar);
+        }
+        [self.navigationController popViewControllerAnimated:YES];
+    }];
 }
 
 - (void)editProfileViewDidTapCancel:(YALEditProfileView *)view {
@@ -69,11 +91,32 @@
 }
 
 - (void)editProfileViewDidTapAvatar:(YALEditProfileView *)view {
-    NSLog(@"点了头像（后面接图片选择器）");
+    [self.view endEditing:YES];
+
+    if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+        return;
+    }
+
+    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+    picker.delegate = self;
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.allowsEditing = NO;
+    [self presentViewController:picker animated:YES completion:nil];
 }
 
-- (void)editProfileViewDidTapChangePassword:(YALEditProfileView *)view {
-    NSLog(@"点了修改密码");
+#pragma mark - UIImagePickerControllerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker
+didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
+    UIImage *img = info[UIImagePickerControllerOriginalImage];
+    if (img) {
+        [self.editView setAvatarImage:img];
+    }
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
 /*

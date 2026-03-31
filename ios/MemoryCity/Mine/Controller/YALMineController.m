@@ -15,6 +15,7 @@
 #import "YALLoginController.h"
 #import "YALAuthManager.h"
 #import "YALEditProfileViewController.h"
+#import "YALChangePasswordViewController.h"
 #import "YALMyContentListController.h"
 #import <UserNotifications/UserNotifications.h>
 
@@ -363,9 +364,23 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
     self.navigationController.navigationBar.tintColor = [self accentColor];
 
+    // 让从 Mine 推出的页面只显示返回图标，不显示 “Mine” 文本
+    if (!self.navigationItem.backBarButtonItem) {
+        self.navigationItem.backBarButtonItem =
+        [[UIBarButtonItem alloc] initWithTitle:@""
+                                         style:UIBarButtonItemStylePlain
+                                        target:nil
+                                        action:nil];
+    }
+
     [self setupNavigationItems];
     [self buildView];
     [self setupData];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleAuthCurrentUserDidChange:)
+                                                 name:YALAuthManagerCurrentUserDidChangeNotification
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -424,14 +439,16 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
     settingsVC.hidesBottomBarWhenPushed = YES;
     __weak typeof(self) weakSelf = self;
     __weak typeof(settingsVC) weakSettingsVC = settingsVC;
-    settingsVC.tapShuffleProfileBlock = ^{
+    settingsVC.tapChangePasswordBlock = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        __strong typeof(weakSettingsVC) strongSettings = weakSettingsVC;
         if (!strongSelf) { return; }
-        [strongSelf shuffleProfileStyle];
-        [strongSelf showPlaceholderAlertOnController:(strongSettings ?: strongSelf)
-                                               title:@"已更新主页样式"
-                                             message:@"昵称、简介和统计数据已切换。"];
+        if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
+            [strongSelf mineViewDidTapLogin:strongSelf.mineView];
+            return;
+        }
+        YALChangePasswordViewController *vc = [[YALChangePasswordViewController alloc] init];
+        vc.hidesBottomBarWhenPushed = YES;
+        [strongSelf.navigationController pushViewController:vc animated:YES];
     };
     settingsVC.tapShareBlock = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -701,6 +718,15 @@ trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_
 }
 
 #pragma mark - Login State Handling
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)handleAuthCurrentUserDidChange:(NSNotification *)note {
+    (void)note;
+    [self refreshLoginState];
+}
 
 - (void)updateUIWithUser:(YALAuthUserModel *)user {
     [self.mineView applyAuthUser:user];

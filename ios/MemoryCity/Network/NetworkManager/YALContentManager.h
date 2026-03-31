@@ -61,6 +61,12 @@ NS_ASSUME_NONNULL_BEGIN
                          pageSize:(NSInteger)pageSize
                        completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
 
+/// 删除内容（仅作者可删除）
+/// @param contentId 内容ID
+/// @param completion 完成回调
+- (void)deleteContentWithId:(NSNumber *)contentId
+                 completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion;
+
 @end
 
 NS_ASSUME_NONNULL_END

@@ -9,8 +9,8 @@
 #import "YALNetworkManager.h"
 #import "YALAuthManager.h"
 
-//static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
+static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
+//static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
 @implementation YALContentManager
 
 + (instancetype)sharedManager {
@@ -23,20 +23,20 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
 }
 
 - (void)publishContentWithTitle:(NSString *)title
-                       content:(NSString *)content
-                          city:(NSString *)city
-                          year:(NSString *)year
-                          mood:(NSString *)mood
-                        images:(NSArray<NSString *> *)images
-                  locationName:(nullable NSString *)locationName
-                      latitude:(double)latitude
-                     longitude:(double)longitude
-                      isPublic:(BOOL)isPublic
-                        userId:(nullable NSNumber *)userId
+                        content:(NSString *)content
+                           city:(NSString *)city
+                           year:(NSString *)year
+                           mood:(NSString *)mood
+                         images:(NSArray<NSString *> *)images
+                   locationName:(nullable NSString *)locationName
+                       latitude:(double)latitude
+                      longitude:(double)longitude
+                       isPublic:(BOOL)isPublic
+                         userId:(nullable NSNumber *)userId
                      completion:(void (^)(BOOL success, NSString *message, NSNumber * _Nullable contentId, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/content/publish", kYALAPIBaseURL];
-    
+
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"title"] = title;
     parameters[@"content"] = content;
@@ -87,7 +87,7 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
             }
         }
         parameters[@"images"] = fixedImages;
-        
+
         // 如果是Base64图片，记录大小
         if (fixedImages.count > 0 && [fixedImages.firstObject isKindOfClass:[NSString class]]) {
             NSString *firstImage = fixedImages.firstObject;
@@ -105,11 +105,11 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
     parameters[@"latitude"] = @(latitude);
     parameters[@"longitude"] = @(longitude);
     parameters[@"is_public"] = @(isPublic);
-    
+
     if (locationName) {
         parameters[@"location_name"] = locationName;
     }
-    
+
     NSNumber *finalUserId = nil;
 
     if (userId) {
@@ -141,38 +141,38 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
         NSLog(@"❌ user_id格式错误，使用默认值1");
         finalUserId = @(1);
     }
-    
+
     parameters[@"user_id"] = finalUserId;
     NSLog(@"🔥 最终 user_id = %@, 类型 = %@, 值 = %ld", finalUserId, [finalUserId class], (long)[finalUserId integerValue]);
     NSLog(@"📦 最终发送参数: %@", parameters);
-    
 
-    
+
+
     // 获取认证headers
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
-    
+
     NSLog(@"📡 网络请求详情：");
     NSLog(@"🔗 URL: %@", url);
     NSLog(@"📦 参数: %@", parameters);
     NSLog(@"🔑 Headers: %@", headers);
-    
+
     [network POST:url
-        parameters:parameters
-           headers:headers
-           progress:nil
-            success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+       parameters:parameters
+          headers:headers
+         progress:nil
+          success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
         NSLog(@"✅ 网络请求成功，收到响应：");
         NSLog(@"📥 响应数据: %@", responseObject);
-        
+
         if ([responseObject isKindOfClass:[NSDictionary class]]) {
             NSDictionary *response = (NSDictionary *)responseObject;
             NSInteger code = [response[@"code"] integerValue];
             NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
-            
+
             NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
             NSLog(@"📁 响应数据: %@", data);
-            
+
             if (code == 200) {
                 NSNumber *contentId = data[@"content_id"];
                 NSLog(@"🎉 发布成功，内容ID: %@", contentId);
@@ -183,8 +183,8 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
                 NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"YALContentManager"
-                                                        code:code
-                                                    userInfo:@{NSLocalizedDescriptionKey: msg}];
+                                                         code:code
+                                                     userInfo:@{NSLocalizedDescriptionKey: msg}];
                     completion(NO, msg, nil, error);
                 }
             }
@@ -192,8 +192,8 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
             NSLog(@"❌ 无效的响应格式: %@", responseObject);
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALContentManager"
-                                                    code:-1
-                                                userInfo:@{NSLocalizedDescriptionKey: @"Invalid response"}];
+                                                     code:-1
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Invalid response"}];
                 completion(NO, @"无效的响应", nil, error);
             }
         }
@@ -209,23 +209,23 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
                     completion:(void (^)(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/content/detail", kYALAPIBaseURL];
-    
+
     NSDictionary *parameters = @{@"content_id": contentId};
-    
+
     // 获取认证headers
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
-    
+
     [network GET:url
-     parameters:parameters
-        headers:headers
-       progress:nil
-        success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+      parameters:parameters
+         headers:headers
+        progress:nil
+         success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
         if ([responseObject isKindOfClass:[NSDictionary class]]) {
             NSDictionary *response = (NSDictionary *)responseObject;
             NSInteger code = [response[@"code"] integerValue];
             NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
-            
+
             if (code == 200) {
                 if (completion) {
                     completion(YES, data, nil);
@@ -233,16 +233,16 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
             } else {
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"YALContentManager"
-                                                        code:code
-                                                    userInfo:@{NSLocalizedDescriptionKey: msg}];
+                                                         code:code
+                                                     userInfo:@{NSLocalizedDescriptionKey: msg}];
                     completion(NO, nil, error);
                 }
             }
         } else {
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALContentManager"
-                                                    code:-1
-                                                userInfo:@{NSLocalizedDescriptionKey: @"Invalid response"}];
+                                                     code:-1
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Invalid response"}];
                 completion(NO, nil, error);
             }
         }
@@ -260,20 +260,20 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
                       completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/content/my", kYALAPIBaseURL];
-    
+
     // 构建请求参数
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"page"] = @(page);
     parameters[@"pageSize"] = @(pageSize);
-    
+
     // 获取认证headers（需要token）
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
-    
+
     NSLog(@"📡 获取我的内容列表请求详情：");
     NSLog(@"🔗 URL: %@", url);
     NSLog(@"📦 参数: %@", parameters);
     NSLog(@"🔑 Headers: %@", headers);
-    
+
     [network GET:url
       parameters:parameters
          headers:headers
@@ -281,20 +281,20 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
          success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
         NSLog(@"✅ 获取我的内容列表成功，收到响应：");
         NSLog(@"📥 响应数据: %@", responseObject);
-        
+
         if ([responseObject isKindOfClass:[NSDictionary class]]) {
             NSDictionary *response = (NSDictionary *)responseObject;
             NSInteger code = [response[@"code"] integerValue];
             NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
-            
+
             NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
-            
+
             if (code == 200) {
                 // 解析数据列表
                 NSArray *listData = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
                 NSMutableArray *contentList = [NSMutableArray array];
-                
+
                 for (NSDictionary *itemDict in listData) {
                     if ([itemDict isKindOfClass:[NSDictionary class]]) {
                         // 这里需要导入YALMyContentModel，但为了不破坏现有结构，我们先返回字典数组
@@ -302,9 +302,9 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
                         [contentList addObject:itemDict];
                     }
                 }
-                
+
                 NSLog(@"📋 解析成功，共 %lu 条内容", (unsigned long)contentList.count);
-                
+
                 if (completion) {
                     completion(YES, [contentList copy], msg, nil);
                 }
@@ -312,8 +312,8 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
                 NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"YALContentManager"
-                                                        code:code
-                                                    userInfo:@{NSLocalizedDescriptionKey: msg}];
+                                                         code:code
+                                                     userInfo:@{NSLocalizedDescriptionKey: msg}];
                     completion(NO, nil, msg, error);
                 }
             }
@@ -321,8 +321,8 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
             NSLog(@"❌ 无效的响应格式: %@", responseObject);
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALContentManager"
-                                                    code:-1
-                                                userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
+                                                     code:-1
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
                 completion(NO, nil, @"无效的响应格式", error);
             }
         }
@@ -330,6 +330,49 @@ static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
         NSLog(@"❌ 获取我的内容列表失败: %@", error);
         if (completion) {
             completion(NO, nil, @"网络请求失败", error);
+        }
+    }];
+}
+
+-(void)deleteContentWithId:(NSNumber *)contentId
+                completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/content/delete?content_id=%@", kYALAPIBaseURL, contentId ?: @(0)];
+    NSLog(@"🚨 DELETE URL = %@", url);
+    NSDictionary *parameters = nil;
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    [network DELETE:url
+         parameters:parameters
+            headers:headers
+            success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *response = (NSDictionary *)responseObject;
+            NSInteger code = [response[@"code"] integerValue];
+            NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
+            if (code == 200) {
+                if (completion) {
+                    completion(YES, msg.length > 0 ? msg : @"删除成功", nil);
+                }
+            } else {
+                NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                     code:code
+                                                 userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"删除失败"}];
+                if (completion) {
+                    completion(NO, msg.length > 0 ? msg : @"删除失败", error);
+                }
+            }
+        } else {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
+            if (completion) {
+                completion(NO, @"无效的响应格式", error);
+            }
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) {
+            completion(NO, @"网络请求失败", error);
         }
     }];
 }

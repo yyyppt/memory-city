@@ -10,6 +10,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSInteger memoryCount;
 @property (nonatomic, copy) NSString *featuredTitle;
 @property (nonatomic, strong, nullable) UIImage *coverImage;
+/// 封面图片 URL（来自接口 images[0]，用于 SDWebImage 异步加载）
+@property (nonatomic, copy, nullable) NSString *coverImageURLString;
 
 @property (nonatomic, readonly) NSString *monthName;
 @property (nonatomic, readonly) NSString *monthNumberText;

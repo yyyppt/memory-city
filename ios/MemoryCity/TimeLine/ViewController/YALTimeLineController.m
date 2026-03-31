@@ -8,12 +8,16 @@
 #import "YALTimeLineController.h"
 #import "YALTimeLineDetailController.h"
 #import "YALTimeLineDayCell.h"
+#import "YALTimeLineEntryModel.h"
+#import "YALReleaseController.h"
+#import "YALTimelineManager.h"
 #import <Masonry/Masonry.h>
 
 @interface YALTimeLineController () <UITableViewDataSource, UITableViewDelegate>
 
-@property (nonatomic, strong) UITableView *dayTableView;
-@property (nonatomic, strong) NSArray<YALTimeLineEntryModel *> *monthDayEntries;
+@property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, copy) NSArray<YALTimeLineEntryModel *> *entries;
+@property (nonatomic, strong) UIView *emptyMonthContainer;
 
 @end
 
@@ -47,78 +51,230 @@
     }
 
     self.title = [NSString stringWithFormat:@"%ld · %02ld", (long)self.displayYear, (long)self.displayMonth];
-    self.monthDayEntries = [self buildSortedMonthEntries];
+    self.entries = @[];
 
-    self.dayTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    self.dayTableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
-    self.dayTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    self.dayTableView.dataSource = self;
-    self.dayTableView.delegate = self;
-    self.dayTableView.rowHeight = 108;
-    self.dayTableView.contentInset = UIEdgeInsetsMake(8, 0, 24, 0);
-    [self.dayTableView registerClass:[YALTimeLineDayCell class] forCellReuseIdentifier:@"YALTimeLineDayCell"];
-    [self.view addSubview:self.dayTableView];
-    [self.dayTableView mas_makeConstraints:^(MASConstraintMaker *make) {
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.tableView.dataSource = self;
+    self.tableView.delegate = self;
+    self.tableView.rowHeight = 108;
+    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 24, 0);
+    [self.tableView registerClass:[YALTimeLineDayCell class] forCellReuseIdentifier:@"YALTimeLineDayCell"];
+    [self.view addSubview:self.tableView];
+    [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.edges.equalTo(self.view);
     }];
+
+    if (!self.emptyMonthContainer) {
+        self.emptyMonthContainer = [[UIView alloc] init];
+        self.emptyMonthContainer.backgroundColor = [UIColor clearColor];
+        self.emptyMonthContainer.hidden = YES;
+        [self.view addSubview:self.emptyMonthContainer];
+        [self.emptyMonthContainer mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self.view);
+        }];
+
+        UILabel *label = [[UILabel alloc] init];
+        label.text = @"还没有任何东西";
+        label.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+        label.textColor = [UIColor labelColor];
+        label.textAlignment = NSTextAlignmentCenter;
+        label.numberOfLines = 0;
+        [self.emptyMonthContainer addSubview:label];
+
+        UIButton *addBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        if (@available(iOS 13.0, *)) {
+            addBtn.backgroundColor = [UIColor systemOrangeColor];
+        } else {
+            addBtn.backgroundColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+        }
+        [addBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        [addBtn setTitle:@"添加" forState:UIControlStateNormal];
+        addBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+        addBtn.layer.cornerRadius = 12;
+        [addBtn addTarget:self action:@selector(addTappedOnEmptyMonth) forControlEvents:UIControlEventTouchUpInside];
+        [self.emptyMonthContainer addSubview:addBtn];
+
+        [label mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerX.equalTo(self.emptyMonthContainer);
+            make.centerY.equalTo(self.emptyMonthContainer).offset(-30);
+            make.left.right.equalTo(self.emptyMonthContainer).inset(24);
+        }];
+        [addBtn mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(label.mas_bottom).offset(16);
+            make.centerX.equalTo(self.emptyMonthContainer);
+            make.width.mas_equalTo(140);
+            make.height.mas_equalTo(44);
+        }];
+    }
+
+    [self loadMonthEntriesFromAPI];
 }
 
 #pragma mark - Month list (daily cells)
 
-- (NSArray<YALTimeLineEntryModel *> *)buildSortedMonthEntries {
-    NSDate *now = [NSDate date];
-    NSCalendar *cal = [NSCalendar currentCalendar];
-    NSDateComponents *c = [[NSDateComponents alloc] init];
-    c.year = self.displayYear;
-    c.month = self.displayMonth;
-    c.day = 1;
-    NSDate *monthDate = [cal dateFromComponents:c] ?: now;
-
-    NSDateFormatter *dayFmt = [[NSDateFormatter alloc] init];
-    dayFmt.dateFormat = @"yyyy.MM.dd";
-
-    NSMutableArray<YALTimeLineEntryModel *> *entries = [NSMutableArray array];
-    NSMutableSet<NSNumber *> *usedDays = [NSMutableSet set];
-
-    NSInteger count = 10;
-    for (NSInteger i = 0; i < count; i++) {
-        NSInteger day = 1 + (NSInteger)(arc4random_uniform(27));
-        if ([usedDays containsObject:@(day)]) {
-            i--;
-            continue;
-        }
-        [usedDays addObject:@(day)];
-
-        NSDateComponents *dc = [[NSDateComponents alloc] init];
-        dc.year = self.displayYear;
-        dc.month = self.displayMonth;
-        dc.day = day;
-        NSDate *dayDate = [cal dateFromComponents:dc] ?: monthDate;
-
-        YALTimeLineEntryModel *e = [[YALTimeLineEntryModel alloc] init];
-        e.dateText = [dayFmt stringFromDate:dayDate];
-        e.image = [UIImage imageNamed:@"WechatIMG395 1.jpg"];
-        e.titleText = @"今日记忆";
-        NSInteger cnt = 1 + (arc4random_uniform(5));
-        e.subtitleText = [NSString stringWithFormat:@"这天有 %ld 个记点 · 点击查看", (long)cnt];
-        [entries addObject:e];
+- (NSString *)normalizedDateTextFromRaw:(NSString *)raw {
+    if (raw.length == 0) return @"";
+    NSString *s = raw;
+    // 兼容 "2024-03-30T12:00:00Z"
+    if ([s containsString:@"T"] && s.length >= 10) {
+        s = [s substringToIndex:10];
+    } else if (s.length >= 10) {
+        s = [s substringToIndex:10];
     }
-
-    [entries sortUsingComparator:^NSComparisonResult(YALTimeLineEntryModel *a, YALTimeLineEntryModel *b) {
-        return [a.dateText compare:b.dateText];
-    }];
-    return entries;
+    // 分隔符统一为点
+    s = [s stringByReplacingOccurrencesOfString:@"-" withString:@"."];
+    NSArray<NSString *> *parts = [s componentsSeparatedByString:@"."];
+    if (parts.count < 3) return s;
+    NSInteger y = [parts[0] integerValue];
+    NSInteger m = [parts[1] integerValue];
+    NSInteger d = [parts[2] integerValue];
+    if (y <= 0 || m <= 0 || d <= 0) return s;
+    return [NSString stringWithFormat:@"%04ld.%02ld.%02ld", (long)y, (long)m, (long)d];
 }
 
+- (NSString *)subtitlePreviewFromContent:(NSString *)content {
+    NSString *c = content ?: @"";
+    if (c.length == 0) return @"";
+    NSInteger maxLen = 28;
+    if (c.length <= maxLen) return c;
+    return [NSString stringWithFormat:@"%@...", [c substringToIndex:maxLen]];
+}
+
+- (void)addTappedOnEmptyMonth {
+    // 默认取当月的 1 号发布
+    NSString *dateText = [NSString stringWithFormat:@"%04ld.%02ld.%02ld",
+                           (long)self.displayYear, (long)self.displayMonth, 1L];
+    YALReleaseController *release = [[YALReleaseController alloc] initWithEditCoverImage:nil
+                                                                                         title:nil
+                                                                                      dateText:dateText
+                                                                                          body:@""];
+    release.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:release animated:YES];
+}
+
+- (NSInteger)daysInMonthForYear:(NSInteger)year month:(NSInteger)month {
+    if (year <= 0 || month < 1 || month > 12) return 0;
+    NSCalendar *cal = [NSCalendar currentCalendar];
+    NSDateComponents *c = [[NSDateComponents alloc] init];
+    c.year = year;
+    c.month = month;
+    c.day = 1;
+    NSDate *d = [cal dateFromComponents:c];
+    if (!d) return 0;
+    NSRange r = [cal rangeOfUnit:NSCalendarUnitDay inUnit:NSCalendarUnitMonth forDate:d];
+    return (NSInteger)r.length;
+}
+
+- (void)loadMonthEntriesFromAPI {
+    NSInteger year = self.displayYear;
+    NSInteger month = self.displayMonth;
+    if (year <= 0 || month < 1 || month > 12) return;
+
+    self.emptyMonthContainer.hidden = YES;
+
+    __weak typeof(self) ws = self;
+    [[YALTimelineManager sharedManager] fetchMyTimelineWithYear:@(year)
+                                                    completion:^(BOOL success, NSDictionary<NSString *,NSArray *> * _Nullable groupedByYearMonth, NSString * _Nullable message, NSError * _Nullable error) {
+        __strong typeof(ws) ss = ws;
+        if (!ss) return;
+
+        if (!success || ![groupedByYearMonth isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"❌ 获取时间轴失败：%@ %@", message, error);
+            ss.emptyMonthContainer.hidden = NO;
+            ss.entries = @[];
+            [ss.tableView reloadData];
+            return;
+        }
+
+        NSString *key = [NSString stringWithFormat:@"%04ld-%02ld", (long)year, (long)month];
+        NSArray *rawList = groupedByYearMonth[key];
+        if (![rawList isKindOfClass:[NSArray class]]) rawList = @[];
+
+        // 整个月没有内容：显示空态 + 添加按钮
+        if (rawList.count == 0) {
+            ss.entries = @[];
+            ss.emptyMonthContainer.hidden = NO;
+            [ss.tableView reloadData];
+            return;
+        }
+
+        // 有内容：只展示有内容的天（不展示空天）
+        NSMutableArray<YALTimeLineEntryModel *> *entries = [NSMutableArray array];
+        NSInteger fallbackDay = 1;
+        for (id obj in rawList) {
+            if (![obj isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary *item = (NSDictionary *)obj;
+
+            NSString *title = @"";
+            NSString *content = @"";
+            NSMutableArray<NSString *> *imageURLs = [NSMutableArray array];
+
+            id tObj = item[@"title"] ?: item[@"content_title"];
+            if ([tObj isKindOfClass:[NSString class]]) title = (NSString *)tObj;
+            id cObj = item[@"content"] ?: item[@"body"];
+            if ([cObj isKindOfClass:[NSString class]]) content = (NSString *)cObj;
+
+            NSString *rawDate = nil;
+            if ([item[@"create_time"] isKindOfClass:[NSString class]]) rawDate = item[@"create_time"];
+            if (rawDate.length == 0 && [item[@"date"] isKindOfClass:[NSString class]]) rawDate = item[@"date"];
+            NSString *dateText = [ss normalizedDateTextFromRaw:(rawDate ?: @"")];
+            // 如果后端没返回我识别的日期字段，则用兜底日期保证 entry 不会被跳过
+            if (dateText.length == 0) {
+                NSInteger day = MAX(1, MIN(28, fallbackDay));
+                dateText = [NSString stringWithFormat:@"%04ld.%02ld.%02ld",
+                             (long)year, (long)month, (long)day];
+                fallbackDay++;
+            }
+
+            id imagesObj = item[@"images"];
+            if ([imagesObj isKindOfClass:[NSArray class]]) {
+                for (id img in imagesObj) {
+                    if ([img isKindOfClass:[NSString class]] && ((NSString *)img).length > 0) {
+                        [imageURLs addObject:(NSString *)img];
+                    }
+                }
+            } else if ([imagesObj isKindOfClass:[NSString class]] && ((NSString *)imagesObj).length > 0) {
+                [imageURLs addObject:(NSString *)imagesObj];
+            } else {
+                id imageObj = item[@"image"] ?: item[@"image_url"];
+                if ([imageObj isKindOfClass:[NSString class]] && ((NSString *)imageObj).length > 0) {
+                    [imageURLs addObject:(NSString *)imageObj];
+                }
+            }
+
+            NSString *preview = [ss subtitlePreviewFromContent:content];
+            YALTimeLineEntryModel *filled =
+                [[YALTimeLineEntryModel alloc] initWithTitle:(title.length > 0 ? title : @"无标题")
+                                                    subtitle:preview
+                                                        date:dateText
+                                                     content:content
+                                                  imageURLs:imageURLs];
+            [entries addObject:filled];
+        }
+
+        // 按时间升序（最早的内容排前面）
+        [entries sortUsingComparator:^NSComparisonResult(YALTimeLineEntryModel *a, YALTimeLineEntryModel *b) {
+            return [a.dateText compare:b.dateText];
+        }];
+
+        ss.entries = [entries copy];
+        ss.emptyMonthContainer.hidden = (ss.entries.count > 0);
+        [ss.tableView reloadData];
+    }];
+}
+
+#pragma mark - UITableView
+
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    (void)tableView;
-    (void)section;
-    return self.monthDayEntries.count;
+    (void)tableView; (void)section;
+    return self.entries.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     YALTimeLineDayCell *cell = [tableView dequeueReusableCellWithIdentifier:@"YALTimeLineDayCell" forIndexPath:indexPath];
-    YALTimeLineEntryModel *entry = self.monthDayEntries[indexPath.row];
+    YALTimeLineEntryModel *entry = self.entries[indexPath.row];
 
     NSArray *parts = [entry.dateText componentsSeparatedByString:@"."];
     NSString *dayText = parts.count >= 3 ? parts[2] : @"--";
@@ -132,17 +288,20 @@
         wdf.dateFormat = @"EEEE";
         weekdayText = [wdf stringFromDate:d];
     }
-
     [cell configureWithEntry:entry dayText:dayText weekdayText:weekdayText];
     return cell;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
-    YALTimeLineEntryModel *entry = self.monthDayEntries[indexPath.row];
+    YALTimeLineEntryModel *entry = self.entries[indexPath.row];
+
     YALTimeLineDetailController *detail = [[YALTimeLineDetailController alloc] init];
     detail.dateText = entry.dateText ?: @"";
-    detail.coverImage = entry.image ?: [UIImage imageNamed:@"WechatIMG395 1.jpg"];
+    detail.titleText = entry.titleText ?: @"";
+    detail.contentText = entry.contentText ?: @"";
+    detail.coverImageURLString = (entry.imageURLStrings.count > 0) ? entry.imageURLStrings.firstObject : nil;
+    detail.coverImage = entry.image;
     detail.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:detail animated:YES];
 }

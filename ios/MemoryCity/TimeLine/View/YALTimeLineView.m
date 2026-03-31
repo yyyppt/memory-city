@@ -102,8 +102,16 @@ static const CGFloat kBottomPad     = 50.0;
 
         NSString *labelText = section.monthText;
         if (!section.isExpanded) {
-            labelText = [NSString stringWithFormat:@"%@  ·  %ld条记忆",
-                         section.monthText, (long)section.entries.count];
+            // 仅统计“有内容”的条目数（用于空天占位时显示 0 条）
+            NSInteger contentCount = 0;
+            for (YALTimeLineEntryModel *e in section.entries) {
+                if ([e.contentText isKindOfClass:[NSString class]] && e.contentText.length > 0) {
+                    contentCount++;
+                } else if ([e.imageURLStrings isKindOfClass:[NSArray class]] && e.imageURLStrings.count > 0) {
+                    contentCount++;
+                }
+            }
+            labelText = [NSString stringWithFormat:@"%@  ·  %ld条记忆", section.monthText, (long)contentCount];
         }
         UILabel *label = [[UILabel alloc] init];
         label.text      = labelText;

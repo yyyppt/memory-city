@@ -1,5 +1,6 @@
 #import "YALMemoryMonthCell.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 @interface YALMemoryMonthCell ()
 
@@ -143,23 +144,48 @@
     self.bigMonthLabel.text = model.monthNumberText;
     self.featuredLabel.text = model.featuredTitle.length > 0 ? model.featuredTitle : @"FEATURED MOMENT";
 
+    // 兼容：如果有本地 image 直接显示；否则优先使用 coverImageURLString 异步加载
     UIImage *img = model.coverImage;
     if (img) {
         self.coverImageView.image = img;
         self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
         self.coverImageView.backgroundColor = [UIColor clearColor];
-    } else {
-        // 无内容 / 拉取失败 / 无图片：统一显示默认占位图（不要项目里原来的 WechatIMG395 1.jpg）
-        if (@available(iOS 13.0, *)) {
-            self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
-            self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
-            self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
-            self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-        } else {
-            self.coverImageView.image = nil;
-            self.coverImageView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-            self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+        return;
+    }
+
+    NSString *urlStr = model.coverImageURLString;
+    if (urlStr.length > 0) {
+        if (![urlStr hasPrefix:@"http://"] && ![urlStr hasPrefix:@"https://"]) {
+            urlStr = [NSString stringWithFormat:@"http://%@", urlStr];
         }
+        NSURL *url = [NSURL URLWithString:urlStr];
+        if (url) {
+            self.coverImageView.backgroundColor = [UIColor clearColor];
+            self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+            UIImage *placeholder = nil;
+            if (@available(iOS 13.0, *)) {
+                placeholder = [UIImage systemImageNamed:@"photo"];
+            }
+            [self.coverImageView sd_setImageWithURL:url
+                                       placeholderImage:placeholder
+                                                options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+            if (@available(iOS 13.0, *)) {
+                self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
+            }
+            return;
+        }
+    }
+
+    // 无内容 / 拉取失败 / 无图片：统一显示默认占位图
+    if (@available(iOS 13.0, *)) {
+        self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
+        self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
+        self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+    } else {
+        self.coverImageView.image = nil;
+        self.coverImageView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
+        self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
     }
 }
 

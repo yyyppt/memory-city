@@ -7,6 +7,7 @@
 
 #import "YALTimeLineCardView.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 @interface YALTimeLineCardView ()
 
@@ -95,7 +96,13 @@
 
 + (CGFloat)cardHeightForEntry:(YALTimeLineEntryModel *)entry width:(CGFloat)cardWidth {
     UIImage *img = entry.image;
-    CGFloat imageH = [self imageHeightForImage:img fitWidth:cardWidth - 20];
+    CGFloat imageH = 0;
+    if (img) {
+        imageH = [self imageHeightForImage:img fitWidth:cardWidth - 20];
+    } else {
+        // 无图片（包含没拿到 URL 尺寸）时：占位图也要有高度
+        imageH = 160.0;
+    }
     return 10 + imageH + 8 + 20 + 4 + 16 + 10;
 }
 
@@ -109,28 +116,43 @@
     _titleLabel.text = entry.titleText.length > 0 ? entry.titleText : entry.dateText;
     _dateLabel.text = entry.subtitleText.length > 0 ? entry.subtitleText : entry.dateText;
 
-    UIImage *img = entry.image;
-    if (img) {
+    UIImage *placeholder = nil;
+    if (@available(iOS 13.0, *)) {
+        placeholder = [UIImage systemImageNamed:@"photo"];
+    }
+
+    NSString *firstURLStr = (entry.imageURLStrings.count > 0) ? entry.imageURLStrings.firstObject : nil;
+    if (firstURLStr.length > 0) {
+        if (![firstURLStr hasPrefix:@"http://"] && ![firstURLStr hasPrefix:@"https://"]) {
+            firstURLStr = [NSString stringWithFormat:@"http://%@", firstURLStr];
+        }
+        NSURL *url = [NSURL URLWithString:firstURLStr];
         _imageView.contentMode = UIViewContentModeScaleAspectFill;
         _imageView.backgroundColor = [UIColor clearColor];
-        _imageView.image = img;
+        [_imageView sd_setImageWithURL:url
+                           placeholderImage:placeholder
+                                    options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+    } else if (entry.image) {
+        _imageView.contentMode = UIViewContentModeScaleAspectFill;
+        _imageView.backgroundColor = [UIColor clearColor];
+        _imageView.image = entry.image;
     } else {
         _imageView.contentMode = UIViewContentModeScaleAspectFit;
         _imageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+        _imageView.image = placeholder;
         if (@available(iOS 13.0, *)) {
-            _imageView.image = [UIImage systemImageNamed:@"photo"];
             _imageView.tintColor = [UIColor tertiaryLabelColor];
-        } else {
-            _imageView.image = nil;
         }
     }
 
     // 根据图片更新高度约束
+    UIImage *img = entry.image;
     CGFloat imgH = [[self class] imageHeightForImage:img fitWidth:self.bounds.size.width - 20];
     [self.imageHeightConstraint uninstall];
     [_imageView mas_updateConstraints:^(MASConstraintMaker *make) {
-        // 没有图片就不占高度（更符合“无内容用默认图”的紧凑显示）
-        self.imageHeightConstraint = make.height.mas_equalTo(imgH);
+        // 占位图 / 图片加载前也要保持稳定高度
+        CGFloat finalH = (imgH > 0 ? imgH : 160.0);
+        self.imageHeightConstraint = make.height.mas_equalTo(finalH);
     }];
 }
 

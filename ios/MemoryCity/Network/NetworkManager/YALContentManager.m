@@ -41,21 +41,9 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
     parameters[@"title"] = title;
     parameters[@"content"] = content;
     parameters[@"city"] = city;
-    // 后端如果把 year 当数字解析，避免出现 '2026-03-30' / '2026.03.30' 这类字符串导致解析失败
-    NSMutableString *yearDigits = [NSMutableString string];
-    for (NSUInteger i = 0; i < year.length; i++) {
-        unichar c = [year characterAtIndex:i];
-        if (c >= '0' && c <= '9') {
-            [yearDigits appendFormat:@"%C", c];
-        }
-    }
-    if (yearDigits.length >= 4) {
-        parameters[@"year"] = [yearDigits substringToIndex:4];
-    } else if (yearDigits.length > 0) {
-        parameters[@"year"] = yearDigits;
-    } else {
-        parameters[@"year"] = @"2026";
-    }
+    // year 参数用于后端解析发布时间（你的 UI 里用的是 yyyy.MM.dd）
+    // 这里不再截取数字，以便后端能拿到月份/日期并正确落库用于 /timeline/my 分组
+    parameters[@"year"] = (year.length > 0 ? year : @"");
     parameters[@"mood"] = mood;
     // 处理图片上传
     if (images && [images isKindOfClass:[NSArray class]] && images.count > 0) {

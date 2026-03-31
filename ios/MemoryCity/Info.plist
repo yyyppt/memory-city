@@ -11,6 +11,8 @@
 	<string>用于地图定位</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>用于选择发布封面照片</string>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍照选择发布封面照片</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

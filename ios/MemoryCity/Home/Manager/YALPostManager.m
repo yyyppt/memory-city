@@ -4,7 +4,6 @@
 //
 //  Created by mac on 2026/3/23.
 //
-
 #import "YALPostManager.h"
 
 @implementation YALPostManager
@@ -21,8 +20,8 @@
 - (void)getPosts:(void(^)(NSArray<YALPostModel *> *posts, NSError *error))completion {
     YALNetworkManager *manager = [YALNetworkManager shareManager];
     //static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";@"http://8.137.158.7:9000/api/content/list";http://192.168.1.65:9000/api
-
     NSString *url = @"http://8.137.158.7:9000/api/content/list";
+
     NSDictionary *parameters = @{@"limit": @10};
 
     NSLog(@"📡 首页获取内容列表请求：%@", url);

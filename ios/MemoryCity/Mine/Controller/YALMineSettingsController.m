@@ -17,7 +17,7 @@ typedef NS_ENUM(NSInteger, YALMineSettingsSection) {
 
 typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
     YALMineSettingsCommonRowDarkMode = 0,
-    YALMineSettingsCommonRowShuffleProfile = 1,
+    YALMineSettingsCommonRowChangePassword = 1,
     YALMineSettingsCommonRowShareApp = 2,
     YALMineSettingsCommonRowClearBadge = 3,
     YALMineSettingsCommonRowCount = 4
@@ -118,8 +118,8 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
 
     if (indexPath.section == YALMineSettingsSectionCommon) {
         switch (indexPath.row) {
-            case YALMineSettingsCommonRowShuffleProfile:
-                cell.textLabel.text = @"切换昵称风格";
+            case YALMineSettingsCommonRowChangePassword:
+                cell.textLabel.text = @"修改密码";
                 break;
             case YALMineSettingsCommonRowShareApp:
                 cell.textLabel.text = @"分享 MemoryCity";
@@ -144,9 +144,9 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.section == YALMineSettingsSectionCommon) {
         switch (indexPath.row) {
-            case YALMineSettingsCommonRowShuffleProfile:
-                if (self.tapShuffleProfileBlock) {
-                    self.tapShuffleProfileBlock();
+            case YALMineSettingsCommonRowChangePassword:
+                if (self.tapChangePasswordBlock) {
+                    self.tapChangePasswordBlock();
                 }
                 break;
             case YALMineSettingsCommonRowShareApp:

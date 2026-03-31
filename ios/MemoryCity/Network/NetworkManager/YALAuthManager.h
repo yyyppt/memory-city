@@ -8,6 +8,8 @@
 #import <Foundation/Foundation.h>
 #import "../../Login/Model/YALAuthUserModel.h"
 
+FOUNDATION_EXPORT NSString * const YALAuthManagerCurrentUserDidChangeNotification;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface YALAuthManager : NSObject
@@ -41,6 +43,21 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)updateUserInfoWithNickname:(NSString * _Nonnull)nickname
                            avatar:(NSString * _Nonnull)avatar
                        completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
+
+/// 一次性更新用户资料（支持昵称/头像/bio；bio/avatar 可选）
+- (void)updateUserInfoWithNickname:(NSString * _Nonnull)nickname
+                              avatar:(NSString * _Nullable)avatar
+                                 bio:(NSString * _Nullable)bio
+                          completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
+
+/// 拉取当前登录用户信息（GET /user/info）
+- (void)fetchUserInfoWithCompletion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
+
+/// 修改密码
+- (void)updatePasswordWithOldPassword:(NSString * _Nonnull)oldPassword
+                          newPassword:(NSString * _Nonnull)newPassword
+                        repeatPassword:(NSString * _Nonnull)repeatPassword
+                            completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;
 
 @end
 

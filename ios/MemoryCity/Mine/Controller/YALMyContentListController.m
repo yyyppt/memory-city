@@ -386,6 +386,35 @@
     }
 }
 
+- (nullable UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_AVAILABLE(ios(11.0)) {
+    if (indexPath.row >= self.contentList.count) {
+        return nil;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
+                                                                                title:@"删除"
+                                                                              handler:^(__unused UIContextualAction * _Nonnull action, __unused UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        [strongSelf confirmDeleteAtIndexPath:indexPath completion:completionHandler];
+    }];
+    deleteAction.backgroundColor = [UIColor systemRedColor];
+
+    UISwipeActionsConfiguration *config = [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
+    config.performsFirstActionWithFullSwipe = NO;
+    return config;
+}
+
+- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (editingStyle == UITableViewCellEditingStyleDelete && indexPath.row < self.contentList.count) {
+        [self confirmDeleteAtIndexPath:indexPath completion:^(BOOL finished) {
+            if (!finished) {
+                [tableView setEditing:NO animated:YES];
+            }
+        }];
+    }
+}
+
 - (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
     // 滚动到底部时加载更多
     if (indexPath.row == self.contentList.count - 1 && self.hasMoreData && !self.isLoading) {
@@ -410,6 +439,12 @@
         // 这里可以跳转到内容详情页面
         [self showMessage:@"跳转到内容详情页面" type:0];
     }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"删除"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        [self confirmDeleteForModel:model];
+    }]];
     
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
@@ -419,6 +454,101 @@
 }
 
 #pragma mark - 工具方法
+
+- (void)confirmDeleteAtIndexPath:(NSIndexPath *)indexPath completion:(void (^)(BOOL finished))completion {
+    if (indexPath.row >= self.contentList.count) {
+        if (completion) completion(NO);
+        return;
+    }
+    YALMyContentModel *model = self.contentList[indexPath.row];
+    [self showDeleteConfirmAlertWithModel:model confirmHandler:^{
+        [self deleteContent:model indexPath:indexPath completion:completion];
+    } cancelHandler:^{
+        if (completion) completion(NO);
+    }];
+}
+
+- (void)confirmDeleteForModel:(YALMyContentModel *)model {
+    NSUInteger index = [self.contentList indexOfObject:model];
+    NSIndexPath *indexPath = (index != NSNotFound) ? [NSIndexPath indexPathForRow:index inSection:0] : nil;
+    [self showDeleteConfirmAlertWithModel:model confirmHandler:^{
+        [self deleteContent:model indexPath:indexPath completion:nil];
+    } cancelHandler:nil];
+}
+
+- (void)showDeleteConfirmAlertWithModel:(YALMyContentModel *)model
+                         confirmHandler:(dispatch_block_t)confirmHandler
+                          cancelHandler:(nullable dispatch_block_t)cancelHandler {
+    NSString *title = @"确认删除";
+    NSString *message = [NSString stringWithFormat:@"确定删除《%@》吗？删除后不可恢复。", model.title.length > 0 ? model.title : @"这条内容"];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        if (cancelHandler) {
+            cancelHandler();
+        }
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"删除"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        if (confirmHandler) {
+            confirmHandler();
+        }
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)deleteContent:(YALMyContentModel *)model
+            indexPath:(nullable NSIndexPath *)indexPath
+           completion:(void (^ _Nullable)(BOOL finished))completion {
+    if (!model.contentId || model.contentId.integerValue <= 0) {
+        [self showMessage:@"内容ID无效，无法删除" type:1];
+        if (completion) completion(NO);
+        return;
+    }
+
+    [self.loadingIndicator startAnimating];
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] deleteContentWithId:model.contentId completion:^(BOOL success, NSString *message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        [strongSelf.loadingIndicator stopAnimating];
+        if (!strongSelf) return;
+
+        if (success) {
+            NSUInteger index = NSNotFound;
+            if (indexPath && indexPath.row < strongSelf.contentList.count) {
+                YALMyContentModel *target = strongSelf.contentList[indexPath.row];
+                if ([target.contentId isEqual:model.contentId]) {
+                    index = indexPath.row;
+                }
+            }
+            if (index == NSNotFound) {
+                index = [strongSelf.contentList indexOfObjectPassingTest:^BOOL(YALMyContentModel * _Nonnull obj, NSUInteger idx, __unused BOOL * _Nonnull stop) {
+                    return [obj.contentId isEqual:model.contentId];
+                }];
+            }
+
+            if (index != NSNotFound && index < strongSelf.contentList.count) {
+                [strongSelf.contentList removeObjectAtIndex:index];
+                [strongSelf.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]]
+                                            withRowAnimation:UITableViewRowAnimationAutomatic];
+                [strongSelf updateEmptyState];
+            } else {
+                [strongSelf.tableView reloadData];
+                [strongSelf updateEmptyState];
+            }
+            [strongSelf showMessage:message.length > 0 ? message : @"删除成功" type:0];
+            if (completion) completion(YES);
+        } else {
+            NSString *errorMessage = message.length > 0 ? message : (error.localizedDescription ?: @"删除失败");
+            [strongSelf showMessage:errorMessage type:1];
+            if (completion) completion(NO);
+        }
+    }];
+}
 
 - (void)showMessage:(NSString *)message type:(NSInteger)type {
     // 在实际项目中，可以使用更完善的提示组件

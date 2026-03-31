@@ -23,9 +23,6 @@ NS_ASSUME_NONNULL_BEGIN
 /// 取消按钮点击
 - (void)editProfileViewDidTapCancel:(YALEditProfileView *)view;
 
-/// 密码修改按钮点击
-- (void)editProfileViewDidTapChangePassword:(YALEditProfileView *)view;
-
 @end
 
 @interface YALEditProfileView : UIView
@@ -40,9 +37,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// 获取当前编辑的数据
 - (NSDictionary *)getEditedData;
-
-/// 获取密码修改数据
-- (NSDictionary *)getPasswordData;
 
 /// 设置头像图片
 - (void)setAvatarImage:(UIImage *)image;

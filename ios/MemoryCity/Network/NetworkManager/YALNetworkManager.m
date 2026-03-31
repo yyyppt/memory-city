@@ -92,5 +92,25 @@
     }];
 }
 
+- (void)DELETE:(NSString *_Nonnull)URLString
+    parameters:(nullable id)parameters
+       headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+       success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
+       failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
+    [self.sessionManager DELETE:URLString parameters:parameters headers:headers success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                success(task, responseObject);
+            }
+        });
+    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (failure) {
+                failure(task, error);
+            }
+        });
+    }];
+}
+
 @end
 

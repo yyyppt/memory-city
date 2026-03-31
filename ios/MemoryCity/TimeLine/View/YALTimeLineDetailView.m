@@ -7,6 +7,7 @@
 
 #import "YALTimeLineDetailView.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 @interface YALTimeLineDetailView ()
 
@@ -15,6 +16,7 @@
 @property (nonatomic, strong) UIView *card;
 
 @property (nonatomic, strong) UIImageView *coverImageView;
+@property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UILabel *bodyLabel;
 
@@ -67,6 +69,12 @@
     _coverImageView.layer.cornerRadius = 14.0;
     _coverImageView.layer.masksToBounds = YES;
     [_card addSubview:_coverImageView];
+
+    _titleLabel = [[UILabel alloc] init];
+    _titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+    _titleLabel.textColor = [UIColor labelColor];
+    _titleLabel.numberOfLines = 0;
+    [_card addSubview:_titleLabel];
 
     _dateLabel = [[UILabel alloc] init];
     _dateLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
@@ -132,8 +140,14 @@
         self.coverImageHeightConstraint = make.height.mas_equalTo(200);
     }];
 
-    [_dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    [_titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(_coverImageView.mas_bottom).offset(10);
+        make.left.right.equalTo(_coverImageView);
+        make.height.mas_greaterThanOrEqualTo(18);
+    }];
+
+    [_dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_titleLabel.mas_bottom).offset(6);
         make.left.right.equalTo(_coverImageView);
         make.height.mas_equalTo(18);
     }];
@@ -172,20 +186,36 @@
     self.card.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.card.bounds cornerRadius:18.0].CGPath;
 }
 
-- (void)configureWithDateText:(NSString *)dateText
-                        image:(UIImage *)image
-                         body:(NSString *)body
-                    likeCount:(NSInteger)likeCount {
+- (void)configureWithTitle:(NSString *)title
+                   dateText:(NSString *)dateText
+                     imageURL:(NSString *)imageURL
+                        body:(NSString *)body
+                   likeCount:(NSInteger)likeCount {
+    self.titleLabel.text = (title.length > 0) ? title : @"";
     self.dateLabel.text = dateText ?: @"";
     self.bodyLabel.text = body ?: @"";
 
-    if (image) {
-        self.coverImageView.image = image;
+    UIImage *placeholder = nil;
+    if (@available(iOS 13.0, *)) {
+        placeholder = [UIImage systemImageNamed:@"photo"];
+    }
+
+    NSString *urlStr = (imageURL.length > 0) ? imageURL : nil;
+    if (urlStr && ![urlStr hasPrefix:@"http://"] && ![urlStr hasPrefix:@"https://"]) {
+        urlStr = [NSString stringWithFormat:@"http://%@", urlStr];
+    }
+    NSURL *url = (urlStr.length > 0) ? [NSURL URLWithString:urlStr] : nil;
+
+    if (url) {
         self.coverImageView.backgroundColor = [UIColor clearColor];
         self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+        // 使用 SDWebImage 异步加载
+        [self.coverImageView sd_setImageWithURL:url
+                               placeholderImage:placeholder
+                                        options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
     } else {
         if (@available(iOS 13.0, *)) {
-            self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
+            self.coverImageView.image = placeholder;
             self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
             self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
             self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
@@ -196,13 +226,8 @@
     }
 
     // 根据图片更新封面高度约束
-    CGFloat cardW = self.bounds.size.width - 32.0 - 28.0;
+    // URL 图片加载后尺寸不易实时获知：保持 200 的布局稳定性
     CGFloat imageH = 200.0;
-    if (image && image.size.width > 0 && cardW > 0) {
-        imageH = cardW * (image.size.height / image.size.width);
-        imageH = MIN(imageH, self.bounds.size.width * 1.2);
-        if (imageH < 10) imageH = 200.0;
-    }
     [self.coverImageHeightConstraint uninstall];
     [self.coverImageView mas_updateConstraints:^(MASConstraintMaker *make) {
         self.coverImageHeightConstraint = make.height.mas_equalTo(imageH);

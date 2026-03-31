@@ -27,7 +27,12 @@
     UIColor *accent = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
     self.navigationController.navigationBar.tintColor = accent;
 
-    self.title = self.dateText.length > 0 ? self.dateText : @"详情";
+    // 展示标题优先，其次日期
+    if (self.titleText.length > 0) {
+        self.title = self.titleText;
+    } else {
+        self.title = self.dateText.length > 0 ? self.dateText : @"详情";
+    }
 
     if (@available(iOS 13.0, *)) {
       UIBarButtonItem *edit =
@@ -52,13 +57,15 @@
         make.edges.equalTo(self.view);
     }];
 
-    NSString *fixedBody =
-      @"那天的风很轻，街角的光落在墙上像一张旧照片。我们把不舍藏进笑里，把温柔留给时间。";
+    NSString *content = self.contentText ?: @"";
+    NSString *title = self.titleText ?: @"";
+    NSString *coverURL = self.coverImageURLString;
 
-    [self.detailView configureWithDateText:(self.dateText ?: @"")
-                                     image:self.coverImage
-                                      body:fixedBody
-                                 likeCount:self.likeCount];
+    [self.detailView configureWithTitle:title
+                                dateText:(self.dateText ?: @"")
+                                  imageURL:coverURL
+                                     body:content
+                                likeCount:self.likeCount];
 
     [self.detailView.likeButton addTarget:self action:@selector(likeTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.detailView.commentButton addTarget:self action:@selector(commentTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -70,16 +77,18 @@
   NSString *body = self.detailView.bodyLabel.text ?: @"";
   YALReleaseController *release =
     [[YALReleaseController alloc] initWithEditCoverImage:self.coverImage
-                                                dateText:self.dateText
-                                                    body:body];
+                                                     title:self.titleText
+                                                  dateText:self.dateText
+                                                      body:body];
   release.hidesBottomBarWhenPushed = YES;
   [self.navigationController pushViewController:release animated:YES];
 }
 
 - (void)likeTapped {
   self.likeCount += 1;
-  [self.detailView configureWithDateText:(self.dateText ?: @"")
-                                   image:self.coverImage
+  [self.detailView configureWithTitle:(self.titleText ?: @"")
+                               dateText:(self.dateText ?: @"")
+                                 imageURL:self.coverImageURLString
                                     body:self.detailView.bodyLabel.text ?: @""
                                likeCount:self.likeCount];
 }

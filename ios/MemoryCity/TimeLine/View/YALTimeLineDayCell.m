@@ -1,5 +1,6 @@
 #import "YALTimeLineDayCell.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 @interface YALTimeLineDayCell ()
 
@@ -113,19 +114,43 @@
     self.weekdayLabel.text = weekdayText;
     self.titleLabel.text = entry.titleText ?: @"";
     self.subtitleLabel.text = entry.subtitleText ?: @"";
+
+    UIImage *placeholder = nil;
+    if (@available(iOS 13.0, *)) {
+        placeholder = [UIImage systemImageNamed:@"photo"];
+    }
+
+    NSString *firstURLStr = (entry.imageURLStrings.count > 0) ? entry.imageURLStrings.firstObject : nil;
+    if (firstURLStr.length > 0) {
+        // 兼容后端返回无协议域名/路径
+        if (![firstURLStr hasPrefix:@"http://"] && ![firstURLStr hasPrefix:@"https://"]) {
+            firstURLStr = [NSString stringWithFormat:@"http://%@", firstURLStr];
+        }
+        NSURL *url = [NSURL URLWithString:firstURLStr];
+        self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
+        self.thumbView.backgroundColor = [UIColor clearColor];
+        [self.thumbView sd_setImageWithURL:url
+                             placeholderImage:placeholder
+                                      options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+        if (@available(iOS 13.0, *)) {
+            self.thumbView.tintColor = [UIColor tertiaryLabelColor];
+        }
+        return;
+    }
+
     if (entry.image) {
         self.thumbView.contentMode = UIViewContentModeScaleAspectFill;
         self.thumbView.backgroundColor = [UIColor clearColor];
         self.thumbView.image = entry.image;
-    } else {
-        self.thumbView.contentMode = UIViewContentModeScaleAspectFit;
-        self.thumbView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-        if (@available(iOS 13.0, *)) {
-            self.thumbView.image = [UIImage systemImageNamed:@"photo"];
-            self.thumbView.tintColor = [UIColor tertiaryLabelColor];
-        } else {
-            self.thumbView.image = nil;
-        }
+        return;
+    }
+
+    // 没有图片数据：显示默认占位
+    self.thumbView.contentMode = UIViewContentModeScaleAspectFit;
+    self.thumbView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+    self.thumbView.image = placeholder;
+    if (@available(iOS 13.0, *)) {
+        self.thumbView.tintColor = [UIColor tertiaryLabelColor];
     }
 }
 

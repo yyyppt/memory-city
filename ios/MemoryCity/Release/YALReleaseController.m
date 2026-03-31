@@ -9,6 +9,7 @@
 #import "YALCalendarController.h"
 #import "../Network/NetworkManager/YALContentManager.h"
 #import <Masonry/Masonry.h>
+#import <AVFoundation/AVFoundation.h>
 
 @interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate>
 
@@ -122,7 +123,7 @@
 
   self.coverImageView.userInteractionEnabled = YES;
   UITapGestureRecognizer *imgTap =
-      [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(chooseCoverFromLibrary)];
+      [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(chooseCover)];
   imgTap.cancelsTouchesInView = NO;
   [self.coverImageView addGestureRecognizer:imgTap];
 
@@ -221,6 +222,24 @@
   self.editBody = self.textView.text ?: @"";
   BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
 
+  // 未选择日期：直接提示并中断发布
+  NSString *dateText = self.editDateText ?: @"";
+  if (dateText.length == 0 && self.selectedDate == nil) {
+    UIAlertController *a =
+      [UIAlertController alertControllerWithTitle:@"未选择日期"
+                                          message:@"还未添加时间，请先选择日期后再发布。"
+                                   preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
+  }
+
+  // 如果 selectedDate 有值但 editDateText 为空，补齐 editDateText
+  if (dateText.length == 0 && self.selectedDate) {
+    dateText = [self dateStringFromDate:self.selectedDate];
+    self.editDateText = dateText;
+  }
+
   // 收集发布参数（这里使用固定值，实际应用中应该从用户输入获取）
   NSString *title = [self.editTitleText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if (title.length == 0) {
@@ -228,7 +247,8 @@
   }
   NSString *content = self.editBody;
   NSString *city = @"北京";
-  NSString *year = @"2026";
+  // year 参数承载发布时间（你的 dateStringFromDate 格式为 yyyy.MM.dd）
+  NSString *year = dateText;
   NSString *mood = @"开心";
   NSString *locationName = @"北京市海淀区";
   double latitude = 39.9042;
@@ -296,8 +316,22 @@
 
           UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"发布成功" message:[NSString stringWithFormat:@"%@\n内容ID: %@\n\n发布内容已保存到服务器", message, contentId] preferredStyle:UIAlertControllerStyleAlert];
           [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            // 发布成功后返回上一页
-            [self.navigationController popViewControllerAnimated:YES];
+            // 发布成功后跳转主页并刷新
+            dispatch_async(dispatch_get_main_queue(), ^{
+              UIViewController *rootVC = self.view.window.rootViewController;
+              if ([rootVC isKindOfClass:[UITabBarController class]]) {
+                UITabBarController *tab = (UITabBarController *)rootVC;
+                tab.selectedIndex = 0; // Home
+                UINavigationController *homeNav = nil;
+                if (tab.viewControllers.count > 0 && [tab.viewControllers.firstObject isKindOfClass:[UINavigationController class]]) {
+                  homeNav = (UINavigationController *)tab.viewControllers.firstObject;
+                }
+                UIViewController *homeVC = homeNav.viewControllers.firstObject ?: nil;
+                if (homeVC && [homeVC respondsToSelector:@selector(loadPosts)]) {
+                  [homeVC performSelector:@selector(loadPosts)];
+                }
+              }
+            });
           }]];
           [self presentViewController:successAlert animated:YES completion:nil];
         } else {
@@ -382,6 +416,107 @@
   picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
   picker.allowsEditing = NO;
   [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)chooseCoverFromCamera {
+  [self.view endEditing:YES];
+
+  if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypeCamera]) {
+    UIAlertController *a =
+        [UIAlertController alertControllerWithTitle:@"无法使用相机"
+                                            message:@"当前设备不支持拍照功能"
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
+  }
+
+  // 先检查相机权限，避免出现“黑屏但不弹授权框”的情况
+  AVAuthorizationStatus status = [AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo];
+  if (status == AVAuthorizationStatusNotDetermined) {
+    __weak typeof(self) ws = self;
+    [AVCaptureDevice requestAccessForMediaType:AVMediaTypeVideo completionHandler:^(__unused BOOL granted) {
+      dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(ws) ss = ws;
+        if (!ss) return;
+        if ([AVCaptureDevice authorizationStatusForMediaType:AVMediaTypeVideo] != AVAuthorizationStatusAuthorized) {
+          UIAlertController *a =
+              [UIAlertController alertControllerWithTitle:@"没有相机权限"
+                                                  message:@"请到系统设置中为该 App 打开“相机”权限后再试。"
+                                           preferredStyle:UIAlertControllerStyleAlert];
+          [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+          [ss presentViewController:a animated:YES completion:nil];
+          return;
+        }
+
+        [ss presentCameraPicker];
+      });
+    }];
+    return;
+  }
+
+  if (status != AVAuthorizationStatusAuthorized) {
+    UIAlertController *a =
+        [UIAlertController alertControllerWithTitle:@"没有相机权限"
+                                            message:@"请到系统设置中为该 App 打开“相机”权限后再试。"
+                                     preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
+  }
+
+  [self presentCameraPicker];
+}
+
+#pragma mark - Camera Picker
+
+- (void)presentCameraPicker {
+  UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+  picker.delegate = self;
+  picker.sourceType = UIImagePickerControllerSourceTypeCamera;
+  picker.allowsEditing = NO;
+  if (@available(iOS 13.0, *)) {
+    picker.modalPresentationStyle = UIModalPresentationFullScreen;
+  }
+  [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)chooseCover {
+  [self.view endEditing:YES];
+
+  UIAlertController *sheet =
+      [UIAlertController alertControllerWithTitle:nil
+                                          message:nil
+                                   preferredStyle:UIAlertControllerStyleActionSheet];
+
+  __weak typeof(self) ws = self;
+  [sheet addAction:[UIAlertAction actionWithTitle:@"从相册选择"
+                                            style:UIAlertActionStyleDefault
+                                          handler:^(__unused UIAlertAction * _Nonnull action) {
+    __strong typeof(ws) ss = ws;
+    if (!ss) return;
+    [ss chooseCoverFromLibrary];
+  }]];
+
+  [sheet addAction:[UIAlertAction actionWithTitle:@"拍照"
+                                            style:UIAlertActionStyleDefault
+                                          handler:^(__unused UIAlertAction * _Nonnull action) {
+    __strong typeof(ws) ss = ws;
+    if (!ss) return;
+    [ss chooseCoverFromCamera];
+  }]];
+
+  [sheet addAction:[UIAlertAction actionWithTitle:@"取消"
+                                            style:UIAlertActionStyleCancel
+                                          handler:nil]];
+
+  // iPad 需要 source
+  if (sheet.popoverPresentationController) {
+    sheet.popoverPresentationController.sourceView = self.coverImageView;
+    sheet.popoverPresentationController.sourceRect = self.coverImageView.bounds;
+  }
+
+  [self presentViewController:sheet animated:YES completion:nil];
 }
 
 #pragma mark - UIImagePickerControllerDelegate

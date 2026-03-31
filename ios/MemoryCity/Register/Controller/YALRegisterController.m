@@ -52,8 +52,17 @@
                                                       nickname:trimName
                                                     completion:^(YALAuthUserModel *user, NSError *error) {
             if (user) {
-                [ss showAlert:@"注册成功，请重新登录"];
-                [ss.navigationController popViewControllerAnimated:YES];
+                UIAlertController *a = [UIAlertController alertControllerWithTitle:nil
+                                                                          message:@"注册成功，请重新登录"
+                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                __weak typeof(ss) weakSelf = ss;
+                [a addAction:[UIAlertAction actionWithTitle:@"好"
+                                                     style:UIAlertActionStyleDefault
+                                                   handler:^(__unused UIAlertAction * _Nonnull action) {
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    [strongSelf.navigationController popViewControllerAnimated:YES];
+                }]];
+                [ss presentViewController:a animated:YES completion:nil];
             } else {
                 [ss showAlert:[NSString stringWithFormat:@"注册失败：%@", error.localizedDescription]];
             }

@@ -116,6 +116,17 @@ static CGFloat const kYALItemSpacing = 10.0;
     self.data = [NSMutableArray array];
 
     [self setupCollectionView];
+
+    // 下拉刷新
+    if (@available(iOS 10.0, *)) {
+      UIRefreshControl *rc = [[UIRefreshControl alloc] init];
+      [rc addTarget:self action:@selector(refreshPosts) forControlEvents:UIControlEventValueChanged];
+      self.collectionView.refreshControl = rc;
+    }
+    [self loadPosts];
+}
+
+- (void)refreshPosts {
     [self loadPosts];
 }
 
@@ -137,6 +148,11 @@ static CGFloat const kYALItemSpacing = 10.0;
             ws.data = [@[placeholder] mutableCopy];
         }
         [ws.collectionView reloadData];
+        if (@available(iOS 10.0, *)) {
+            if (ws.collectionView.refreshControl.isRefreshing) {
+                [ws.collectionView.refreshControl endRefreshing];
+            }
+        }
     }];
 }
 

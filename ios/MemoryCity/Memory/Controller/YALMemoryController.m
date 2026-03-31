@@ -5,6 +5,29 @@
 #import "YALTimelineManager.h"
 #import <Masonry/Masonry.h>
 
+static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
+    if (![raw isKindOfClass:[NSString class]] || raw.length == 0) {
+        return @"";
+    }
+    NSString *s = raw;
+    NSLog(@"📅 原始日期字符串: %@", s);
+    // 兼容 "2024-03-30T12:00:00Z"
+    if ([s containsString:@"T"] && s.length >= 10) {
+        s = [s substringToIndex:10];
+        NSLog(@"📅 处理ISO格式日期: %@ -> %@", raw, s);
+    } else if (s.length >= 10) {
+        s = [s substringToIndex:10];
+        NSLog(@"📅 截取日期部分: %@ -> %@", raw, s);
+    }
+    // 确保格式为 "yyyy.MM.dd"
+    if ([s containsString:@"-"]) {
+        s = [s stringByReplacingOccurrencesOfString:@"-" withString:@"."];
+        NSLog(@"📅 转换日期格式: %@ -> %@", raw, s);
+    }
+    NSLog(@"📅 最终规范化日期: %@", s);
+    return s;
+}
+
 @interface YALMemoryController () <YALMemoryViewDelegate, UITableViewDataSource, UITableViewDelegate>
 
 @property (nonatomic, strong) YALMemoryView *memoryView;
@@ -174,11 +197,32 @@
         NSArray *list = [self.timelineGrouped[key] isKindOfClass:[NSArray class]] ? self.timelineGrouped[key] : @[];
         model.memoryCount = (NSInteger)list.count;
 
-        // featuredTitle：尽量从第一条内容里提取 title/content，否则给默认文案
+        // featuredTitle/封面图：按 create_time/date 升序取“最前面那条”
         NSString *featured = @"FEATURED MOMENT";
-        id first = list.firstObject;
+        NSString *coverURL = nil;
+
+        NSArray *sorted = list;
+        if (list.count > 1) {
+            sorted = [list sortedArrayUsingComparator:^NSComparisonResult(id  _Nonnull obj1, id  _Nonnull obj2) {
+                if (![obj1 isKindOfClass:[NSDictionary class]] || ![obj2 isKindOfClass:[NSDictionary class]]) {
+                    return NSOrderedSame;
+                }
+                NSDictionary *d1 = (NSDictionary *)obj1;
+                NSDictionary *d2 = (NSDictionary *)obj2;
+                NSString *k1 = YALNormalizeDateKeyFromRaw(d1[@"create_time"] ?: d1[@"date"]);
+                NSString *k2 = YALNormalizeDateKeyFromRaw(d2[@"create_time"] ?: d2[@"date"]);
+                if (k1.length == 0 && k2.length == 0) return NSOrderedSame;
+                if (k1.length == 0) return NSOrderedDescending;
+                if (k2.length == 0) return NSOrderedAscending;
+                return [k1 compare:k2];
+            }];
+        }
+
+        id first = sorted.firstObject;
         if ([first isKindOfClass:[NSDictionary class]]) {
             NSDictionary *d = (NSDictionary *)first;
+
+            // title/content 取一个作为 featuredTitle
             id t = d[@"title"];
             if (![t isKindOfClass:[NSString class]] || ((NSString *)t).length == 0) {
                 t = d[@"content"];
@@ -186,11 +230,35 @@
             if ([t isKindOfClass:[NSString class]] && ((NSString *)t).length > 0) {
                 featured = (NSString *)t;
             }
+
+            // images[0] 取封面图
+            id imagesObj = d[@"images"];
+            if ([imagesObj isKindOfClass:[NSArray class]]) {
+                for (id imgObj in imagesObj) {
+                    if ([imgObj isKindOfClass:[NSString class]] && ((NSString *)imgObj).length > 0) {
+                        coverURL = (NSString *)imgObj;
+                        break;
+                    }
+                }
+            }
+            if (!coverURL) {
+                // 兼容单张字段
+                id imageObj = d[@"image"];
+                if ([imageObj isKindOfClass:[NSString class]] && ((NSString *)imageObj).length > 0) {
+                    coverURL = (NSString *)imageObj;
+                } else {
+                    id imageURLObj = d[@"image_url"];
+                    if ([imageURLObj isKindOfClass:[NSString class]] && ((NSString *)imageURLObj).length > 0) {
+                        coverURL = (NSString *)imageURLObj;
+                    }
+                }
+            }
         }
+
         model.featuredTitle = featured;
 
-        // 目前项目里没有统一的图片 URL -> UIImage 异步加载器，这里先用占位图即可
         model.coverImage = nil;
+        model.coverImageURLString = coverURL;
         [arr addObject:model];
     }
     self.months = arr;

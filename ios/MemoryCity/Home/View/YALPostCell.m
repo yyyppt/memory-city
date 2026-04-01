@@ -65,11 +65,15 @@
 
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.font = [UIFont boldSystemFontOfSize:14.0];
+    _titleLabel.numberOfLines = 1;
+    _titleLabel.textColor = [UIColor labelColor];
+    _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
     _descLabel = [[UILabel alloc] init];
     _descLabel.font = [UIFont systemFontOfSize:12.0];
     _descLabel.textColor = [UIColor secondaryLabelColor];
     _descLabel.numberOfLines = 2;
+    _descLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
     [self.contentView addSubview:_imageView];
     [self.contentView addSubview:_titleLabel];
@@ -90,7 +94,7 @@
     }];
 
     [self.descLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.titleLabel.mas_bottom).offset(4.0);
+        make.top.equalTo(self.titleLabel.mas_bottom).offset(6.0);
         make.left.equalTo(self.titleLabel);
         make.right.equalTo(self.titleLabel);
         make.height.mas_equalTo(34.0);
@@ -110,14 +114,22 @@
     [self.imageView sd_cancelCurrentImageLoad];
     self.titleLabel.text = nil;
     self.descLabel.text = nil;
+    self.descLabel.hidden = NO;
     self.useWaterfall = YES;
     self.fixedImageHeight = 0.0;
     self.imageRatio = 1.0;
 }
 
 - (void)configureWithModel:(YALPostModel *)model useWaterfall:(BOOL)useWaterfall fixedImageHeight:(CGFloat)fixedImageHeight {
-    self.titleLabel.text = model.title;
-    self.descLabel.text = model.desc;
+    NSString *titleText = [model.title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *descText = [model.desc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (titleText.length == 0) {
+        titleText = @"未命名内容";
+    }
+
+    self.titleLabel.text = titleText;
+    self.descLabel.text = descText;
+    self.descLabel.hidden = (descText.length == 0);
 
     self.useWaterfall = useWaterfall;
     self.fixedImageHeight = fixedImageHeight;
@@ -134,22 +146,17 @@
     CGFloat imageHeight = 0.0;
     
     if (self.useWaterfall) {
-        // 瀑布流模式：根据图片比例计算高度，但限制在合理范围内
-        imageHeight = width * self.imageRatio;
+        // 瀑布流模式优先使用外部传入的固定高度，避免重复计算导致抖动。
+        if (self.fixedImageHeight > 0) {
+            imageHeight = self.fixedImageHeight;
+        } else {
+            imageHeight = width * self.imageRatio;
+        }
         // 限制图片高度在120-400之间
         imageHeight = MAX(120.0, MIN(imageHeight, 400.0));
     } else {
-        // 单列模式：使用动态计算的高度，基于屏幕宽度
-        CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
-        CGFloat itemWidth = screenWidth - 24.0;  // 左右边距各12
-        CGFloat baseHeight = itemWidth * 0.75;  // 使用4:3的比例
-        
-        // 如果图片比例更接近正方形，使用更高的高度
-        if (self.imageRatio > 0.8 && self.imageRatio < 1.2) {
-            baseHeight = itemWidth;  // 正方形图片使用1:1比例
-        }
-        
-        imageHeight = MAX(200.0, MIN(baseHeight, 400.0));  // 限制在200-400之间
+        // 单列模式使用统一高度，保证所有卡片整齐对齐。
+        imageHeight = (self.fixedImageHeight > 0) ? self.fixedImageHeight : 222.0;
     }
     
     self.imageHeightConstraint.offset = imageHeight;

@@ -11,6 +11,20 @@
 #import "YALAuthManager.h"
 #import <Masonry/Masonry.h>
 
+static BOOL YALBoolFromPublicValue(id value) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [(NSNumber *)value boolValue];
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *lower = [[(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] lowercaseString];
+        if (lower.length == 0) return NO;
+        if ([lower isEqualToString:@"1"] || [lower isEqualToString:@"true"] || [lower isEqualToString:@"yes"]) {
+            return YES;
+        }
+        return NO;
+    }
+    return NO;
+}
 
 @interface YALMyContentCell : UITableViewCell
 
@@ -317,13 +331,16 @@
                     NSMutableArray *modelArray = [NSMutableArray array];
                     for (NSDictionary *dict in contentList) {
                         if ([dict isKindOfClass:[NSDictionary class]]) {
+                            if (![self shouldIncludeContentDict:dict]) {
+                                continue;
+                            }
                             YALMyContentModel *model = [[YALMyContentModel alloc] initWithDictionary:dict];
                             [modelArray addObject:model];
                         }
                     }
                     
                     [self.contentList addObjectsFromArray:modelArray];
-                    self.hasMoreData = contentList.count >= 10; // 如果返回的数量等于pageSize，认为还有更多数据
+                    self.hasMoreData = contentList.count >= 10; // 按接口原始返回数量判断是否还有下一页
                     self.currentPage++;
                 } else {
                     self.hasMoreData = NO;
@@ -345,6 +362,17 @@
             }
         });
     }];
+}
+
+- (BOOL)shouldIncludeContentDict:(NSDictionary *)dict {
+    BOOL shouldShowPublicOnly = [self.pageTitle isEqualToString:@"公开内容"];
+    BOOL shouldShowPrivateOnly = [self.pageTitle isEqualToString:@"私人内容"] || [self.pageTitle isEqualToString:@"私密内容"];
+    if (!shouldShowPublicOnly && !shouldShowPrivateOnly) {
+        return YES;
+    }
+
+    BOOL isPublic = YALBoolFromPublicValue(dict[@"is_public"]);
+    return shouldShowPublicOnly ? isPublic : !isPublic;
 }
 
 - (void)refreshData {

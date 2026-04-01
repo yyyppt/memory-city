@@ -45,6 +45,26 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)getContentDetailWithId:(NSNumber *)contentId
                     completion:(void (^)(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error))completion;
 
+/// 点赞/取消点赞内容
+- (void)toggleLikeContentWithId:(NSNumber *)contentId
+                     completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion;
+
+/// 获取内容评论列表
+- (void)getCommentListWithContentId:(NSNumber *)contentId
+                               page:(NSInteger)page
+                           pageSize:(NSInteger)pageSize
+                         completion:(void (^)(BOOL success, NSArray * _Nullable comments, NSError * _Nullable error))completion;
+
+/// 发布评论
+- (void)publishCommentWithContentId:(NSNumber *)contentId
+                            content:(NSString *)content
+                           parentId:(NSNumber *)parentId
+                         completion:(void (^)(BOOL success, NSDictionary * _Nullable comment, NSError * _Nullable error))completion;
+
+/// 收藏/取消收藏内容
+- (void)toggleCollectContentWithId:(NSNumber *)contentId
+                        completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion;
+
 /// 获取我的内容列表
 /// @param page 页码（从1开始）
 /// @param pageSize 每页数量

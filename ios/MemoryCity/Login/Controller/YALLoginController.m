@@ -15,6 +15,9 @@
 
 @implementation YALLoginController
 
+static const NSUInteger kYALPasswordMinLength = 6;
+static const NSUInteger kYALPasswordMaxLength = 15;
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
@@ -39,6 +42,10 @@
         NSString *password = strongSelf.loginView.passwordField.text ?: @"";
         if (username.length == 0 || password.length == 0) {
             [strongSelf showAlert:@"请输入账号和密码"];
+            return;
+        }
+        if (password.length < kYALPasswordMinLength || password.length > kYALPasswordMaxLength) {
+            [strongSelf showAlert:@"密码长度需为6到15位"];
             return;
         }
 

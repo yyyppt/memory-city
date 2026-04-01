@@ -12,6 +12,8 @@
 @property (nonatomic, strong) NSMutableArray<UICollectionViewLayoutAttributes *> *attributesArray;
 @property (nonatomic, strong) NSMutableArray<NSNumber *> *columnHeights;
 @property (nonatomic, assign) CGFloat contentHeight;
+@property (nonatomic, assign) CGFloat lastPreparedWidth;
+@property (nonatomic, assign) NSInteger lastPreparedItemCount;
 
 @end
 
@@ -34,7 +36,22 @@
   if (!self.collectionView) { return; }
 
   NSInteger itemCount = [self.collectionView numberOfItemsInSection:0];
-  if (itemCount == 0) { return; }
+  CGFloat collectionWidth = CGRectGetWidth(self.collectionView.bounds);
+
+  if (itemCount == 0) {
+    self.attributesArray = [NSMutableArray array];
+    self.contentHeight = 0;
+    self.lastPreparedWidth = collectionWidth;
+    self.lastPreparedItemCount = 0;
+    return;
+  }
+
+  // 同一宽度和数据量下直接复用上次计算结果，减少布局开销。
+  if (self.attributesArray.count == itemCount &&
+      fabs(self.lastPreparedWidth - collectionWidth) <= 0.5 &&
+      self.lastPreparedItemCount == itemCount) {
+    return;
+  }
 
   self.attributesArray = [NSMutableArray arrayWithCapacity:itemCount];
   self.columnHeights = [NSMutableArray arrayWithCapacity:self.columnCount];
@@ -43,7 +60,6 @@
     [self.columnHeights addObject:@(self.sectionInset.top)];
   }
 
-  CGFloat collectionWidth = CGRectGetWidth(self.collectionView.bounds);
   CGFloat totalSpacing = self.sectionInset.left + self.sectionInset.right +
                          (self.columnCount - 1) * self.columnSpacing;
   CGFloat itemWidth = (collectionWidth - totalSpacing) / self.columnCount;
@@ -88,6 +104,8 @@
     }
   }
   self.contentHeight = maxHeight + self.sectionInset.bottom - self.rowSpacing;
+  self.lastPreparedWidth = collectionWidth;
+  self.lastPreparedItemCount = itemCount;
 }
 
 - (CGSize)collectionViewContentSize {

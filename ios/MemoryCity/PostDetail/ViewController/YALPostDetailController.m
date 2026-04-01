@@ -8,7 +8,10 @@
 #import "YALPostDetailController.h"
 #import "YALPostModel.h"
 #import "YALCommentCell.h"
+#import "YALContentManager.h"
+#import "YALAuthManager.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 @interface YALPostDetailController () <UITableViewDataSource, UITableViewDelegate, UITextViewDelegate, UIGestureRecognizerDelegate>
 
@@ -31,6 +34,7 @@
 @property (nonatomic, strong) UILabel *commentCountLabel;
 @property (nonatomic, strong) UILabel *commentHeader;
 @property (nonatomic, strong) NSMutableSet<NSNumber *> *expandedRows;
+@property (nonatomic, strong) MASConstraint *tableHeightConstraint;
 @property (nonatomic, assign) NSInteger likeCount;
 @property (nonatomic, assign) NSInteger favoriteCount;
 @property (nonatomic, assign) NSInteger viewCount;
@@ -39,10 +43,237 @@
 @property (nonatomic, strong) MASConstraint *inputContainerHeightConstraint;
 @property (nonatomic, strong) MASConstraint *publishButtonWidthConstraint;
 @property (nonatomic, assign) BOOL inputExpanded;
+@property (nonatomic, assign) BOOL isLiked;
+@property (nonatomic, assign) BOOL isCollected;
 
 @end
 
 @implementation YALPostDetailController
+
+static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
+static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
+
+- (NSString *)cacheKeyForPrefix:(NSString *)prefix {
+    NSNumber *contentId = self.post.contentId;
+    if (contentId == nil) {
+        return nil;
+    }
+    return [NSString stringWithFormat:@"%@_%@", prefix, contentId];
+}
+
+- (void)persistBoolStatus:(BOOL)value prefix:(NSString *)prefix {
+    NSString *key = [self cacheKeyForPrefix:prefix];
+    if (key.length == 0) {
+        return;
+    }
+    [[NSUserDefaults standardUserDefaults] setBool:value forKey:key];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (BOOL)cachedBoolStatusForPrefix:(NSString *)prefix hasValue:(BOOL *)hasValue {
+    NSString *key = [self cacheKeyForPrefix:prefix];
+    if (key.length == 0) {
+        if (hasValue) { *hasValue = NO; }
+        return NO;
+    }
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:key] == nil) {
+        if (hasValue) { *hasValue = NO; }
+        return NO;
+    }
+    if (hasValue) { *hasValue = YES; }
+    return [defaults boolForKey:key];
+}
+
+- (void)updateActionButtonsAppearance {
+    if (@available(iOS 13.0, *)) {
+        UIImage *likeImage = [UIImage systemImageNamed:(self.isLiked ? @"heart.fill" : @"heart")];
+        UIImage *favoriteImage = [UIImage systemImageNamed:(self.isCollected ? @"star.fill" : @"star")];
+        [self.likeButton setImage:likeImage forState:UIControlStateNormal];
+        [self.favoriteButton setImage:favoriteImage forState:UIControlStateNormal];
+        self.likeButton.tintColor = self.isLiked ? [UIColor systemRedColor] : [UIColor labelColor];
+        self.favoriteButton.tintColor = self.isCollected ? [UIColor systemOrangeColor] : [UIColor labelColor];
+    }
+}
+
+- (BOOL)boolValueFromLikeStatusObject:(id)value fallback:(BOOL)fallback {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [((NSNumber *)value) integerValue] != 0;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *text = [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (text.length == 0) {
+            return fallback;
+        }
+        return text.integerValue != 0;
+    }
+    return fallback;
+}
+
+- (NSString *)displayTimeStringFromRaw:(id)raw {
+    if (![raw isKindOfClass:[NSString class]]) {
+        return @"刚刚";
+    }
+    NSString *text = (NSString *)raw;
+    if (text.length >= 16 && [text containsString:@"T"]) {
+        return [[text substringToIndex:16] stringByReplacingOccurrencesOfString:@"T" withString:@" "];
+    }
+    return text.length > 0 ? text : @"刚刚";
+}
+
+- (NSArray<NSDictionary *> *)flattenCommentTree:(NSArray *)comments {
+    NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
+    for (id obj in comments) {
+        if (![obj isKindOfClass:[NSDictionary class]]) { continue; }
+        NSDictionary *item = (NSDictionary *)obj;
+        NSString *name = [item[@"user_nickname"] isKindOfClass:[NSString class]] ? item[@"user_nickname"] : @"匿名用户";
+        NSString *content = [item[@"content"] isKindOfClass:[NSString class]] ? item[@"content"] : @"";
+        NSString *time = [self displayTimeStringFromRaw:item[@"created_at"]];
+        [result addObject:@{
+            @"name": name,
+            @"content": content,
+            @"time": time
+        }];
+
+        NSArray *replies = [item[@"replies"] isKindOfClass:[NSArray class]] ? item[@"replies"] : nil;
+        if (replies.count > 0) {
+            [result addObjectsFromArray:[self flattenCommentTree:replies]];
+        }
+    }
+    return result;
+}
+
+- (void)refreshTableHeight {
+    [self.tableView layoutIfNeeded];
+    CGFloat height = self.tableView.contentSize.height;
+    self.tableHeightConstraint.offset = MAX(height, 1.0);
+    [self.view layoutIfNeeded];
+}
+
+- (void)applyDetailData:(NSDictionary *)content {
+    if (![content isKindOfClass:[NSDictionary class]]) {
+        return;
+    }
+
+    NSString *titleText = [content[@"title"] isKindOfClass:[NSString class]] ? content[@"title"] : self.post.title;
+    NSString *descText = [content[@"content"] isKindOfClass:[NSString class]] ? content[@"content"] : self.post.desc;
+    if (titleText.length == 0) {
+        titleText = @"未命名内容";
+    }
+    self.titleLabel.text = titleText;
+    self.descLabel.text = descText ?: @"";
+
+    id likeObj = content[@"like_count"];
+    if ([likeObj respondsToSelector:@selector(integerValue)]) {
+        self.likeCount = [likeObj integerValue];
+    }
+    id favoriteObj = content[@"favorite_count"];
+    if (![favoriteObj respondsToSelector:@selector(integerValue)]) {
+        favoriteObj = content[@"collect_count"];
+    }
+    if ([favoriteObj respondsToSelector:@selector(integerValue)]) {
+        self.favoriteCount = [favoriteObj integerValue];
+    } else if (self.favoriteCount < 0) {
+        self.favoriteCount = 0;
+    }
+    id commentObj = content[@"comment_count"];
+    if ([commentObj respondsToSelector:@selector(integerValue)]) {
+        self.viewCount = [commentObj integerValue];
+    }
+    BOOL hasLikedValue = NO;
+    BOOL hasCollectedValue = NO;
+    if ([content[@"is_liked"] respondsToSelector:@selector(boolValue)]) {
+        self.isLiked = [self boolValueFromLikeStatusObject:content[@"is_liked"] fallback:self.isLiked];
+        hasLikedValue = YES;
+    }
+    if ([content[@"is_likeed"] respondsToSelector:@selector(boolValue)]) {
+        self.isLiked = [self boolValueFromLikeStatusObject:content[@"is_likeed"] fallback:self.isLiked];
+        hasLikedValue = YES;
+    }
+    if ([content[@"is_collected"] respondsToSelector:@selector(boolValue)]) {
+        self.isCollected = [content[@"is_collected"] boolValue];
+        hasCollectedValue = YES;
+    }
+    if (!hasLikedValue) {
+        self.isLiked = [self cachedBoolStatusForPrefix:kYALLikedStatusCachePrefix hasValue:&hasLikedValue];
+    }
+    if (!hasCollectedValue) {
+        self.isCollected = [self cachedBoolStatusForPrefix:kYALCollectedStatusCachePrefix hasValue:&hasCollectedValue];
+    }
+    if (hasLikedValue) {
+        [self persistBoolStatus:self.isLiked prefix:kYALLikedStatusCachePrefix];
+    }
+    if (hasCollectedValue) {
+        [self persistBoolStatus:self.isCollected prefix:kYALCollectedStatusCachePrefix];
+    }
+    self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
+    self.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(self.favoriteCount, 0)];
+    self.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.viewCount];
+    [self updateActionButtonsAppearance];
+
+    NSArray *images = nil;
+    if ([content[@"images"] isKindOfClass:[NSArray class]]) {
+        images = content[@"images"];
+    } else if ([content[@"Images"] isKindOfClass:[NSArray class]]) {
+        images = content[@"Images"];
+    }
+    NSString *detailImageURL = nil;
+    for (id obj in images) {
+        if ([obj isKindOfClass:[NSString class]] && [obj length] > 0) {
+            detailImageURL = (NSString *)obj;
+            break;
+        }
+    }
+    if (detailImageURL.length > 0) {
+        self.post.imageURLString = detailImageURL;
+        self.post.images = images;
+        [self.imageView sd_setImageWithURL:[NSURL URLWithString:detailImageURL]
+                          placeholderImage:self.post.image
+                                   options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages
+                                 completed:nil];
+    }
+}
+
+- (void)loadContentDetailIfNeeded {
+    if (self.post.contentId == nil) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] getContentDetailWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        if (success) {
+            [strongSelf applyDetailData:content];
+        } else {
+            NSLog(@"❌ 详情获取失败: %@", error.localizedDescription);
+        }
+    }];
+}
+
+- (void)loadComments {
+    if (self.post.contentId == nil) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] getCommentListWithContentId:self.post.contentId
+                                                              page:1
+                                                          pageSize:50
+                                                        completion:^(BOOL success, NSArray * _Nullable comments, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        if (success) {
+            strongSelf.comments = [strongSelf flattenCommentTree:(comments ?: @[])];
+            strongSelf.viewCount = strongSelf.comments.count;
+            strongSelf.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.viewCount];
+            [strongSelf.tableView reloadData];
+            [strongSelf refreshTableHeight];
+        } else {
+            NSLog(@"❌ 评论获取失败: %@", error.localizedDescription);
+        }
+    }];
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -81,6 +312,8 @@
 
     [self setupViews];
     [self setupDummyComments];
+    [self loadContentDetailIfNeeded];
+    [self loadComments];
 }
 
 - (void)setupViews {
@@ -97,7 +330,7 @@
     self.imageView = [[UIImageView alloc] init];
     self.imageView.contentMode = UIViewContentModeScaleAspectFill;
     self.imageView.clipsToBounds = YES;
-    self.imageView.layer.cornerRadius = 12.0;
+    self.imageView.layer.cornerRadius = 0.0;
     self.imageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
 
     self.titleLabel = [[UILabel alloc] init];
@@ -253,10 +486,9 @@
     CGFloat padding = 16.0;
 
     [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(contentView.mas_top).offset(padding);
-        make.left.equalTo(contentView.mas_left).offset(padding);
-        make.right.equalTo(contentView.mas_right).offset(-padding);
-        make.height.equalTo(self.imageView.mas_width).multipliedBy(4.0/3.0);
+        make.top.equalTo(contentView.mas_top);
+        make.left.right.equalTo(contentView);
+        make.height.equalTo(self.imageView.mas_width).multipliedBy(0.95);
     }];
 
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -278,6 +510,7 @@
     [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.commentHeader.mas_bottom).offset(8.0);
         make.left.right.equalTo(self.imageView);
+        self.tableHeightConstraint = make.height.mas_equalTo(1.0);
         make.bottom.equalTo(contentView.mas_bottom).offset(-padding);
     }];
 
@@ -332,11 +565,33 @@
     }];
 
     if (self.post) {
-        self.imageView.image = self.post.image;
-        self.titleLabel.text = self.post.title;
-        self.descLabel.text = self.post.desc;
+        NSString *titleText = [self.post.title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        NSString *descText = [self.post.desc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (titleText.length == 0) {
+            titleText = @"未命名内容";
+        }
+
+        self.titleLabel.text = titleText;
+        self.descLabel.text = descText;
+
+        if (self.post.imageURLString.length > 0) {
+            NSURL *url = [NSURL URLWithString:self.post.imageURLString];
+            [self.imageView sd_setImageWithURL:url
+                              placeholderImage:self.post.image
+                                       options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages
+                                     completed:nil];
+        } else {
+            self.imageView.image = self.post.image;
+        }
     }
 
+    BOOL hasLikedValue = NO;
+    BOOL hasCollectedValue = NO;
+    self.isLiked = [self cachedBoolStatusForPrefix:kYALLikedStatusCachePrefix hasValue:&hasLikedValue];
+    self.isCollected = [self cachedBoolStatusForPrefix:kYALCollectedStatusCachePrefix hasValue:&hasCollectedValue];
+    self.favoriteCount = MAX(self.favoriteCount, 0);
+    self.favoriteCountLabel.text = @"0";
+    [self updateActionButtonsAppearance];
     [self updateBottomBarForEditing:NO animated:NO];
 }
 
@@ -362,9 +617,11 @@
     self.favoriteCount = 128;
     self.viewCount = (NSInteger)self.comments.count;
     self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
-    self.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.favoriteCount];
+    self.favoriteCount = 0;
+    self.favoriteCountLabel.text = @"0";
     self.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.viewCount];
     [self.tableView reloadData];
+    [self refreshTableHeight];
     [self updateBottomBarForEditing:self.inputExpanded animated:NO];
 }
 
@@ -453,13 +710,64 @@
 }
 
 - (void)didTapLike {
-    self.likeCount += 1;
-    self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
+    if (self.post.contentId == nil) {
+        self.likeCount += 1;
+        self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] toggleLikeContentWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        if (success) {
+            BOOL previousLiked = strongSelf.isLiked;
+            if ([result[@"is_liked"] respondsToSelector:@selector(boolValue)]) {
+                strongSelf.isLiked = [strongSelf boolValueFromLikeStatusObject:result[@"is_liked"] fallback:previousLiked];
+            } else if ([result[@"is_likeed"] respondsToSelector:@selector(boolValue)]) {
+                strongSelf.isLiked = [strongSelf boolValueFromLikeStatusObject:result[@"is_likeed"] fallback:previousLiked];
+            } else {
+                strongSelf.isLiked = !previousLiked;
+            }
+            NSInteger likeCount = [result[@"like_count"] respondsToSelector:@selector(integerValue)] ? [result[@"like_count"] integerValue] : MAX(0, strongSelf.likeCount + (strongSelf.isLiked ? 1 : -1));
+            strongSelf.likeCount = likeCount;
+            strongSelf.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.likeCount];
+            [strongSelf persistBoolStatus:strongSelf.isLiked prefix:kYALLikedStatusCachePrefix];
+            [strongSelf updateActionButtonsAppearance];
+        } else {
+            NSLog(@"❌ 点赞失败: %@", error.localizedDescription);
+        }
+    }];
 }
 
 - (void)didTapFavorite {
-    self.favoriteCount += 1;
-    self.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.favoriteCount];
+    if (self.post.contentId == nil) {
+        self.favoriteCountLabel.text = @"0";
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] toggleCollectContentWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        if (success) {
+            strongSelf.isCollected = [result[@"is_collected"] respondsToSelector:@selector(boolValue)] ? [result[@"is_collected"] boolValue] : !strongSelf.isCollected;
+            id favoriteObj = result[@"favorite_count"];
+            if (![favoriteObj respondsToSelector:@selector(integerValue)]) {
+                favoriteObj = result[@"collect_count"];
+            }
+            if ([favoriteObj respondsToSelector:@selector(integerValue)]) {
+                strongSelf.favoriteCount = [favoriteObj integerValue];
+            } else {
+                strongSelf.favoriteCount = MAX(strongSelf.favoriteCount, 0);
+            }
+            strongSelf.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(strongSelf.favoriteCount, 0)];
+            [strongSelf persistBoolStatus:strongSelf.isCollected prefix:kYALCollectedStatusCachePrefix];
+            [strongSelf updateActionButtonsAppearance];
+        } else {
+            NSLog(@"❌ 收藏失败: %@", error.localizedDescription);
+        }
+    }];
 }
 
 - (void)didTapInput {
@@ -541,25 +849,42 @@
         return;
     }
 
-    NSMutableArray *mutable = [self.comments mutableCopy] ?: [NSMutableArray array];
-    NSDictionary *newComment = @{
-        @"name": @"我",
-        @"content": text,
-        @"time": @"刚刚"
-    };
-    [mutable insertObject:newComment atIndex:0];
-    self.comments = mutable;
-    self.viewCount = self.comments.count;
-    self.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.viewCount];
+    if (self.post.contentId == nil) {
+        return;
+    }
 
-    [self.expandedRows addObject:@0];
-    [self.tableView reloadData];
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] publishCommentWithContentId:self.post.contentId
+                                                           content:text
+                                                          parentId:@(0)
+                                                        completion:^(BOOL success, NSDictionary * _Nullable comment, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        if (success) {
+            NSString *name = [comment[@"user_nickname"] isKindOfClass:[NSString class]] ? comment[@"user_nickname"] : ([YALAuthManager sharedManager].currentUser.nickname ?: @"我");
+            NSDictionary *newComment = @{
+                @"name": name,
+                @"content": text,
+                @"time": [strongSelf displayTimeStringFromRaw:comment[@"created_at"]]
+            };
+            NSMutableArray *mutable = [strongSelf.comments mutableCopy] ?: [NSMutableArray array];
+            [mutable insertObject:newComment atIndex:0];
+            strongSelf.comments = mutable;
+            strongSelf.viewCount = strongSelf.comments.count;
+            strongSelf.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.viewCount];
+            [strongSelf.expandedRows addObject:@0];
+            [strongSelf.tableView reloadData];
+            [strongSelf refreshTableHeight];
 
-    self.inputTextView.text = @"";
-    self.inputPlaceholderLabel.hidden = NO;
-    [self updatePublishButtonState];
-    [self updateBottomBarForEditing:YES animated:NO];
-    [self.inputTextView resignFirstResponder];
+            strongSelf.inputTextView.text = @"";
+            strongSelf.inputPlaceholderLabel.hidden = NO;
+            [strongSelf updatePublishButtonState];
+            [strongSelf updateBottomBarForEditing:YES animated:NO];
+            [strongSelf.inputTextView resignFirstResponder];
+        } else {
+            NSLog(@"❌ 评论发布失败: %@", error.localizedDescription);
+        }
+    }];
 }
 
 - (void)updateBottomBarForEditing:(BOOL)editing animated:(BOOL)animated {
@@ -672,4 +997,3 @@
 
 
 @end
-

@@ -9,7 +9,7 @@
 #import <Masonry/Masonry.h>
 #import "YALAuthManager.h"
 
-@interface YALChangePasswordViewController ()
+@interface YALChangePasswordViewController () <UITextFieldDelegate>
 
 @property (nonatomic, strong) UITextField *oldPasswordField;
 @property (nonatomic, strong) UITextField *updatedPasswordField;
@@ -19,6 +19,9 @@
 @end
 
 @implementation YALChangePasswordViewController
+
+static const NSUInteger kYALPasswordMinLength = 6;
+static const NSUInteger kYALPasswordMaxLength = 15;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -82,6 +85,7 @@
     field.borderStyle = UITextBorderStyleRoundedRect;
     field.backgroundColor = [UIColor systemBackgroundColor];
     field.clearButtonMode = UITextFieldViewModeWhileEditing;
+    field.delegate = self;
     return field;
 }
 
@@ -94,13 +98,18 @@
         [self showAlertWithTitle:@"提示" message:@"密码不能为空"];
         return;
     }
+    if (oldP.length < kYALPasswordMinLength || oldP.length > kYALPasswordMaxLength ||
+        newP.length < kYALPasswordMinLength || newP.length > kYALPasswordMaxLength ||
+        repeatP.length < kYALPasswordMinLength || repeatP.length > kYALPasswordMaxLength) {
+        [self showAlertWithTitle:@"提示" message:@"密码长度需为6到15位"];
+        return;
+    }
     if (![newP isEqualToString:repeatP]) {
         [self showAlertWithTitle:@"提示" message:@"两次新密码不一致"];
         return;
     }
     
     self.view.userInteractionEnabled = NO;
-    
     [[YALAuthManager sharedManager] updatePasswordWithOldPassword:oldP
                                                       newPassword:newP
                                                     repeatPassword:repeatP
@@ -141,6 +150,14 @@
         }
     }]];
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (BOOL)textField:(UITextField *)textField
+shouldChangeCharactersInRange:(NSRange)range
+replacementString:(NSString *)string {
+    NSString *current = textField.text ?: @"";
+    NSString *updated = [current stringByReplacingCharactersInRange:range withString:string ?: @""];
+    return updated.length <= kYALPasswordMaxLength;
 }
 
 @end

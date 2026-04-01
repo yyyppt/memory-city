@@ -65,6 +65,13 @@
     _passwordField.layer.cornerRadius = 25;
     _passwordField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 15, 0)];
     _passwordField.leftViewMode = UITextFieldViewModeAlways;
+    _passwordField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    _passwordField.textContentType = UITextContentTypePassword;
+    _passwordField.keyboardType = UIKeyboardTypeASCIICapable;
+    _passwordField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    if (@available(iOS 13.0, *)) {
+        _passwordField.passwordRules = [UITextInputPasswordRules passwordRulesWithDescriptor:@"minlength: 6; maxlength: 15;"];
+    }
     [self addSubview:_passwordField];
 
     _loginButton = [[UIButton alloc] init];

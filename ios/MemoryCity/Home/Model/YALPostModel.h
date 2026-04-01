@@ -30,6 +30,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *mood;
 @property (nonatomic, strong) NSArray<NSString *> *images;
 @property (nonatomic, copy) NSString *createTime;
+@property (nonatomic, assign) BOOL isPublic;
 
 /// 从字典初始化模型
 /// @param dict 字典数据

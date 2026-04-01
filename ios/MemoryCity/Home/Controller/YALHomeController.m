@@ -14,8 +14,9 @@
 #import "YALPostManager.h"
 #import <Masonry/Masonry.h>
 
-static CGFloat const kYALPostCellTextAreaHeight = 80.0;  // 增加文本区域高度
-static CGFloat const kYALSingleColumnItemHeight = 380.0;  // 增加单列高度
+static CGFloat const kYALPostCellTextAreaHeight = 88.0;
+static CGFloat const kYALWaterfallTextAreaHeight = 88.0; // 与 YALPostCell 内部约束一致
+static CGFloat const kYALSingleColumnItemHeight = 336.0;
 static CGFloat const kYALHorizontalInset = 12.0;
 static CGFloat const kYALItemSpacing = 10.0;
 
@@ -24,12 +25,75 @@ static CGFloat const kYALItemSpacing = 10.0;
 @property (nonatomic, strong) UICollectionView *collectionView;
 @property (nonatomic, assign) BOOL useWaterfall;            
 @property (nonatomic, strong) NSMutableArray<YALPostModel *> *data;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSNumber *> *waterfallHeightCache;
+@property (nonatomic, assign) CGFloat cachedWaterfallItemWidth;
 @property (nonatomic, strong) UIView *titleSearchContainer;
 @property (nonatomic, strong) UISearchBar *titleSearchBar;
 
 @end
 
 @implementation YALHomeController
+
+#pragma mark - Waterfall Height Simulation
+
+/// 以 index 作为 seed 生成稳定比例，禁止随机数。
+- (CGFloat)simulatedRatioForItem:(NSInteger)item model:(YALPostModel *)model {
+    static CGFloat const kBaseRatios[] = {
+        0.90, 0.96, 1.02, 1.08, 1.14, 1.22, 1.30, 1.38, 1.48, 1.60
+    };
+    static NSInteger const kBaseRatioCount = sizeof(kBaseRatios) / sizeof(CGFloat);
+
+    NSInteger mixed = (item * 37 + 17) % kBaseRatioCount;
+    CGFloat ratio = kBaseRatios[mixed];
+
+    NSInteger contentLength = model.content.length;
+    CGFloat contentBoost = MIN(0.18, contentLength / 240.0 * 0.18);
+    ratio += contentBoost;
+
+    return MAX(0.90, MIN(ratio, 1.60));
+}
+
+- (CGFloat)waterfallItemWidth {
+    CGFloat collectionWidth = CGRectGetWidth(self.collectionView.bounds);
+    if (collectionWidth <= 0) {
+        collectionWidth = [UIScreen mainScreen].bounds.size.width;
+    }
+    CGFloat totalSpacing = kYALHorizontalInset * 2 + kYALItemSpacing;
+    return floor((collectionWidth - totalSpacing) / 2.0);
+}
+
+- (void)prepareWaterfallMetricsIfNeeded {
+    if (self.data.count == 0) { return; }
+
+    CGFloat itemWidth = [self waterfallItemWidth];
+    if (itemWidth <= 0) { return; }
+
+    BOOL shouldRebuild = (self.waterfallHeightCache.count != self.data.count) ||
+                         (fabs(self.cachedWaterfallItemWidth - itemWidth) > 0.5);
+    if (!shouldRebuild) { return; }
+
+    [self.waterfallHeightCache removeAllObjects];
+    self.cachedWaterfallItemWidth = itemWidth;
+
+    for (NSInteger i = 0; i < self.data.count; i++) {
+        YALPostModel *model = self.data[i];
+        CGFloat ratio = [self simulatedRatioForItem:i model:model];
+        CGFloat imageHeight = floor(itemWidth * ratio);
+        CGFloat totalHeight = imageHeight + kYALWaterfallTextAreaHeight;
+        self.waterfallHeightCache[@(i)] = @(totalHeight);
+
+        // 后端图片优先：仅当无后端图或本身是 picsum 时，才使用模拟图 URL。
+        BOOL hasBackendURL = (model.imageURLString.length > 0 &&
+                              [model.imageURLString rangeOfString:@"picsum.photos"].location == NSNotFound);
+        if (!hasBackendURL) {
+            NSInteger imageW = (NSInteger)round(itemWidth);
+            NSInteger imageH = (NSInteger)round(imageHeight);
+            model.imageURLString = [NSString stringWithFormat:@"https://picsum.photos/%ld/%ld?seed=%ld",
+                                    (long)imageW, (long)imageH, (long)(i + 1)];
+        }
+    }
+}
+
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -114,6 +178,8 @@ static CGFloat const kYALItemSpacing = 10.0;
 
     // 先置空等待后端数据刷新
     self.data = [NSMutableArray array];
+    self.waterfallHeightCache = [NSMutableDictionary dictionary];
+    self.cachedWaterfallItemWidth = 0;
 
     [self setupCollectionView];
 
@@ -147,6 +213,9 @@ static CGFloat const kYALItemSpacing = 10.0;
             placeholder.desc = (error.localizedDescription.length > 0) ? error.localizedDescription : @"请检查网络或接口地址。";
             ws.data = [@[placeholder] mutableCopy];
         }
+        [ws.waterfallHeightCache removeAllObjects];
+        ws.cachedWaterfallItemWidth = 0;
+        [ws prepareWaterfallMetricsIfNeeded];
         [ws.collectionView reloadData];
         if (@available(iOS 10.0, *)) {
             if (ws.collectionView.refreshControl.isRefreshing) {
@@ -222,8 +291,14 @@ static CGFloat const kYALItemSpacing = 10.0;
         [self.collectionView.collectionViewLayout invalidateLayout];
         [self.collectionView layoutIfNeeded];
     } completion:^(__unused BOOL finished) {
+        [self prepareWaterfallMetricsIfNeeded];
         [self.collectionView reloadData];
     }];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self prepareWaterfallMetricsIfNeeded];
 }
 
 #pragma mark - UICollectionViewDataSource
@@ -239,10 +314,20 @@ static CGFloat const kYALItemSpacing = 10.0;
                                               forIndexPath:indexPath];
 
     YALPostModel *model = self.data[indexPath.item];
-    // 单列模式下不再传递固定高度，由cell内部根据图片比例动态计算
+    CGFloat fixedImageHeight = 0.0;
+    if (self.useWaterfall) {
+        [self prepareWaterfallMetricsIfNeeded];
+        NSNumber *totalHeight = self.waterfallHeightCache[@(indexPath.item)];
+        if (totalHeight) {
+            fixedImageHeight = MAX(120.0, totalHeight.doubleValue - kYALWaterfallTextAreaHeight);
+        }
+    } else {
+        fixedImageHeight = kYALSingleColumnItemHeight - kYALPostCellTextAreaHeight;
+    }
+
     [cell configureWithModel:model
                 useWaterfall:self.useWaterfall
-            fixedImageHeight:0.0];  // 传递0，让cell内部计算
+            fixedImageHeight:fixedImageHeight];
 
     return cell;
 }
@@ -256,33 +341,9 @@ static CGFloat const kYALItemSpacing = 10.0;
         return CGSizeMake(100, 100);
     }
 
-    // 单列模式：根据图片比例动态计算高度
     CGFloat screenWidth = [UIScreen mainScreen].bounds.size.width;
     CGFloat itemWidth = screenWidth - kYALHorizontalInset * 2;
-    
-    // 获取当前模型
-    YALPostModel *model = self.data[indexPath.item];
-    CGFloat imageRatio = 0.75;  // 默认4:3比例
-    
-    if (model.imageWidth > 0 && model.imageHeight > 0) {
-        imageRatio = model.imageHeight / model.imageWidth;
-    }
-    
-    // 限制图片比例在合理范围内
-    imageRatio = MAX(0.5, MIN(imageRatio, 1.5));
-    
-    // 计算图片高度（基于itemWidth）
-    CGFloat imageHeight = itemWidth * imageRatio;
-    
-    // 限制图片高度在合理范围内
-    CGFloat minImageHeight = 200.0;
-    CGFloat maxImageHeight = 400.0;
-    imageHeight = MAX(minImageHeight, MIN(imageHeight, maxImageHeight));
-    
-    // 总高度 = 图片高度 + 文本区域高度
-    CGFloat totalHeight = imageHeight + kYALPostCellTextAreaHeight;
-    
-    return CGSizeMake(itemWidth, totalHeight);
+    return CGSizeMake(itemWidth, kYALSingleColumnItemHeight);
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
@@ -298,13 +359,23 @@ static CGFloat const kYALItemSpacing = 10.0;
                    layout:(YALWaterfallLayout *)layout
  heightForItemAtIndexPath:(NSIndexPath *)indexPath
                 itemWidth:(CGFloat)width {
-    YALPostModel *model = self.data[indexPath.item];
-    if (model.imageWidth <= 0) {
-        return width * 1.0 + kYALPostCellTextAreaHeight;
+    (void)collectionView;
+    (void)layout;
+    (void)width;
+    [self prepareWaterfallMetricsIfNeeded];
+    NSNumber *cachedHeight = self.waterfallHeightCache[@(indexPath.item)];
+    if (cachedHeight) {
+        return cachedHeight.doubleValue;
     }
 
-    CGFloat imageHeight = width * (model.imageHeight / model.imageWidth);
-    return imageHeight + kYALPostCellTextAreaHeight;
+    // 兜底：缓存未命中时即时计算并写回，确保高度稳定。
+    YALPostModel *model = self.data[indexPath.item];
+    CGFloat itemWidth = [self waterfallItemWidth];
+    CGFloat ratio = [self simulatedRatioForItem:indexPath.item model:model];
+    CGFloat imageHeight = floor(itemWidth * ratio);
+    CGFloat totalHeight = imageHeight + kYALWaterfallTextAreaHeight;
+    self.waterfallHeightCache[@(indexPath.item)] = @(totalHeight);
+    return totalHeight;
 }
 
 - (void)messageTapped {
@@ -327,4 +398,3 @@ static CGFloat const kYALItemSpacing = 10.0;
 }
 
 @end
-

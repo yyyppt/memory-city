@@ -11,6 +11,76 @@
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 //static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
+
+static NSNumber *YALResolvedUserId(void) {
+    YALAuthUserModel *currentUser = [[YALAuthManager sharedManager] currentUser];
+    if (currentUser.userId > 0) {
+        return @(currentUser.userId);
+    }
+    return @(1);
+}
+
+static NSInteger YALResponseCode(id responseObject) {
+    if (![responseObject isKindOfClass:[NSDictionary class]]) {
+        return -1;
+    }
+    id codeObj = ((NSDictionary *)responseObject)[@"code"];
+    return [codeObj respondsToSelector:@selector(integerValue)] ? [codeObj integerValue] : 200;
+}
+
+static NSString *YALResponseMessage(id responseObject) {
+    if (![responseObject isKindOfClass:[NSDictionary class]]) {
+        return @"";
+    }
+    id msg = ((NSDictionary *)responseObject)[@"msg"];
+    return [msg isKindOfClass:[NSString class]] ? (NSString *)msg : @"";
+}
+
+static NSDictionary *YALResponseData(id responseObject) {
+    if (![responseObject isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    id data = ((NSDictionary *)responseObject)[@"data"];
+    if ([data isKindOfClass:[NSDictionary class]]) {
+        return (NSDictionary *)data;
+    }
+    return [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
+}
+
+static BOOL YALIsFormatError(id responseObject) {
+    NSString *msg = YALResponseMessage(responseObject);
+    return (YALResponseCode(responseObject) == 400 &&
+            [msg containsString:@"参数"] &&
+            [msg containsString:@"格式"]);
+}
+
+static BOOL YALShouldRetryAlternatePayload(id responseObject) {
+    NSString *msg = YALResponseMessage(responseObject);
+    if (YALIsFormatError(responseObject)) {
+        return YES;
+    }
+    if ([msg containsString:@"内容ID不能为空"]) {
+        return YES;
+    }
+    if ([msg containsString:@"fk_comments_replies"]) {
+        return YES;
+    }
+    return NO;
+}
+
+static NSNumber *YALNumberFromLikeFlag(id value) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return (NSNumber *)value;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *text = [(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (text.length > 0) {
+            return @([text integerValue]);
+        }
+    }
+    return nil;
+}
+
 @implementation YALContentManager
 
 + (instancetype)sharedManager {
@@ -239,6 +309,248 @@ static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
             completion(NO, nil, error);
         }
     }];
+}
+
+- (void)toggleLikeContentWithId:(NSNumber *)contentId
+                     completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/like", kYALAPIBaseURL];
+    NSNumber *userId = YALResolvedUserId();
+
+    NSArray<NSDictionary *> *parameterCandidates = @[
+        @{@"content_id": contentId ?: @(0), @"user_id": userId},
+        @{@"content_id": [NSString stringWithFormat:@"%@", contentId ?: @(0)],
+          @"user_id": [NSString stringWithFormat:@"%@", userId]},
+        @{@"contentId": contentId ?: @(0), @"userId": userId},
+        @{@"content_id": contentId ?: @(0)}
+    ];
+
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+    __block NSInteger candidateIndex = 0;
+    __block void (^sendRequest)(void) = ^{
+        NSDictionary *parameters = parameterCandidates[candidateIndex];
+        NSLog(@"👍 点赞请求参数[%ld]: %@", (long)candidateIndex, parameters);
+        [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+            NSLog(@"👍 点赞响应[%ld]: %@", (long)candidateIndex, responseObject);
+            if (YALShouldRetryAlternatePayload(responseObject) && candidateIndex + 1 < parameterCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+
+            NSInteger code = YALResponseCode(responseObject);
+            NSDictionary *data = YALResponseData(responseObject);
+            NSString *msg = YALResponseMessage(responseObject);
+            if (code == 200) {
+                if (completion) completion(YES, data, nil);
+            } else {
+                NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                     code:code
+                                                 userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"点赞失败"}];
+                if (completion) completion(NO, nil, error);
+            }
+        } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+            if (completion) completion(NO, nil, error);
+        }];
+    };
+    sendRequest();
+}
+
+- (void)getCommentListWithContentId:(NSNumber *)contentId
+                               page:(NSInteger)page
+                           pageSize:(NSInteger)pageSize
+                         completion:(void (^)(BOOL success, NSArray * _Nullable comments, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/comment/list", kYALAPIBaseURL];
+    NSDictionary *parameters = @{
+        @"content_id": contentId ?: @(0),
+        @"page": @(MAX(page, 1)),
+        @"size": @(MAX(pageSize, 1))
+    };
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSArray *comments = nil;
+        if ([responseObject isKindOfClass:[NSArray class]]) {
+            comments = (NSArray *)responseObject;
+        } else if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *response = (NSDictionary *)responseObject;
+            NSInteger code = [response[@"code"] respondsToSelector:@selector(integerValue)] ? [response[@"code"] integerValue] : 200;
+            if (code != 200) {
+                NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"评论获取失败";
+                NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                     code:code
+                                                 userInfo:@{NSLocalizedDescriptionKey: msg}];
+                if (completion) completion(NO, nil, error);
+                return;
+            }
+
+            id data = response[@"data"];
+            if ([data isKindOfClass:[NSArray class]]) {
+                comments = (NSArray *)data;
+            } else if ([data isKindOfClass:[NSDictionary class]] && [data[@"list"] isKindOfClass:[NSArray class]]) {
+                comments = data[@"list"];
+            } else if ([response[@"list"] isKindOfClass:[NSArray class]]) {
+                comments = response[@"list"];
+            }
+        }
+
+        if (comments) {
+            if (completion) completion(YES, comments, nil);
+        } else {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:-2
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid response"}];
+            if (completion) completion(NO, nil, error);
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) completion(NO, nil, error);
+    }];
+}
+
+- (void)publishCommentWithContentId:(NSNumber *)contentId
+                            content:(NSString *)content
+                           parentId:(NSNumber *)parentId
+                         completion:(void (^)(BOOL success, NSDictionary * _Nullable comment, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSNumber *userId = YALResolvedUserId();
+    NSString *url = [NSString stringWithFormat:@"%@/interact/comment", kYALAPIBaseURL];
+    NSNumber *resolvedContentId = contentId ?: @(0);
+    NSNumber *resolvedParentId = parentId ?: @(0);
+    NSString *contentString = content ?: @"";
+    NSString *parentIdString = (resolvedParentId.integerValue <= 0) ? @"" : [NSString stringWithFormat:@"%@", resolvedParentId];
+    NSArray<NSDictionary *> *parameterCandidates = @[
+        // 对齐后端当前结构体：
+        // content_id: int64, content: string, parent_id: string（一级评论传空串）
+        @{
+            @"content_id": resolvedContentId,
+            @"content": contentString,
+            @"parent_id": parentIdString,
+            @"user_id": userId
+        },
+        // 兜底1：有些实现会在一级评论场景要求不传 parent_id
+        @{
+            @"content_id": resolvedContentId,
+            @"content": contentString,
+            @"user_id": userId
+        },
+        // 兜底2：如果后端实际是全 string 绑定
+        @{
+            @"content_id": [NSString stringWithFormat:@"%@", resolvedContentId],
+            @"content": contentString,
+            @"parent_id": parentIdString,
+            @"user_id": [NSString stringWithFormat:@"%@", userId]
+        },
+        // 驼峰版兜底
+        @{
+            @"contentId": resolvedContentId,
+            @"content": contentString,
+            @"parentId": resolvedParentId,
+            @"userId": userId
+        }
+    ];
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    __block NSInteger candidateIndex = 0;
+    __block void (^sendRequest)(void) = ^{
+        NSDictionary *parameters = parameterCandidates[candidateIndex];
+        NSLog(@"💬 评论请求参数[%ld]: url=%@ body=%@", (long)candidateIndex, url, parameters);
+        [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+            NSLog(@"💬 评论响应[%ld]: %@", (long)candidateIndex, responseObject);
+            NSInteger code = YALResponseCode(responseObject);
+            NSDictionary *data = YALResponseData(responseObject);
+            NSString *msg = YALResponseMessage(responseObject);
+            if (code == 200) {
+                if (completion) completion(YES, data, nil);
+                return;
+            }
+
+            // 参数问题或服务端内部异常时，自动尝试下一套参数，尽量保证联调可继续。
+            if ((YALShouldRetryAlternatePayload(responseObject) || code == 500) &&
+                candidateIndex + 1 < parameterCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:code
+                                             userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"评论发布失败"}];
+            if (completion) completion(NO, nil, error);
+        } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+            if (candidateIndex + 1 < parameterCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+            if (completion) completion(NO, nil, error);
+        }];
+    };
+    sendRequest();
+}
+
+- (void)toggleCollectContentWithId:(NSNumber *)contentId
+                        completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSNumber *userId = YALResolvedUserId();
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    NSString *contentIdString = [NSString stringWithFormat:@"%@", contentId ?: @(0)];
+    NSString *userIdString = [NSString stringWithFormat:@"%@", userId ?: @(0)];
+    NSArray<NSDictionary *> *requestCandidates = @[
+        @{
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?content_id=%@&user_id=%@", kYALAPIBaseURL, contentIdString, userIdString],
+            @"parameters": [NSNull null]
+        },
+        @{
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?content_id=%@", kYALAPIBaseURL, contentIdString],
+            @"parameters": [NSNull null]
+        },
+        @{
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?contentId=%@&userId=%@", kYALAPIBaseURL, contentIdString, userIdString],
+            @"parameters": [NSNull null]
+        },
+        @{
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?contentId=%@", kYALAPIBaseURL, contentIdString],
+            @"parameters": [NSNull null]
+        },
+        @{
+            @"url": [NSString stringWithFormat:@"%@/interact/collect", kYALAPIBaseURL],
+            @"parameters": @{@"content_id": contentId ?: @(0), @"user_id": userId}
+        }
+    ];
+
+    __block NSInteger candidateIndex = 0;
+    __block void (^sendRequest)(void) = ^{
+        NSDictionary *candidate = requestCandidates[candidateIndex];
+        NSString *url = candidate[@"url"];
+        id parametersObject = candidate[@"parameters"];
+        NSDictionary *parameters = [parametersObject isKindOfClass:[NSDictionary class]] ? parametersObject : nil;
+        NSLog(@"⭐️ 收藏请求参数[%ld]: url=%@ body=%@", (long)candidateIndex, url, parameters ?: @{});
+        [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+            NSLog(@"⭐️ 收藏响应[%ld]: %@", (long)candidateIndex, responseObject);
+            if (YALShouldRetryAlternatePayload(responseObject) && candidateIndex + 1 < requestCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+
+            NSInteger code = YALResponseCode(responseObject);
+            NSDictionary *data = YALResponseData(responseObject);
+            NSString *msg = YALResponseMessage(responseObject);
+            if (code == 200) {
+                if (completion) completion(YES, data, nil);
+            } else {
+                NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                     code:code
+                                                 userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"收藏失败"}];
+                if (completion) completion(NO, nil, error);
+            }
+        } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+            if (completion) completion(NO, nil, error);
+        }];
+    };
+    sendRequest();
 }
 
 #pragma mark - 获取我的内容列表

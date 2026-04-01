@@ -110,6 +110,10 @@
             }
             NSDictionary *dic = (NSDictionary *)item;
             YALPostModel *model = [[YALPostModel alloc] initWithDictionary:dic];
+            if (!model.isPublic) {
+                NSLog(@"🔒 跳过私密内容ID: %@", model.contentId);
+                continue;
+            }
             [posts addObject:model];
 
             // 打印每条数据的图片信息
@@ -128,4 +132,3 @@
 }
 
 @end
-

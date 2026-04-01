@@ -27,6 +27,13 @@
         self.year = [dict[@"year"] isKindOfClass:[NSString class]] ? dict[@"year"] : @"";
         self.mood = [dict[@"mood"] isKindOfClass:[NSString class]] ? dict[@"mood"] : @"";
         self.createTime = [dict[@"create_time"] isKindOfClass:[NSString class]] ? dict[@"create_time"] : @"";
+        id publicValue = dict[@"is_public"];
+        if ([publicValue respondsToSelector:@selector(boolValue)]) {
+            self.isPublic = [publicValue boolValue];
+        } else {
+            // 接口未返回隐私字段时，首页默认按公开内容处理。
+            self.isPublic = YES;
+        }
 
         // 解析图片数组 - 尝试多种可能的字段名
         NSArray *imageArray = nil;
@@ -100,4 +107,3 @@
 }
 
 @end
-

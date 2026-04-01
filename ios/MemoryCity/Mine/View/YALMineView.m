@@ -35,14 +35,10 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 @property (nonatomic, strong) UILabel *bioLabel;
 @property (nonatomic, strong) UIButton *editProfileButton;
 
-@property (nonatomic, strong) UILabel *workspaceSectionLabel;
-@property (nonatomic, strong) NSArray<UIButton *> *workspaceButtons;
-
 @property (nonatomic, strong) UILabel *statsSectionLabel;
 @property (nonatomic, strong) UIView *statsCardView;
 @property (nonatomic, strong) UILabel *publicValueLabel;
 @property (nonatomic, strong) UILabel *privateValueLabel;
-@property (nonatomic, strong) UILabel *draftValueLabel;
 
 @property (nonatomic, strong) UILabel *personalSectionLabel;
 @property (nonatomic, strong) NSArray<UIButton *> *personalButtons;
@@ -79,7 +75,6 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     }];
 
     [self buildProfileCard];
-    [self buildWorkspaceSection];
     [self buildStatsSection];
     [self buildPersonalSection];
     [self setupMainConstraints];
@@ -167,34 +162,6 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     }];
 }
 
-- (void)buildWorkspaceSection {
-    self.workspaceSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
-                                               color:[UIColor labelColor]];
-    self.workspaceSectionLabel.text = @"创作工作台";
-    [self.contentView addSubview:self.workspaceSectionLabel];
-
-    self.workspaceButtons = @[
-        [self makeListButtonWithTitle:@"我的发布"
-                             subtitle:@"集中管理公开、私密和已发布内容"
-                             iconName:@"square.and.pencil"
-                                  tag:0
-                               action:@selector(workspaceTapped:)],
-        [self makeListButtonWithTitle:@"草稿箱"
-                             subtitle:@"继续编辑暂未发出的内容"
-                             iconName:@"doc.text.fill"
-                                  tag:1
-                               action:@selector(workspaceTapped:)],
-        [self makeListButtonWithTitle:@"新建发布"
-                             subtitle:@"快速记录新的城市瞬间"
-                             iconName:@"plus.circle.fill"
-                                  tag:2
-                               action:@selector(workspaceTapped:)]
-    ];
-    for (UIButton *button in self.workspaceButtons) {
-        [self.contentView addSubview:button];
-    }
-}
-
 - (void)buildStatsSection {
     self.statsSectionLabel = [self labelWithFont:[UIFont systemFontOfSize:18.0 weight:UIFontWeightSemibold]
                                            color:[UIColor labelColor]];
@@ -210,24 +177,17 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 
     UIControl *publicStat = [self makeStatViewWithTitle:@"公开中" valueLabel:&_publicValueLabel tag:0];
     UIControl *privateStat = [self makeStatViewWithTitle:@"私密中" valueLabel:&_privateValueLabel tag:1];
-    UIControl *draftStat = [self makeStatViewWithTitle:@"草稿数" valueLabel:&_draftValueLabel tag:2];
+    
     UIView *firstSeparator = [self makeStatSeparatorView];
-    UIView *secondSeparator = [self makeStatSeparatorView];
     [self.statsCardView addSubview:publicStat];
     [self.statsCardView addSubview:privateStat];
-    [self.statsCardView addSubview:draftStat];
     [self.statsCardView addSubview:firstSeparator];
-    [self.statsCardView addSubview:secondSeparator];
 
     [publicStat mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.top.bottom.equalTo(self.statsCardView);
     }];
     [privateStat mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(firstSeparator.mas_right);
-        make.top.bottom.width.equalTo(publicStat);
-    }];
-    [draftStat mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(secondSeparator.mas_right);
         make.right.top.bottom.equalTo(self.statsCardView);
         make.top.bottom.width.equalTo(publicStat);
     }];
@@ -236,10 +196,6 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
         make.width.mas_equalTo(1.0);
         make.centerY.equalTo(self.statsCardView);
         make.height.mas_equalTo(32.0);
-    }];
-    [secondSeparator mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(privateStat.mas_right);
-        make.width.height.centerY.equalTo(firstSeparator);
     }];
 }
 
@@ -260,10 +216,15 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
                              iconName:@"location.fill"
                                   tag:1
                                action:@selector(personalTapped:)],
-        [self makeListButtonWithTitle:@"消息中心"
-                             subtitle:@"查看互动提醒和系统消息"
-                             iconName:@"envelope.fill"
+        [self makeListButtonWithTitle:@"我的点赞"
+                             subtitle:@"查看收到的点赞记录"
+                             iconName:@"heart.fill"
                                   tag:2
+                               action:@selector(personalTapped:)],
+        [self makeListButtonWithTitle:@"我的收藏"
+                             subtitle:@"管理收藏的内容"
+                             iconName:@"star.fill"
+                                  tag:3
                                action:@selector(personalTapped:)]
     ];
     for (UIButton *button in self.personalButtons) {
@@ -279,34 +240,10 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
         make.height.mas_equalTo(128.0);
     }];
 
-    [self.workspaceSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    [self.statsSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.profileCard.mas_bottom).offset(26.0);
         make.left.equalTo(self.contentView.mas_left).offset(16.0);
         make.right.equalTo(self.contentView.mas_right).offset(-16.0);
-    }];
-
-    UIButton *workspaceFirst = self.workspaceButtons.firstObject;
-    UIButton *workspaceSecond = self.workspaceButtons.count > 1 ? self.workspaceButtons[1] : nil;
-    UIButton *workspaceThird = self.workspaceButtons.count > 2 ? self.workspaceButtons[2] : nil;
-
-    [workspaceFirst mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.workspaceSectionLabel.mas_bottom).offset(14.0);
-        make.left.equalTo(self.contentView.mas_left).offset(16.0);
-        make.right.equalTo(self.contentView.mas_right).offset(-16.0);
-        make.height.mas_equalTo(72.0);
-    }];
-    [workspaceSecond mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(workspaceFirst.mas_bottom).offset(10.0);
-        make.left.right.height.equalTo(workspaceFirst);
-    }];
-    [workspaceThird mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(workspaceSecond.mas_bottom).offset(10.0);
-        make.left.right.height.equalTo(workspaceFirst);
-    }];
-
-    [self.statsSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(workspaceThird.mas_bottom).offset(26.0);
-        make.left.right.equalTo(self.workspaceSectionLabel);
     }];
     [self.statsCardView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.statsSectionLabel.mas_bottom).offset(14.0);
@@ -323,6 +260,7 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     UIButton *personalFirst = self.personalButtons.firstObject;
     UIButton *personalSecond = self.personalButtons.count > 1 ? self.personalButtons[1] : nil;
     UIButton *personalThird = self.personalButtons.count > 2 ? self.personalButtons[2] : nil;
+    UIButton *personalFourth = self.personalButtons.count > 3 ? self.personalButtons[3] : nil;
 
     [personalFirst mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.personalSectionLabel.mas_bottom).offset(14.0);
@@ -336,6 +274,10 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     }];
     [personalThird mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(personalSecond.mas_bottom).offset(10.0);
+        make.left.right.height.equalTo(personalFirst);
+    }];
+    [personalFourth mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(personalThird.mas_bottom).offset(10.0);
         make.left.right.height.equalTo(personalFirst);
         make.bottom.equalTo(self.contentView.mas_bottom).offset(-24.0);
     }];
@@ -480,12 +422,6 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     }
 }
 
-- (void)workspaceTapped:(UIButton *)sender {
-    if ([self.delegate respondsToSelector:@selector(mineView:didTapWorkspaceItemAtIndex:)]) {
-        [self.delegate mineView:self didTapWorkspaceItemAtIndex:sender.tag];
-    }
-}
-
 - (void)statTapped:(UIControl *)sender {
     if ([self.delegate respondsToSelector:@selector(mineView:didTapStatAtIndex:)]) {
         [self.delegate mineView:self didTapStatAtIndex:sender.tag];
@@ -505,12 +441,10 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 
     NSInteger publishedCount = MAX(profile.publishedCount.integerValue, 6);
     NSInteger privateCount = MAX(2, MIN(8, publishedCount / 4));
-    NSInteger draftCount = MAX(1, MIN(5, publishedCount / 6));
     NSInteger publicCount = MAX(publishedCount - privateCount, 0);
 
     self.publicValueLabel.text = [NSString stringWithFormat:@"%ld", (long)publicCount];
     self.privateValueLabel.text = [NSString stringWithFormat:@"%ld", (long)privateCount];
-    self.draftValueLabel.text = [NSString stringWithFormat:@"%ld", (long)draftCount];
 }
 
 - (void)applyAuthUser:(YALAuthUserModel *)user {

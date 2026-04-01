@@ -10,8 +10,94 @@
 #import "../Network/NetworkManager/YALContentManager.h"
 #import <Masonry/Masonry.h>
 #import <AVFoundation/AVFoundation.h>
+#import <PhotosUI/PhotosUI.h>
 
-@interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate, UITextViewDelegate>
+static NSInteger const kYALReleaseMaxImageCount = 9;
+static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
+
+@interface YALReleasePhotoCell : UICollectionViewCell
+
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UIImageView *imageView;
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *subtitleLabel;
+@property (nonatomic, strong) UIButton *removeButton;
+
+@end
+
+@implementation YALReleasePhotoCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.contentView.backgroundColor = [UIColor clearColor];
+
+        self.cardView = [[UIView alloc] init];
+        self.cardView.layer.cornerRadius = 16.0;
+        self.cardView.layer.masksToBounds = YES;
+        [self.contentView addSubview:self.cardView];
+
+        self.imageView = [[UIImageView alloc] init];
+        self.imageView.contentMode = UIViewContentModeScaleAspectFill;
+        self.imageView.clipsToBounds = YES;
+        [self.cardView addSubview:self.imageView];
+
+        self.iconView = [[UIImageView alloc] init];
+        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+        [self.cardView addSubview:self.iconView];
+
+        self.titleLabel = [[UILabel alloc] init];
+        self.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+        self.titleLabel.textAlignment = NSTextAlignmentCenter;
+        [self.cardView addSubview:self.titleLabel];
+
+        self.subtitleLabel = [[UILabel alloc] init];
+        self.subtitleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+        self.subtitleLabel.textAlignment = NSTextAlignmentCenter;
+        [self.cardView addSubview:self.subtitleLabel];
+
+        self.removeButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        self.removeButton.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.6];
+        self.removeButton.layer.cornerRadius = 12.0;
+        self.removeButton.layer.masksToBounds = YES;
+        [self.removeButton setTitle:@"×" forState:UIControlStateNormal];
+        [self.removeButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        self.removeButton.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+        [self.cardView addSubview:self.removeButton];
+
+        [self.cardView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self.contentView);
+        }];
+        [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self.cardView);
+        }];
+        [self.iconView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.centerX.equalTo(self.cardView);
+            make.centerY.equalTo(self.cardView).offset(-14);
+            make.width.height.mas_equalTo(30);
+        }];
+        [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.cardView).offset(8);
+            make.right.equalTo(self.cardView).offset(-8);
+            make.top.equalTo(self.iconView.mas_bottom).offset(8);
+        }];
+        [self.subtitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.right.equalTo(self.titleLabel);
+            make.top.equalTo(self.titleLabel.mas_bottom).offset(3);
+        }];
+        [self.removeButton mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.cardView).offset(8);
+            make.right.equalTo(self.cardView).offset(-8);
+            make.width.height.mas_equalTo(24);
+        }];
+    }
+    return self;
+}
+
+@end
+
+@interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate, UITextViewDelegate, PHPickerViewControllerDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
 
 @property (nonatomic, strong, nullable) UIImage *editCoverImage;
 @property (nonatomic, copy, nullable) NSString *editDateText;
@@ -21,7 +107,11 @@
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIView *contentView;
 
-@property (nonatomic, strong) UIImageView *coverImageView;
+@property (nonatomic, strong) UIView *photoSectionHeaderView;
+@property (nonatomic, strong) UILabel *photoSectionLabel;
+@property (nonatomic, strong) UILabel *photoHintLabel;
+@property (nonatomic, strong) UICollectionView *photoCollectionView;
+@property (nonatomic, strong) MASConstraint *photoCollectionHeightConstraint;
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
@@ -33,6 +123,7 @@
 @property (nonatomic, strong) MASConstraint *visibilityIndicatorLeading;
 @property (nonatomic, assign) BOOL isPublic;
 @property (nonatomic, copy) NSString *bodyPlaceholderText;
+@property (nonatomic, strong) NSMutableArray<UIImage *> *selectedImages;
 
 @property (nonatomic, strong, nullable) NSDate *selectedDate;
 
@@ -62,7 +153,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    self.selectedImages = [NSMutableArray array];
 
     UIColor *accent = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
     self.navigationController.navigationBar.tintColor = accent;
@@ -99,6 +191,11 @@
     [self.view addGestureRecognizer:tap];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self updatePhotoCollectionHeight];
+}
+
 #pragma mark - UI
 
 - (void)buildUI {
@@ -119,26 +216,47 @@
   }];
 
   UIView *card = [[UIView alloc] init];
-  card.backgroundColor = [UIColor secondarySystemBackgroundColor];
-  card.layer.cornerRadius = 18.0;
-  card.layer.masksToBounds = YES;
+  card.backgroundColor = [UIColor colorWithRed:1.0 green:0.985 blue:0.965 alpha:1.0];
+  card.layer.cornerRadius = 24.0;
+  card.layer.shadowColor = [UIColor blackColor].CGColor;
+  card.layer.shadowOpacity = 0.08;
+  card.layer.shadowRadius = 18.0;
+  card.layer.shadowOffset = CGSizeMake(0, 10);
   [self.contentView addSubview:card];
 
-  self.coverImageView = [[UIImageView alloc] init];
-  self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
-  self.coverImageView.layer.cornerRadius = 14.0;
-  self.coverImageView.layer.masksToBounds = YES;
-  [card addSubview:self.coverImageView];
+  self.photoSectionHeaderView = [[UIView alloc] init];
+  [card addSubview:self.photoSectionHeaderView];
 
-  self.coverImageView.userInteractionEnabled = YES;
-  UITapGestureRecognizer *imgTap =
-      [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(chooseCover)];
-  imgTap.cancelsTouchesInView = NO;
-  [self.coverImageView addGestureRecognizer:imgTap];
+  self.photoSectionLabel = [[UILabel alloc] init];
+  self.photoSectionLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+  self.photoSectionLabel.textColor = [UIColor labelColor];
+  self.photoSectionLabel.text = @"图片";
+  [self.photoSectionHeaderView addSubview:self.photoSectionLabel];
+
+  self.photoHintLabel = [[UILabel alloc] init];
+  self.photoHintLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+  self.photoHintLabel.textColor = [UIColor colorWithRed:0.76 green:0.45 blue:0.16 alpha:1.0];
+  self.photoHintLabel.textAlignment = NSTextAlignmentRight;
+  [self.photoSectionHeaderView addSubview:self.photoHintLabel];
+
+  UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
+  layout.minimumLineSpacing = 12.0;
+  layout.minimumInteritemSpacing = 12.0;
+  self.photoCollectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+  self.photoCollectionView.backgroundColor = [UIColor clearColor];
+  self.photoCollectionView.showsVerticalScrollIndicator = NO;
+  self.photoCollectionView.scrollEnabled = NO;
+  self.photoCollectionView.dataSource = self;
+  self.photoCollectionView.delegate = self;
+  [self.photoCollectionView registerClass:[YALReleasePhotoCell class] forCellWithReuseIdentifier:kYALReleasePhotoCellIdentifier];
+  [card addSubview:self.photoCollectionView];
 
   self.dateLabel = [[UILabel alloc] init];
-  self.dateLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+  self.dateLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
   self.dateLabel.textColor = [UIColor secondaryLabelColor];
+  self.dateLabel.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
+  self.dateLabel.layer.cornerRadius = 14.0;
+  self.dateLabel.layer.masksToBounds = YES;
   [card addSubview:self.dateLabel];
 
   self.dateLabel.userInteractionEnabled = YES;
@@ -148,23 +266,31 @@
   [self.dateLabel addGestureRecognizer:dateTap];
 
   self.titleField = [[UITextField alloc] init];
-  self.titleField.backgroundColor = [UIColor clearColor];
+  self.titleField.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
   self.titleField.textColor = [UIColor labelColor];
   self.titleField.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
   self.titleField.placeholder = @"输入标题";
   self.titleField.clearButtonMode = UITextFieldViewModeWhileEditing;
   self.titleField.returnKeyType = UIReturnKeyNext;
+  self.titleField.layer.cornerRadius = 16.0;
+  self.titleField.layer.masksToBounds = YES;
+  self.titleField.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 14, 10)];
+  self.titleField.leftViewMode = UITextFieldViewModeAlways;
+  self.titleField.rightView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 14, 10)];
+  self.titleField.rightViewMode = UITextFieldViewModeAlways;
   if (@available(iOS 12.0, *)) {
       self.titleField.textContentType = UITextContentTypeOneTimeCode; // 关闭自动填充/建议
   }
   [card addSubview:self.titleField];
 
   self.textView = [[UITextView alloc] init];
-  self.textView.backgroundColor = [UIColor clearColor];
+  self.textView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
   self.textView.textColor = [UIColor labelColor];
   self.textView.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
-  self.textView.textContainerInset = UIEdgeInsetsMake(8, 0, 8, 0);
+  self.textView.textContainerInset = UIEdgeInsetsMake(14, 14, 14, 14);
   self.textView.textContainer.lineFragmentPadding = 0;
+  self.textView.layer.cornerRadius = 18.0;
+  self.textView.layer.masksToBounds = YES;
   self.textView.delegate = self;
   [card addSubview:self.textView];
 
@@ -199,29 +325,40 @@
   [self.privateButton addTarget:self action:@selector(visibilityButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
   [self.visibilitySegment addSubview:self.privateButton];
 
-  CGFloat imageH = MIN(260.0, [UIScreen mainScreen].bounds.size.width * 0.68);
-
   [card mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.contentView.mas_top).offset(14);
     make.left.equalTo(self.contentView.mas_left).offset(16);
     make.right.equalTo(self.contentView.mas_right).offset(-16);
     make.bottom.equalTo(self.contentView.mas_bottom).offset(-18);
   }];
-  [self.coverImageView mas_makeConstraints:^(MASConstraintMaker *make) {
-    make.top.equalTo(card.mas_top).offset(14);
-    make.left.equalTo(card.mas_left).offset(14);
-    make.right.equalTo(card.mas_right).offset(-14);
-    make.height.mas_equalTo(imageH);
+  [self.photoSectionHeaderView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(card.mas_top).offset(18);
+    make.left.equalTo(card.mas_left).offset(18);
+    make.right.equalTo(card.mas_right).offset(-18);
+    make.height.mas_equalTo(24);
+  }];
+  [self.photoSectionLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.top.bottom.equalTo(self.photoSectionHeaderView);
+  }];
+  [self.photoHintLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.right.top.bottom.equalTo(self.photoSectionHeaderView);
+    make.left.greaterThanOrEqualTo(self.photoSectionLabel.mas_right).offset(10);
+  }];
+  [self.photoCollectionView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.photoSectionHeaderView.mas_bottom).offset(14);
+    make.left.equalTo(card.mas_left).offset(18);
+    make.right.equalTo(card.mas_right).offset(-18);
+    self.photoCollectionHeightConstraint = make.height.mas_equalTo(0);
   }];
   [self.dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-    make.top.equalTo(self.coverImageView.mas_bottom).offset(10);
-    make.left.equalTo(self.coverImageView);
+    make.top.equalTo(self.photoCollectionView.mas_bottom).offset(16);
+    make.left.equalTo(self.photoCollectionView);
     make.right.lessThanOrEqualTo(self.visibilityTitleLabel.mas_left).offset(-10);
-    make.height.mas_equalTo(18);
+    make.height.mas_equalTo(42);
   }];
   [self.visibilitySegment mas_makeConstraints:^(MASConstraintMaker *make) {
     make.centerY.equalTo(self.dateLabel);
-    make.right.equalTo(self.coverImageView);
+    make.right.equalTo(self.photoCollectionView);
     make.width.mas_equalTo(132);
     make.height.mas_equalTo(30);
   }];
@@ -245,34 +382,26 @@
   }];
   [self.titleField mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.dateLabel.mas_bottom).offset(8);
-    make.left.right.equalTo(self.coverImageView);
-    make.height.mas_equalTo(40);
+    make.left.right.equalTo(self.photoCollectionView);
+    make.height.mas_equalTo(52);
   }];
   [self.textView mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.titleField.mas_bottom).offset(8);
-    make.left.right.equalTo(self.coverImageView);
-    make.height.mas_equalTo(220);
-    make.bottom.equalTo(card.mas_bottom).offset(-14);
+    make.left.right.equalTo(self.photoCollectionView);
+    make.height.mas_equalTo(240);
+    make.bottom.equalTo(card.mas_bottom).offset(-18);
   }];
 
   self.isPublic = YES;
   [self updateVisibilitySegmentAnimated:NO];
+  [self updatePhotoSelectionUI];
 }
 
 - (void)applyPrefillIfNeeded {
   if (self.editCoverImage) {
-    self.coverImageView.image = self.editCoverImage;
-  } else {
-    if (@available(iOS 13.0, *)) {
-      self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
-      self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
-      self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
-      self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-    } else {
-      self.coverImageView.image = nil;
-      self.coverImageView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-    }
+    [self.selectedImages addObject:self.editCoverImage];
   }
+  [self updatePhotoSelectionUI];
 
   self.dateLabel.text = self.editDateText.length > 0 ? self.editDateText : @"选择日期";
   if (self.editDateText.length > 0) {
@@ -289,6 +418,34 @@
     self.textView.text = self.bodyPlaceholderText;
     self.textView.textColor = [UIColor placeholderTextColor];
   }
+}
+
+- (void)updatePhotoSelectionUI {
+  self.photoHintLabel.text = [NSString stringWithFormat:@"%lu/%ld · 最多上传 9 张",
+                              (unsigned long)self.selectedImages.count,
+                              (long)kYALReleaseMaxImageCount];
+  [self.photoCollectionView reloadData];
+  [self updatePhotoCollectionHeight];
+}
+
+- (void)updatePhotoCollectionHeight {
+  NSInteger displayCount = self.selectedImages.count < kYALReleaseMaxImageCount ? self.selectedImages.count + 1 : self.selectedImages.count;
+  displayCount = MAX(displayCount, 1);
+  NSInteger rows = (NSInteger)ceil(displayCount / 3.0);
+  CGFloat itemSize = [self photoItemSize];
+  CGFloat spacing = 12.0;
+  CGFloat height = rows * itemSize + MAX(rows - 1, 0) * spacing;
+  [self.photoCollectionHeightConstraint setOffset:height];
+  [self.view layoutIfNeeded];
+}
+
+- (CGFloat)photoItemSize {
+  CGFloat availableWidth = CGRectGetWidth(self.photoCollectionView.bounds);
+  if (availableWidth <= 0) {
+    availableWidth = CGRectGetWidth(self.view.bounds) - 32.0 - 36.0;
+  }
+  CGFloat spacing = 24.0;
+  return floor((availableWidth - spacing) / 3.0);
 }
 
 #pragma mark - Actions
@@ -314,11 +471,11 @@
   }
 
   // 未选择图片：直接提示并中断发布
-  if (!self.coverImageView.image) {
+  if (self.selectedImages.count == 0) {
     UIAlertController *a =
-      [UIAlertController alertControllerWithTitle:@"未选择图片"
-                                          message:@"还未添加图片，请先选择图片后再发布。"
-                                   preferredStyle:UIAlertControllerStyleAlert];
+        [UIAlertController alertControllerWithTitle:@"未选择图片"
+                                            message:@"还未添加图片，请先选择图片后再发布。"
+                                     preferredStyle:UIAlertControllerStyleAlert];
     [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:a animated:YES completion:nil];
     return;
@@ -376,17 +533,15 @@
 
   // 图片处理：如果有选择的图片，转换为Base64
   NSMutableArray *images = [NSMutableArray array];
-  if (self.coverImageView.image) {
-      // 将图片转换为Base64字符串
-      // 先压缩图片，避免Base64字符串过大
-      UIImage *compressedImage = [self compressImage:self.coverImageView.image toMaxFileSize:1024*500]; // 最大500KB
+  for (UIImage *selectedImage in self.selectedImages) {
+      UIImage *compressedImage = [self compressImage:selectedImage toMaxFileSize:1024*500];
       NSData *imageData = UIImageJPEGRepresentation(compressedImage, 0.7); // 70%质量压缩
       if (imageData) {
           NSString *base64String = [imageData base64EncodedStringWithOptions:0];
           if (base64String) {
               [images addObject:base64String];
               NSLog(@"🖼️ 图片已转换为Base64，原始大小: %.2fKB，压缩后: %.2fKB，Base64长度: %lu字符",
-                    UIImageJPEGRepresentation(self.coverImageView.image, 1.0).length/1024.0,
+                    UIImageJPEGRepresentation(selectedImage, 1.0).length/1024.0,
                     imageData.length/1024.0,
                     (unsigned long)base64String.length);
           }
@@ -473,23 +628,14 @@
   self.editBody = @"";
   self.selectedDate = nil;
   self.isPublic = YES;
+  [self.selectedImages removeAllObjects];
   [self updateVisibilitySegmentAnimated:NO];
 
   self.titleField.text = @"";
   self.dateLabel.text = @"选择日期";
   self.textView.text = self.bodyPlaceholderText;
   self.textView.textColor = [UIColor placeholderTextColor];
-
-  if (@available(iOS 13.0, *)) {
-    self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
-    self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
-    self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
-    self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-  } else {
-    self.coverImageView.image = nil;
-    self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
-    self.coverImageView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
-  }
+  [self updatePhotoSelectionUI];
 }
 
 #pragma mark - Keyboard
@@ -594,7 +740,14 @@
 - (void)chooseCoverFromLibrary {
   [self.view endEditing:YES];
 
-  if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+  if (@available(iOS 14.0, *)) {
+    PHPickerConfiguration *configuration = [[PHPickerConfiguration alloc] init];
+    configuration.filter = [PHPickerFilter imagesFilter];
+    configuration.selectionLimit = 0;
+
+    PHPickerViewController *picker = [[PHPickerViewController alloc] initWithConfiguration:configuration];
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
     return;
   }
 
@@ -700,11 +853,44 @@
 
   // iPad 需要 source
   if (sheet.popoverPresentationController) {
-    sheet.popoverPresentationController.sourceView = self.coverImageView;
-    sheet.popoverPresentationController.sourceRect = self.coverImageView.bounds;
+    sheet.popoverPresentationController.sourceView = self.photoCollectionView;
+    sheet.popoverPresentationController.sourceRect = self.photoCollectionView.bounds;
   }
 
   [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)appendImages:(NSArray<UIImage *> *)images showLimitAlertIfNeeded:(BOOL)showAlert {
+  if (images.count == 0) {
+    return;
+  }
+
+  NSInteger remainingCount = kYALReleaseMaxImageCount - self.selectedImages.count;
+  if (remainingCount <= 0) {
+    if (showAlert) {
+      [self showImageLimitAlertWithMessage:@"最多只能上传 9 张图片，请先删除后再继续添加。"];
+    }
+    return;
+  }
+
+  NSArray<UIImage *> *allowedImages = images;
+  if (images.count > remainingCount) {
+    allowedImages = [images subarrayWithRange:NSMakeRange(0, remainingCount)];
+    if (showAlert) {
+      [self showImageLimitAlertWithMessage:[NSString stringWithFormat:@"最多只能上传 9 张图片，本次已保留前 %ld 张。", (long)remainingCount]];
+    }
+  }
+
+  [self.selectedImages addObjectsFromArray:allowedImages];
+  [self updatePhotoSelectionUI];
+}
+
+- (void)showImageLimitAlertWithMessage:(NSString *)message {
+  UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"图片数量超出限制"
+                                                                 message:message
+                                                          preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+  [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - UIImagePickerControllerDelegate
@@ -712,15 +898,124 @@
 - (void)imagePickerController:(UIImagePickerController *)picker
     didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
   UIImage *img = info[UIImagePickerControllerOriginalImage];
-  self.coverImageView.image = img;
-  self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
-  self.coverImageView.tintColor = nil;
-  self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+  if (img) {
+    [self appendImages:@[img] showLimitAlertIfNeeded:YES];
+  }
   [picker dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
   [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+#pragma mark - PHPickerViewControllerDelegate
+
+- (void)picker:(PHPickerViewController *)picker didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14.0)) {
+  if (results.count == 0) {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+    return;
+  }
+
+  dispatch_group_t group = dispatch_group_create();
+  NSMutableArray<UIImage *> *loadedImages = [NSMutableArray array];
+  NSLock *lock = [[NSLock alloc] init];
+
+  for (PHPickerResult *result in results) {
+    NSItemProvider *provider = result.itemProvider;
+    if (![provider canLoadObjectOfClass:[UIImage class]]) {
+      continue;
+    }
+    dispatch_group_enter(group);
+    [provider loadObjectOfClass:[UIImage class] completionHandler:^(UIImage * _Nullable image, NSError * _Nullable error) {
+      if (image && !error) {
+        [lock lock];
+        [loadedImages addObject:image];
+        [lock unlock];
+      }
+      dispatch_group_leave(group);
+    }];
+  }
+
+  __weak typeof(self) ws = self;
+  dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+    __strong typeof(ws) ss = ws;
+    [picker dismissViewControllerAnimated:YES completion:^{
+      if (!ss) return;
+      [ss appendImages:loadedImages showLimitAlertIfNeeded:YES];
+    }];
+  });
+}
+
+#pragma mark - UICollectionViewDataSource
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+  if (self.selectedImages.count >= kYALReleaseMaxImageCount) {
+    return self.selectedImages.count;
+  }
+  return self.selectedImages.count + 1;
+}
+
+- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+  YALReleasePhotoCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:kYALReleasePhotoCellIdentifier forIndexPath:indexPath];
+  cell.removeButton.hidden = YES;
+  [cell.removeButton removeTarget:nil action:NULL forControlEvents:UIControlEventTouchUpInside];
+
+  BOOL isAddCell = (indexPath.item == self.selectedImages.count && self.selectedImages.count < kYALReleaseMaxImageCount);
+  if (isAddCell) {
+    cell.cardView.backgroundColor = [UIColor colorWithRed:0.98 green:0.93 blue:0.86 alpha:1.0];
+    cell.cardView.layer.borderWidth = 1.0;
+    cell.cardView.layer.borderColor = [UIColor colorWithRed:0.93 green:0.74 blue:0.5 alpha:1.0].CGColor;
+    cell.imageView.image = nil;
+    if (@available(iOS 13.0, *)) {
+      cell.iconView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
+    } else {
+      cell.iconView.image = nil;
+    }
+    cell.iconView.tintColor = [UIColor colorWithRed:0.82 green:0.48 blue:0.16 alpha:1.0];
+    cell.iconView.hidden = NO;
+    cell.titleLabel.text = @"添加图片";
+    cell.titleLabel.textColor = [UIColor colorWithRed:0.45 green:0.29 blue:0.12 alpha:1.0];
+    cell.subtitleLabel.text = @"相册多选 / 拍照追加";
+    cell.subtitleLabel.textColor = [UIColor secondaryLabelColor];
+    return cell;
+  }
+
+  cell.cardView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+  cell.cardView.layer.borderWidth = 0.0;
+  cell.cardView.layer.borderColor = nil;
+  cell.imageView.image = self.selectedImages[indexPath.item];
+  cell.iconView.hidden = YES;
+  cell.titleLabel.text = @"";
+  cell.subtitleLabel.text = @"";
+  cell.removeButton.hidden = NO;
+  cell.removeButton.tag = indexPath.item;
+  [cell.removeButton addTarget:self action:@selector(removeSelectedImage:) forControlEvents:UIControlEventTouchUpInside];
+  return cell;
+}
+
+#pragma mark - UICollectionViewDelegate
+
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+  BOOL isAddCell = (indexPath.item == self.selectedImages.count && self.selectedImages.count < kYALReleaseMaxImageCount);
+  if (isAddCell) {
+    [self chooseCover];
+  }
+}
+
+#pragma mark - UICollectionViewDelegateFlowLayout
+
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+  CGFloat itemSize = [self photoItemSize];
+  return CGSizeMake(itemSize, itemSize);
+}
+
+- (void)removeSelectedImage:(UIButton *)sender {
+  NSInteger index = sender.tag;
+  if (index < 0 || index >= self.selectedImages.count) {
+    return;
+  }
+  [self.selectedImages removeObjectAtIndex:index];
+  [self updatePhotoSelectionUI];
 }
 
 #pragma mark - 图片压缩工具方法

@@ -32,6 +32,12 @@ NS_ASSUME_NONNULL_BEGIN
                                         NSString * _Nullable message,
                                         NSError * _Nullable error))completion;
 
+/// 获取我的全部内容（基于 /content/my，返回 list 原始数组）
+- (void)fetchMyContentListWithCompletion:(void (^)(BOOL success,
+                                                   NSArray * _Nullable list,
+                                                   NSString * _Nullable message,
+                                                   NSError * _Nullable error))completion;
+
 @end
 
 NS_ASSUME_NONNULL_END

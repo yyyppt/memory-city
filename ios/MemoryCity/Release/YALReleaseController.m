@@ -11,7 +11,7 @@
 #import <Masonry/Masonry.h>
 #import <AVFoundation/AVFoundation.h>
 
-@interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate>
+@interface YALReleaseController () <UIImagePickerControllerDelegate, UINavigationControllerDelegate, UIGestureRecognizerDelegate, UITextViewDelegate>
 
 @property (nonatomic, strong, nullable) UIImage *editCoverImage;
 @property (nonatomic, copy, nullable) NSString *editDateText;
@@ -25,6 +25,14 @@
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
+@property (nonatomic, strong) UILabel *visibilityTitleLabel;
+@property (nonatomic, strong) UIView *visibilitySegment;
+@property (nonatomic, strong) UIView *visibilityIndicator;
+@property (nonatomic, strong) UIButton *publicButton;
+@property (nonatomic, strong) UIButton *privateButton;
+@property (nonatomic, strong) MASConstraint *visibilityIndicatorLeading;
+@property (nonatomic, assign) BOOL isPublic;
+@property (nonatomic, copy) NSString *bodyPlaceholderText;
 
 @property (nonatomic, strong, nullable) NSDate *selectedDate;
 
@@ -80,6 +88,7 @@
     }
 
     [self buildUI];
+    self.bodyPlaceholderText = @"写下此刻的心情…";
     [self applyPrefillIfNeeded];
 
     // 点击空白收起键盘
@@ -154,8 +163,41 @@
   self.textView.backgroundColor = [UIColor clearColor];
   self.textView.textColor = [UIColor labelColor];
   self.textView.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
-  self.textView.textContainerInset = UIEdgeInsetsMake(8, 6, 8, 6);
+  self.textView.textContainerInset = UIEdgeInsetsMake(8, 0, 8, 0);
+  self.textView.textContainer.lineFragmentPadding = 0;
+  self.textView.delegate = self;
   [card addSubview:self.textView];
+
+  self.visibilityTitleLabel = [[UILabel alloc] init];
+  self.visibilityTitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+  self.visibilityTitleLabel.textColor = [UIColor secondaryLabelColor];
+  [card addSubview:self.visibilityTitleLabel];
+
+  self.visibilitySegment = [[UIView alloc] init];
+  self.visibilitySegment.backgroundColor = [UIColor systemGray5Color];
+  self.visibilitySegment.layer.cornerRadius = 15.0;
+  self.visibilitySegment.layer.masksToBounds = YES;
+  [card addSubview:self.visibilitySegment];
+
+  self.visibilityIndicator = [[UIView alloc] init];
+  self.visibilityIndicator.backgroundColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+  self.visibilityIndicator.layer.cornerRadius = 13.0;
+  self.visibilityIndicator.userInteractionEnabled = NO;
+  [self.visibilitySegment addSubview:self.visibilityIndicator];
+
+  self.publicButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  [self.publicButton setTitle:@"公开" forState:UIControlStateNormal];
+  self.publicButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+  self.publicButton.tag = 100;
+  [self.publicButton addTarget:self action:@selector(visibilityButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+  [self.visibilitySegment addSubview:self.publicButton];
+
+  self.privateButton = [UIButton buttonWithType:UIButtonTypeCustom];
+  [self.privateButton setTitle:@"私密" forState:UIControlStateNormal];
+  self.privateButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+  self.privateButton.tag = 101;
+  [self.privateButton addTarget:self action:@selector(visibilityButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+  [self.visibilitySegment addSubview:self.privateButton];
 
   CGFloat imageH = MIN(260.0, [UIScreen mainScreen].bounds.size.width * 0.68);
 
@@ -173,8 +215,33 @@
   }];
   [self.dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.coverImageView.mas_bottom).offset(10);
-    make.left.right.equalTo(self.coverImageView);
+    make.left.equalTo(self.coverImageView);
+    make.right.lessThanOrEqualTo(self.visibilityTitleLabel.mas_left).offset(-10);
     make.height.mas_equalTo(18);
+  }];
+  [self.visibilitySegment mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.centerY.equalTo(self.dateLabel);
+    make.right.equalTo(self.coverImageView);
+    make.width.mas_equalTo(132);
+    make.height.mas_equalTo(30);
+  }];
+  [self.visibilityIndicator mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.visibilitySegment).offset(2);
+    make.bottom.equalTo(self.visibilitySegment).offset(-2);
+    make.width.equalTo(self.visibilitySegment).multipliedBy(0.5).offset(-2);
+    self.visibilityIndicatorLeading = make.left.equalTo(self.visibilitySegment).offset(2);
+  }];
+  [self.publicButton mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.top.bottom.equalTo(self.visibilitySegment);
+    make.width.equalTo(self.visibilitySegment).multipliedBy(0.5);
+  }];
+  [self.privateButton mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.right.top.bottom.equalTo(self.visibilitySegment);
+    make.width.equalTo(self.visibilitySegment).multipliedBy(0.5);
+  }];
+  [self.visibilityTitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.right.equalTo(self.visibilitySegment.mas_left).offset(-8);
+    make.centerY.equalTo(self.visibilitySegment);
   }];
   [self.titleField mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.dateLabel.mas_bottom).offset(8);
@@ -187,6 +254,9 @@
     make.height.mas_equalTo(220);
     make.bottom.equalTo(card.mas_bottom).offset(-14);
   }];
+
+  self.isPublic = YES;
+  [self updateVisibilitySegmentAnimated:NO];
 }
 
 - (void)applyPrefillIfNeeded {
@@ -212,15 +282,24 @@
       self.selectedDate = nil;
   }
   self.titleField.text = self.editTitleText.length > 0 ? self.editTitleText : @"";
-  self.textView.text = self.editBody.length > 0 ? self.editBody : @"写下此刻的心情…";
+  if (self.editBody.length > 0) {
+    self.textView.text = self.editBody;
+    self.textView.textColor = [UIColor labelColor];
+  } else {
+    self.textView.text = self.bodyPlaceholderText;
+    self.textView.textColor = [UIColor placeholderTextColor];
+  }
 }
 
 #pragma mark - Actions
 
 - (void)submitTapped {
   self.editTitleText = self.titleField.text ?: @"";
-  self.editBody = self.textView.text ?: @"";
-  BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
+  NSString *bodyText = self.textView.text ?: @"";
+  if ([bodyText isEqualToString:self.bodyPlaceholderText]) {
+    bodyText = @"";
+  }
+  self.editBody = bodyText;
 
   // 未选择日期：直接提示并中断发布
   NSString *dateText = self.editDateText ?: @"";
@@ -234,18 +313,47 @@
     return;
   }
 
+  // 未选择图片：直接提示并中断发布
+  if (!self.coverImageView.image) {
+    UIAlertController *a =
+      [UIAlertController alertControllerWithTitle:@"未选择图片"
+                                          message:@"还未添加图片，请先选择图片后再发布。"
+                                   preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
+  }
+
   // 如果 selectedDate 有值但 editDateText 为空，补齐 editDateText
   if (dateText.length == 0 && self.selectedDate) {
     dateText = [self dateStringFromDate:self.selectedDate];
     self.editDateText = dateText;
   }
 
-  // 收集发布参数（这里使用固定值，实际应用中应该从用户输入获取）
+  // 标题必填
   NSString *title = [self.editTitleText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if (title.length == 0) {
-      title = isEdit ? @"编辑后的标题" : @"新发布的标题";
+    UIAlertController *a =
+      [UIAlertController alertControllerWithTitle:@"未填写标题"
+                                          message:@"请输入标题后再发布。"
+                                   preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
   }
-  NSString *content = self.editBody;
+
+  // 内容必填
+  NSString *content = [self.editBody stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (content.length == 0) {
+    UIAlertController *a =
+      [UIAlertController alertControllerWithTitle:@"未填写内容"
+                                          message:@"请输入内容后再发布。"
+                                   preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
+  }
+
   NSString *city = @"北京";
   // year 参数承载发布时间（你的 dateStringFromDate 格式为 yyyy.MM.dd）
   NSString *year = dateText;
@@ -253,7 +361,7 @@
   NSString *locationName = @"北京市海淀区";
   double latitude = 39.9042;
   double longitude = 116.4074;
-  BOOL isPublic = YES;
+  BOOL isPublic = self.isPublic;
 
   // 打印发布参数
   NSLog(@"🚀 开始发布内容：");
@@ -268,17 +376,17 @@
 
   // 图片处理：如果有选择的图片，转换为Base64
   NSMutableArray *images = [NSMutableArray array];
-  if (self.editCoverImage) {
+  if (self.coverImageView.image) {
       // 将图片转换为Base64字符串
       // 先压缩图片，避免Base64字符串过大
-      UIImage *compressedImage = [self compressImage:self.editCoverImage toMaxFileSize:1024*500]; // 最大500KB
+      UIImage *compressedImage = [self compressImage:self.coverImageView.image toMaxFileSize:1024*500]; // 最大500KB
       NSData *imageData = UIImageJPEGRepresentation(compressedImage, 0.7); // 70%质量压缩
       if (imageData) {
           NSString *base64String = [imageData base64EncodedStringWithOptions:0];
           if (base64String) {
               [images addObject:base64String];
               NSLog(@"🖼️ 图片已转换为Base64，原始大小: %.2fKB，压缩后: %.2fKB，Base64长度: %lu字符",
-                    UIImageJPEGRepresentation(self.editCoverImage, 1.0).length/1024.0,
+                    UIImageJPEGRepresentation(self.coverImageView.image, 1.0).length/1024.0,
                     imageData.length/1024.0,
                     (unsigned long)base64String.length);
           }
@@ -316,6 +424,7 @@
 
           UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"发布成功" message:[NSString stringWithFormat:@"%@\n内容ID: %@\n\n发布内容已保存到服务器", message, contentId] preferredStyle:UIAlertControllerStyleAlert];
           [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [self resetPublishForm];
             // 发布成功后跳转主页并刷新
             dispatch_async(dispatch_get_main_queue(), ^{
               UIViewController *rootVC = self.view.window.rootViewController;
@@ -329,6 +438,13 @@
                 UIViewController *homeVC = homeNav.viewControllers.firstObject ?: nil;
                 if (homeVC && [homeVC respondsToSelector:@selector(loadPosts)]) {
                   [homeVC performSelector:@selector(loadPosts)];
+                }
+                if (tab.viewControllers.count > 1 && [tab.viewControllers[1] isKindOfClass:[UINavigationController class]]) {
+                  UINavigationController *memoryNav = (UINavigationController *)tab.viewControllers[1];
+                  UIViewController *memoryVC = memoryNav.viewControllers.firstObject ?: nil;
+                  if (memoryVC && [memoryVC respondsToSelector:@selector(refreshTimelineAndReloadUI)]) {
+                    [memoryVC performSelector:@selector(refreshTimelineAndReloadUI)];
+                  }
                 }
               }
             });
@@ -350,10 +466,52 @@
   }];
 }
 
+- (void)resetPublishForm {
+  self.editCoverImage = nil;
+  self.editDateText = nil;
+  self.editTitleText = @"";
+  self.editBody = @"";
+  self.selectedDate = nil;
+  self.isPublic = YES;
+  [self updateVisibilitySegmentAnimated:NO];
+
+  self.titleField.text = @"";
+  self.dateLabel.text = @"选择日期";
+  self.textView.text = self.bodyPlaceholderText;
+  self.textView.textColor = [UIColor placeholderTextColor];
+
+  if (@available(iOS 13.0, *)) {
+    self.coverImageView.image = [UIImage systemImageNamed:@"photo"];
+    self.coverImageView.tintColor = [UIColor tertiaryLabelColor];
+    self.coverImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+  } else {
+    self.coverImageView.image = nil;
+    self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+    self.coverImageView.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
+  }
+}
+
 #pragma mark - Keyboard
 
 - (void)dismissKeyboard {
   [self.view endEditing:YES];
+}
+
+#pragma mark - UITextViewDelegate
+
+- (void)textViewDidBeginEditing:(UITextView *)textView {
+  if ([textView.text isEqualToString:self.bodyPlaceholderText]) {
+    textView.text = @"";
+    textView.textColor = [UIColor labelColor];
+  }
+}
+
+- (void)textViewDidEndEditing:(UITextView *)textView {
+  if (textView.text.length == 0) {
+    textView.text = self.bodyPlaceholderText;
+    textView.textColor = [UIColor placeholderTextColor];
+  }
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer
@@ -373,6 +531,35 @@
 }
 
 #pragma mark - Date & Image
+
+- (void)visibilityButtonTapped:(UIButton *)sender {
+  self.isPublic = (sender.tag == 100);
+  [self updateVisibilitySegmentAnimated:YES];
+}
+
+- (void)updateVisibilitySegmentAnimated:(BOOL)animated {
+  self.visibilityTitleLabel.text = self.isPublic ? @"公开显示" : @"仅自己可见";
+  [self.publicButton setTitleColor:(self.isPublic ? [UIColor whiteColor] : [UIColor labelColor]) forState:UIControlStateNormal];
+  [self.privateButton setTitleColor:(self.isPublic ? [UIColor labelColor] : [UIColor whiteColor]) forState:UIControlStateNormal];
+
+  [self.visibilityIndicatorLeading uninstall];
+  [self.visibilityIndicator mas_updateConstraints:^(MASConstraintMaker *make) {
+    if (self.isPublic) {
+      self.visibilityIndicatorLeading = make.left.equalTo(self.visibilitySegment).offset(2);
+    } else {
+      self.visibilityIndicatorLeading = make.left.equalTo(self.visibilitySegment.mas_centerX);
+    }
+  }];
+
+  void (^animations)(void) = ^{
+    [self.visibilitySegment layoutIfNeeded];
+  };
+  if (animated) {
+    [UIView animateWithDuration:0.22 animations:animations];
+  } else {
+    animations();
+  }
+}
 
 - (NSString *)dateStringFromDate:(NSDate *)date {
   NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
@@ -415,6 +602,7 @@
   picker.delegate = self;
   picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
   picker.allowsEditing = NO;
+  
   [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -524,11 +712,10 @@
 - (void)imagePickerController:(UIImagePickerController *)picker
     didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
   UIImage *img = info[UIImagePickerControllerOriginalImage];
-  if (img) {
-    self.editCoverImage = img;
-    self.coverImageView.image = img;
-    self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
-  }
+  self.coverImageView.image = img;
+  self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+  self.coverImageView.tintColor = nil;
+  self.coverImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
   [picker dismissViewControllerAnimated:YES completion:nil];
 }
 

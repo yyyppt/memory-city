@@ -8,6 +8,7 @@
 #import "YALTimelineManager.h"
 #import "YALNetworkManager.h"
 #import "YALAuthManager.h"
+#import "YALContentManager.h"
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 
@@ -137,6 +138,17 @@ static NSInteger YALExtractCode(id responseObject) {
         if (completion) completion(YES, (NSArray *)data, msg, nil);
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
         if (completion) completion(NO, nil, error.localizedDescription, error);
+    }];
+}
+
+- (void)fetchMyContentListWithCompletion:(void (^)(BOOL success, NSArray * _Nullable list, NSString * _Nullable message, NSError * _Nullable error))completion {
+    // 直接复用 content manager 的 /content/my 能力，拉一页大数据供 Memory/Timeline 本地筛选
+    [[YALContentManager sharedManager] getMyContentListWithPage:1
+                                                        pageSize:1000
+                                                      completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+        if (completion) {
+            completion(success, contentList, message, error);
+        }
     }];
 }
 

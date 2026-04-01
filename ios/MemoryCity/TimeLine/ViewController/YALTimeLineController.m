@@ -175,22 +175,35 @@
     self.emptyMonthContainer.hidden = YES;
 
     __weak typeof(self) ws = self;
-    [[YALTimelineManager sharedManager] fetchMyTimelineWithYear:@(year)
-                                                    completion:^(BOOL success, NSDictionary<NSString *,NSArray *> * _Nullable groupedByYearMonth, NSString * _Nullable message, NSError * _Nullable error) {
+    [[YALTimelineManager sharedManager] fetchMyContentListWithCompletion:^(BOOL success, NSArray * _Nullable list, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(ws) ss = ws;
         if (!ss) return;
 
-        if (!success || ![groupedByYearMonth isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"❌ 获取时间轴失败：%@ %@", message, error);
+        if (!success || ![list isKindOfClass:[NSArray class]]) {
+            NSLog(@"❌ 获取我的内容失败：%@ %@", message, error);
             ss.emptyMonthContainer.hidden = NO;
             ss.entries = @[];
             [ss.tableView reloadData];
             return;
         }
 
-        NSString *key = [NSString stringWithFormat:@"%04ld-%02ld", (long)year, (long)month];
-        NSArray *rawList = groupedByYearMonth[key];
-        if (![rawList isKindOfClass:[NSArray class]]) rawList = @[];
+        NSMutableArray *rawList = [NSMutableArray array];
+        for (id obj in list) {
+            if (![obj isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary *item = (NSDictionary *)obj;
+            NSString *rawDate = nil;
+            if ([item[@"year"] isKindOfClass:[NSString class]]) rawDate = item[@"year"];
+            if (rawDate.length == 0 && [item[@"create_time"] isKindOfClass:[NSString class]]) rawDate = item[@"create_time"];
+            if (rawDate.length == 0 && [item[@"date"] isKindOfClass:[NSString class]]) rawDate = item[@"date"];
+            NSString *dateText = [ss normalizedDateTextFromRaw:(rawDate ?: @"")];
+            NSArray *parts = [dateText componentsSeparatedByString:@"."];
+            if (parts.count < 3) continue;
+            NSInteger y = [parts[0] integerValue];
+            NSInteger m = [parts[1] integerValue];
+            if (y == year && m == month) {
+                [rawList addObject:item];
+            }
+        }
 
         // 整个月没有内容：显示空态 + 添加按钮
         if (rawList.count == 0) {
@@ -217,7 +230,8 @@
             if ([cObj isKindOfClass:[NSString class]]) content = (NSString *)cObj;
 
             NSString *rawDate = nil;
-            if ([item[@"create_time"] isKindOfClass:[NSString class]]) rawDate = item[@"create_time"];
+            if ([item[@"year"] isKindOfClass:[NSString class]]) rawDate = item[@"year"];
+            if (rawDate.length == 0 && [item[@"create_time"] isKindOfClass:[NSString class]]) rawDate = item[@"create_time"];
             if (rawDate.length == 0 && [item[@"date"] isKindOfClass:[NSString class]]) rawDate = item[@"date"];
             NSString *dateText = [ss normalizedDateTextFromRaw:(rawDate ?: @"")];
             // 如果后端没返回我识别的日期字段，则用兜底日期保证 entry 不会被跳过
@@ -277,7 +291,13 @@
     YALTimeLineEntryModel *entry = self.entries[indexPath.row];
 
     NSArray *parts = [entry.dateText componentsSeparatedByString:@"."];
-    NSString *dayText = parts.count >= 3 ? parts[2] : @"--";
+    NSString *dayText = @"--";
+    if (parts.count >= 3) {
+        NSInteger day = [parts[2] integerValue];
+        if (day > 0) {
+            dayText = [NSString stringWithFormat:@"%02ld", (long)day];
+        }
+    }
     NSString *weekdayText = @"";
     NSDateFormatter *df = [[NSDateFormatter alloc] init];
     df.dateFormat = @"yyyy.MM.dd";

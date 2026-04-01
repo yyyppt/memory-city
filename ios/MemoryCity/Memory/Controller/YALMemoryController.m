@@ -72,12 +72,12 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
     self.calendarYearNow = dc.year > 0 ? dc.year : 2026;
 
     __weak typeof(self) ws = self;
-    [[YALTimelineManager sharedManager] fetchMyTimelineWithYear:nil completion:^(BOOL success, NSDictionary<NSString *,NSArray *> * _Nullable groupedByYearMonth, NSString * _Nullable message, NSError * _Nullable error) {
+    [[YALTimelineManager sharedManager] fetchMyContentListWithCompletion:^(BOOL success, NSArray * _Nullable list, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(ws) ss = ws;
         if (!ss) return;
 
-        if (!success || ![groupedByYearMonth isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"❌ 获取我的时间轴失败：%@ %@", message, error);
+        if (!success || ![list isKindOfClass:[NSArray class]]) {
+            NSLog(@"❌ 获取我的内容失败：%@ %@", message, error);
             // 失败时保持空态，但仍允许显示当前年份（不可点）
             ss.timelineGrouped = @{};
             ss.firstPublishYear = ss.calendarYearNow;
@@ -86,7 +86,28 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
             return;
         }
 
-        ss.timelineGrouped = [groupedByYearMonth copy];
+        NSMutableDictionary<NSString *, NSMutableArray *> *grouped = [NSMutableDictionary dictionary];
+        for (id obj in list) {
+            if (![obj isKindOfClass:[NSDictionary class]]) continue;
+            NSDictionary *item = (NSDictionary *)obj;
+            NSString *raw = nil;
+            id yearObj = item[@"year"];
+            if ([yearObj isKindOfClass:[NSString class]]) raw = (NSString *)yearObj;
+            if (raw.length == 0) {
+                id createObj = item[@"create_time"] ?: item[@"date"];
+                if ([createObj isKindOfClass:[NSString class]]) raw = (NSString *)createObj;
+            }
+            NSString *dateKey = YALNormalizeDateKeyFromRaw(raw ?: @"");
+            NSArray<NSString *> *parts = [dateKey componentsSeparatedByString:@"."];
+            if (parts.count < 2) continue;
+            NSInteger y = [parts[0] integerValue];
+            NSInteger m = [parts[1] integerValue];
+            if (y <= 0 || m <= 0) continue;
+            NSString *ym = [NSString stringWithFormat:@"%04ld-%02ld", (long)y, (long)m];
+            if (!grouped[ym]) grouped[ym] = [NSMutableArray array];
+            [grouped[ym] addObject:item];
+        }
+        ss.timelineGrouped = [grouped copy];
         [ss rebuildYearMetadataFromGrouped:ss.timelineGrouped];
         NSInteger start = [ss defaultYearToShow];
         [ss applyYearMetaToViewAndReload:start];
@@ -197,7 +218,7 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
         NSArray *list = [self.timelineGrouped[key] isKindOfClass:[NSArray class]] ? self.timelineGrouped[key] : @[];
         model.memoryCount = (NSInteger)list.count;
 
-        // featuredTitle/封面图：按 create_time/date 升序取“最前面那条”
+        // featuredTitle/封面图：按 year(create_time/date兜底) 升序取“最前面那条”
         NSString *featured = @"FEATURED MOMENT";
         NSString *coverURL = nil;
 
@@ -209,8 +230,8 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
                 }
                 NSDictionary *d1 = (NSDictionary *)obj1;
                 NSDictionary *d2 = (NSDictionary *)obj2;
-                NSString *k1 = YALNormalizeDateKeyFromRaw(d1[@"create_time"] ?: d1[@"date"]);
-                NSString *k2 = YALNormalizeDateKeyFromRaw(d2[@"create_time"] ?: d2[@"date"]);
+                NSString *k1 = YALNormalizeDateKeyFromRaw(d1[@"year"] ?: d1[@"create_time"] ?: d1[@"date"]);
+                NSString *k2 = YALNormalizeDateKeyFromRaw(d2[@"year"] ?: d2[@"create_time"] ?: d2[@"date"]);
                 if (k1.length == 0 && k2.length == 0) return NSOrderedSame;
                 if (k1.length == 0) return NSOrderedDescending;
                 if (k2.length == 0) return NSOrderedAscending;
@@ -289,6 +310,24 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
 
 - (void)memoryView:(YALMemoryView *)view didSelectMonth:(YALMemoryMonthModel *)month {
     (void)view;
+    NSString *key = [NSString stringWithFormat:@"%04ld-%02ld", (long)month.year, (long)month.month];
+    NSArray *monthList = [self.timelineGrouped[key] isKindOfClass:[NSArray class]] ? self.timelineGrouped[key] : @[];
+    NSLog(@"🧠 Memory点击月份: %@, 共%lu条", key, (unsigned long)monthList.count);
+    [monthList enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        (void)stop;
+        if (![obj isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"  [%lu] %@", (unsigned long)idx, obj);
+            return;
+        }
+        NSDictionary *d = (NSDictionary *)obj;
+        NSLog(@"  [%lu] title=%@, year=%@, create_time=%@, date=%@, images=%@",
+              (unsigned long)idx,
+              d[@"title"] ?: @"",
+              d[@"year"] ?: @"",
+              d[@"create_time"] ?: @"",
+              d[@"date"] ?: @"",
+              d[@"images"] ?: @[]);
+    }];
 
     YALTimeLineController *vc = [[YALTimeLineController alloc] init];
     vc.displayYear = month.year;

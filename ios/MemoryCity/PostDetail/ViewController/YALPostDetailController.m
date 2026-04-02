@@ -45,6 +45,7 @@
 @property (nonatomic, assign) BOOL inputExpanded;
 @property (nonatomic, assign) BOOL isLiked;
 @property (nonatomic, assign) BOOL isCollected;
+@property (nonatomic, strong) UIView *contentCard;
 
 @end
 
@@ -327,10 +328,20 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
     UIView *contentView = [[UIView alloc] init];
     [self.scrollView addSubview:contentView];
 
+    self.contentCard = [[UIView alloc] init];
+    self.contentCard.backgroundColor = [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+    self.contentCard.layer.cornerRadius = 22.0;
+    self.contentCard.layer.masksToBounds = NO;
+    self.contentCard.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.10].CGColor;
+    self.contentCard.layer.shadowOpacity = 1.0;
+    self.contentCard.layer.shadowOffset = CGSizeMake(0, 10);
+    self.contentCard.layer.shadowRadius = 20.0;
+    [contentView addSubview:self.contentCard];
+
     self.imageView = [[UIImageView alloc] init];
     self.imageView.contentMode = UIViewContentModeScaleAspectFill;
     self.imageView.clipsToBounds = YES;
-    self.imageView.layer.cornerRadius = 0.0;
+    self.imageView.layer.cornerRadius = 16.0;
     self.imageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
 
     self.titleLabel = [[UILabel alloc] init];
@@ -356,11 +367,11 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
     self.tableView.backgroundColor = [UIColor clearColor];
     [self.tableView registerClass:[YALCommentCell class] forCellReuseIdentifier:@"YALCommentCell"];
 
-    [contentView addSubview:self.imageView];
-    [contentView addSubview:self.titleLabel];
-    [contentView addSubview:self.descLabel];
-    [contentView addSubview:self.commentHeader];
-    [contentView addSubview:self.tableView];
+    [self.contentCard addSubview:self.imageView];
+    [self.contentCard addSubview:self.titleLabel];
+    [self.contentCard addSubview:self.descLabel];
+    [self.contentCard addSubview:self.commentHeader];
+    [self.contentCard addSubview:self.tableView];
 
     // 底部工具栏：评论输入 + 点赞 / 收藏 / 评论数
     self.bottomBar = [[UIView alloc] init];
@@ -485,9 +496,17 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
 
     CGFloat padding = 16.0;
 
+    [self.contentCard mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(contentView.mas_top).offset(16.0);
+        make.left.equalTo(contentView.mas_left).offset(16.0);
+        make.right.equalTo(contentView.mas_right).offset(-16.0);
+        make.bottom.equalTo(contentView.mas_bottom).offset(-padding);
+    }];
+
     [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(contentView.mas_top);
-        make.left.right.equalTo(contentView);
+        make.top.equalTo(self.contentCard.mas_top).offset(14.0);
+        make.left.equalTo(self.contentCard.mas_left).offset(14.0);
+        make.right.equalTo(self.contentCard.mas_right).offset(-14.0);
         make.height.equalTo(self.imageView.mas_width).multipliedBy(0.95);
     }];
 
@@ -511,7 +530,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
         make.top.equalTo(self.commentHeader.mas_bottom).offset(8.0);
         make.left.right.equalTo(self.imageView);
         self.tableHeightConstraint = make.height.mas_equalTo(1.0);
-        make.bottom.equalTo(contentView.mas_bottom).offset(-padding);
+        make.bottom.equalTo(self.contentCard.mas_bottom).offset(-padding);
     }];
 
     // 底部四个按钮布局
@@ -593,6 +612,11 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
     self.favoriteCountLabel.text = @"0";
     [self updateActionButtonsAppearance];
     [self updateBottomBarForEditing:NO animated:NO];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    self.contentCard.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.contentCard.bounds cornerRadius:22.0].CGPath;
 }
 
 - (void)setupDummyComments {
@@ -703,6 +727,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
 }
 
 - (void)didTapComment {
+    [self animateActionButton:self.commentButton];
     CGRect headerFrameInScroll = [self.commentHeader convertRect:self.commentHeader.bounds
                                                           toView:self.scrollView];
     CGPoint offset = CGPointMake(0, MAX(0, headerFrameInScroll.origin.y - 16.0));
@@ -710,6 +735,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
 }
 
 - (void)didTapLike {
+    [self animateActionButton:self.likeButton];
     if (self.post.contentId == nil) {
         self.likeCount += 1;
         self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
@@ -741,6 +767,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
 }
 
 - (void)didTapFavorite {
+    [self animateActionButton:self.favoriteButton];
     if (self.post.contentId == nil) {
         self.favoriteCountLabel.text = @"0";
         return;
@@ -767,6 +794,21 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
         } else {
             NSLog(@"❌ 收藏失败: %@", error.localizedDescription);
         }
+    }];
+}
+
+- (void)animateActionButton:(UIButton *)button {
+    [UIView animateWithDuration:0.12 animations:^{
+        button.transform = CGAffineTransformMakeScale(0.84, 0.84);
+    } completion:^(__unused BOOL finished) {
+        [UIView animateWithDuration:0.20
+                              delay:0
+             usingSpringWithDamping:0.52
+              initialSpringVelocity:3.0
+                            options:UIViewAnimationOptionCurveEaseOut
+                         animations:^{
+            button.transform = CGAffineTransformIdentity;
+        } completion:nil];
     }];
 }
 

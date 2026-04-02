@@ -221,6 +221,7 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
         // featuredTitle/封面图：按 year(create_time/date兜底) 升序取“最前面那条”
         NSString *featured = @"FEATURED MOMENT";
         NSString *coverURL = nil;
+        NSMutableArray<NSString *> *coverURLs = [NSMutableArray array];
 
         NSArray *sorted = list;
         if (list.count > 1) {
@@ -257,20 +258,22 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
             if ([imagesObj isKindOfClass:[NSArray class]]) {
                 for (id imgObj in imagesObj) {
                     if ([imgObj isKindOfClass:[NSString class]] && ((NSString *)imgObj).length > 0) {
-                        coverURL = (NSString *)imgObj;
-                        break;
+                        [coverURLs addObject:(NSString *)imgObj];
                     }
                 }
+                coverURL = coverURLs.firstObject;
             }
             if (!coverURL) {
                 // 兼容单张字段
                 id imageObj = d[@"image"];
                 if ([imageObj isKindOfClass:[NSString class]] && ((NSString *)imageObj).length > 0) {
                     coverURL = (NSString *)imageObj;
+                    [coverURLs addObject:coverURL];
                 } else {
                     id imageURLObj = d[@"image_url"];
                     if ([imageURLObj isKindOfClass:[NSString class]] && ((NSString *)imageURLObj).length > 0) {
                         coverURL = (NSString *)imageURLObj;
+                        [coverURLs addObject:coverURL];
                     }
                 }
             }
@@ -280,6 +283,7 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
 
         model.coverImage = nil;
         model.coverImageURLString = coverURL;
+        model.coverImageURLStrings = [coverURLs copy];
         [arr addObject:model];
     }
     self.months = arr;

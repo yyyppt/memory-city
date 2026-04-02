@@ -59,11 +59,11 @@
 
     NSString *content = self.contentText ?: @"";
     NSString *title = self.titleText ?: @"";
-    NSString *coverURL = self.coverImageURLString;
+    NSArray<NSString *> *imageURLs = [self.imageURLStrings isKindOfClass:[NSArray class]] ? self.imageURLStrings : @[];
 
     [self.detailView configureWithTitle:title
                                 dateText:(self.dateText ?: @"")
-                                  imageURL:coverURL
+                                 imageURLs:imageURLs
                                      body:content
                                 likeCount:self.likeCount];
 
@@ -88,7 +88,7 @@
   self.likeCount += 1;
   [self.detailView configureWithTitle:(self.titleText ?: @"")
                                dateText:(self.dateText ?: @"")
-                                 imageURL:self.coverImageURLString
+                                imageURLs:self.imageURLStrings ?: @[]
                                     body:self.detailView.bodyLabel.text ?: @""
                                likeCount:self.likeCount];
 }

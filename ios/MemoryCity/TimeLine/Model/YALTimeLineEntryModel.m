@@ -31,7 +31,9 @@
         _subtitleText = [subtitle copy] ?: @"";
         _dateText = [date copy] ?: @"";
         _contentText = [content copy] ?: @"";
+        _contentId = nil;
         _imageURLStrings = [imageURLs copy] ?: @[];
+        _imageCount = _imageURLStrings.count;
         _image = nil;
     }
     return self;

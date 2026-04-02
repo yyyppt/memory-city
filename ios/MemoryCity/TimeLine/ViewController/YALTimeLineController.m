@@ -6,11 +6,12 @@
 //
 
 #import "YALTimeLineController.h"
-#import "YALTimeLineDetailController.h"
+#import "YALPostDetailController.h"
 #import "YALTimeLineDayCell.h"
 #import "YALTimeLineEntryModel.h"
 #import "YALReleaseController.h"
 #import "YALTimelineManager.h"
+#import "../../Home/Model/YALPostModel.h"
 #import <Masonry/Masonry.h>
 
 @interface YALTimeLineController () <UITableViewDataSource, UITableViewDelegate>
@@ -58,7 +59,7 @@
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
-    self.tableView.rowHeight = 108;
+    self.tableView.rowHeight = 128;
     self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 24, 0);
     [self.tableView registerClass:[YALTimeLineDayCell class] forCellReuseIdentifier:@"YALTimeLineDayCell"];
     [self.view addSubview:self.tableView];
@@ -265,6 +266,13 @@
                                                         date:dateText
                                                      content:content
                                                   imageURLs:imageURLs];
+            id contentIdObj = item[@"content_id"];
+            if ([contentIdObj isKindOfClass:[NSNumber class]]) {
+                filled.contentId = (NSNumber *)contentIdObj;
+            } else if ([contentIdObj isKindOfClass:[NSString class]]) {
+                filled.contentId = @([(NSString *)contentIdObj integerValue]);
+            }
+            filled.imageCount = imageURLs.count;
             [entries addObject:filled];
         }
 
@@ -316,12 +324,27 @@
     (void)tableView;
     YALTimeLineEntryModel *entry = self.entries[indexPath.row];
 
-    YALTimeLineDetailController *detail = [[YALTimeLineDetailController alloc] init];
-    detail.dateText = entry.dateText ?: @"";
-    detail.titleText = entry.titleText ?: @"";
-    detail.contentText = entry.contentText ?: @"";
-    detail.coverImageURLString = (entry.imageURLStrings.count > 0) ? entry.imageURLStrings.firstObject : nil;
-    detail.coverImage = entry.image;
+    YALPostModel *post = [[YALPostModel alloc] init];
+    post.contentId = entry.contentId;
+    post.title = entry.titleText ?: @"";
+    post.content = entry.contentText ?: @"";
+    post.desc = entry.contentText.length > 0 ? entry.contentText : (entry.subtitleText ?: @"");
+    post.year = entry.dateText ?: @"";
+    post.createTime = entry.dateText ?: @"";
+    post.images = entry.imageURLStrings ?: @[];
+    post.imageURLString = post.images.firstObject ?: @"";
+    if (entry.image) {
+        post.image = entry.image;
+    } else if (@available(iOS 13.0, *)) {
+        post.image = [UIImage systemImageNamed:@"photo"];
+    } else {
+        post.image = [[UIImage alloc] init];
+    }
+    post.imageWidth = 300.0;
+    post.imageHeight = 360.0;
+
+    YALPostDetailController *detail = [[YALPostDetailController alloc] init];
+    detail.post = post;
     detail.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:detail animated:YES];
 }

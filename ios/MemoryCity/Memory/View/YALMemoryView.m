@@ -5,6 +5,7 @@
 @interface YALMemoryView () <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout>
 
 @property (nonatomic, strong) UIView *header;
+@property (nonatomic, strong) UILabel *eyebrowLabel;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *yearLabel;
 @property (nonatomic, strong) UIButton *prevButton;
@@ -40,8 +41,19 @@
     _header.backgroundColor = [UIColor clearColor];
     [self addSubview:_header];
 
+    _eyebrowLabel = [[UILabel alloc] init];
+    _eyebrowLabel.text = @"";
+    _eyebrowLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
+    _eyebrowLabel.textColor = [UIColor colorWithRed:0.74 green:0.47 blue:0.20 alpha:1.0];
+    _eyebrowLabel.hidden = YES;
+    [_header addSubview:_eyebrowLabel];
+
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.text = @"";
+    _titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    _titleLabel.textColor = [UIColor secondaryLabelColor];
+    _titleLabel.hidden = YES;
+    [_header addSubview:_titleLabel];
 
     _yearLabel = [[UILabel alloc] init];
     _yearLabel.font = [UIFont systemFontOfSize:34 weight:UIFontWeightHeavy];
@@ -84,9 +96,9 @@
     // Masonry 约束
     [_header mas_makeConstraints:^(MASConstraintMaker *make) {
         if (@available(iOS 11.0, *)) {
-            make.top.equalTo(self.mas_safeAreaLayoutGuideTop).offset(10);
+            make.top.equalTo(self.mas_safeAreaLayoutGuideTop).offset(12);
         } else {
-            make.top.equalTo(self.mas_top).offset(10);
+            make.top.equalTo(self.mas_top).offset(12);
         }
         make.left.right.equalTo(self);
         make.height.mas_equalTo(76.0);
@@ -190,7 +202,7 @@
     (void)collectionView; (void)collectionViewLayout; (void)indexPath;
     CGFloat w = self.bounds.size.width;
     CGFloat itemW = w - 16 * 2;
-    return CGSizeMake(itemW, 260);
+    return CGSizeMake(itemW, 320);
 }
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {

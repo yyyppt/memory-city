@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, nullable) UIImage *coverImage;
 /// 封面图片 URL（来自接口 images[0]，用于 SDWebImage 异步加载）
 @property (nonatomic, copy, nullable) NSString *coverImageURLString;
+@property (nonatomic, copy) NSArray<NSString *> *coverImageURLStrings;
 
 @property (nonatomic, readonly) NSString *monthName;
 @property (nonatomic, readonly) NSString *monthNumberText;
@@ -19,4 +20,3 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 NS_ASSUME_NONNULL_END
-

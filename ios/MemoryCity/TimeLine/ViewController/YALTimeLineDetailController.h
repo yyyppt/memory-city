@@ -15,8 +15,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *titleText;
 @property (nonatomic, copy, nullable) NSString *contentText;
 
-/// 用于 SDWebImage 异步加载封面
-@property (nonatomic, copy, nullable) NSString *coverImageURLString;
+/// 用于 SDWebImage 异步加载内容图片
+@property (nonatomic, copy) NSArray<NSString *> *imageURLStrings;
 
 @property (nonatomic, strong, nullable) UIImage *coverImage;
 

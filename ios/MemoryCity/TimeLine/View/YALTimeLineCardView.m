@@ -9,12 +9,24 @@
 #import <Masonry/Masonry.h>
 #import <SDWebImage/SDWebImage.h>
 
+static NSString *YALCardAbsoluteURLString(NSString *raw) {
+    if (![raw isKindOfClass:[NSString class]] || raw.length == 0) {
+        return nil;
+    }
+    if ([raw hasPrefix:@"http://"] || [raw hasPrefix:@"https://"]) {
+        return raw;
+    }
+    return [NSString stringWithFormat:@"http://%@", raw];
+}
+
 @interface YALTimeLineCardView ()
 
 @property (nonatomic, strong) UIImageView *imageView;
+@property (nonatomic, strong) UIImageView *stackImageView;
+@property (nonatomic, strong) UILabel *countBadgeLabel;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *dateLabel;
-@property (nonatomic, strong) UIView *moreDot;
+@property (nonatomic, strong) UILabel *summaryLabel;
 @property (nonatomic, strong) MASConstraint *imageHeightConstraint;
 
 @end
@@ -24,135 +36,168 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.backgroundColor = [UIColor systemBackgroundColor];
-        self.layer.cornerRadius = 14;
+        self.backgroundColor = [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+        self.layer.cornerRadius = 18.0;
         self.layer.masksToBounds = NO;
         self.layer.borderWidth = 1.0 / [UIScreen mainScreen].scale;
-        self.layer.borderColor = [UIColor colorWithWhite:0 alpha:0.06].CGColor;
+        self.layer.borderColor = [UIColor colorWithWhite:0 alpha:0.05].CGColor;
         self.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.08].CGColor;
-        self.layer.shadowOpacity = 1;
-        self.layer.shadowOffset = CGSizeMake(0, 6);
-        self.layer.shadowRadius = 14;
+        self.layer.shadowOpacity = 1.0;
+        self.layer.shadowOffset = CGSizeMake(0, 10);
+        self.layer.shadowRadius = 18.0;
+
+        _stackImageView = [[UIImageView alloc] init];
+        _stackImageView.contentMode = UIViewContentModeScaleAspectFill;
+        _stackImageView.clipsToBounds = YES;
+        _stackImageView.layer.cornerRadius = 13.0;
+        _stackImageView.layer.borderWidth = 2.0;
+        _stackImageView.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.75].CGColor;
+        _stackImageView.alpha = 0.0;
+        [self addSubview:_stackImageView];
 
         _imageView = [[UIImageView alloc] init];
         _imageView.contentMode = UIViewContentModeScaleAspectFill;
         _imageView.clipsToBounds = YES;
-        _imageView.layer.cornerRadius = 11;
+        _imageView.layer.cornerRadius = 15.0;
         [self addSubview:_imageView];
+
+        _countBadgeLabel = [[UILabel alloc] init];
+        _countBadgeLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.55];
+        _countBadgeLabel.textColor = [UIColor whiteColor];
+        _countBadgeLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightBold];
+        _countBadgeLabel.textAlignment = NSTextAlignmentCenter;
+        _countBadgeLabel.layer.cornerRadius = 12.0;
+        _countBadgeLabel.layer.masksToBounds = YES;
+        _countBadgeLabel.hidden = YES;
+        [self addSubview:_countBadgeLabel];
 
         _titleLabel = [[UILabel alloc] init];
         _titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
         _titleLabel.textColor = [UIColor labelColor];
+        _titleLabel.numberOfLines = 2;
         [self addSubview:_titleLabel];
 
         _dateLabel = [[UILabel alloc] init];
-        _dateLabel.font = [UIFont systemFontOfSize:12];
-        _dateLabel.textColor = [UIColor secondaryLabelColor];
+        _dateLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        _dateLabel.textColor = [UIColor colorWithRed:0.65 green:0.42 blue:0.18 alpha:1.0];
         [self addSubview:_dateLabel];
 
-        _moreDot = [[UIView alloc] init];
-        _moreDot.backgroundColor = [UIColor tertiaryLabelColor];
-        _moreDot.layer.cornerRadius = 3;
-        _moreDot.alpha = 0.6;
-        [self addSubview:_moreDot];
+        _summaryLabel = [[UILabel alloc] init];
+        _summaryLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
+        _summaryLabel.textColor = [UIColor secondaryLabelColor];
+        _summaryLabel.numberOfLines = 2;
+        [self addSubview:_summaryLabel];
 
         [self addTarget:self action:@selector(cardTapped) forControlEvents:UIControlEventTouchUpInside];
 
-        // Masonry 约束
+        [_stackImageView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self).offset(18);
+            make.left.equalTo(self).offset(18);
+            make.right.equalTo(self).offset(-18);
+            make.height.mas_equalTo(138);
+        }];
         [_imageView mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(self.mas_top).offset(10);
-            make.left.equalTo(self.mas_left).offset(10);
-            make.right.equalTo(self.mas_right).offset(-10);
-            self.imageHeightConstraint = make.height.mas_equalTo(0);
+            make.top.equalTo(self).offset(10);
+            make.left.equalTo(self).offset(10);
+            make.right.equalTo(self).offset(-10);
+            self.imageHeightConstraint = make.height.mas_equalTo(146);
         }];
-
+        [_countBadgeLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.right.equalTo(_imageView).offset(-10);
+            make.bottom.equalTo(_imageView).offset(-10);
+            make.height.mas_equalTo(24);
+            make.width.mas_greaterThanOrEqualTo(30);
+        }];
         [_titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(_imageView.mas_bottom).offset(8);
-            make.left.equalTo(self.mas_left).offset(12);
-            make.right.equalTo(self.mas_right).offset(-24);
-            make.height.mas_equalTo(20);
+            make.top.equalTo(_imageView.mas_bottom).offset(10);
+            make.left.equalTo(self).offset(14);
+            make.right.equalTo(self).offset(-14);
         }];
-
         [_dateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(_titleLabel.mas_bottom).offset(4);
+            make.top.equalTo(_titleLabel.mas_bottom).offset(6);
             make.left.right.equalTo(_titleLabel);
-            make.height.mas_equalTo(16);
         }];
-
-        [_moreDot mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.right.equalTo(self.mas_right).offset(-12);
-            make.top.equalTo(self.mas_top).offset(14);
-            make.width.height.mas_equalTo(6);
+        [_summaryLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(_dateLabel.mas_bottom).offset(6);
+            make.left.right.equalTo(_titleLabel);
         }];
     }
     return self;
 }
 
 + (CGFloat)imageHeightForImage:(UIImage *)img fitWidth:(CGFloat)fitWidth {
-    if (!img || img.size.width <= 0) return 0;
+    if (!img || img.size.width <= 0) return 146.0;
     CGFloat h = fitWidth * (img.size.height / img.size.width);
-    return MIN(h, fitWidth * 1.8);
+    return MIN(MAX(h, 132.0), fitWidth * 1.25);
 }
 
 + (CGFloat)cardHeightForEntry:(YALTimeLineEntryModel *)entry width:(CGFloat)cardWidth {
-    UIImage *img = entry.image;
-    CGFloat imageH = 0;
-    if (img) {
-        imageH = [self imageHeightForImage:img fitWidth:cardWidth - 20];
-    } else {
-        // 无图片（包含没拿到 URL 尺寸）时：占位图也要有高度
-        imageH = 160.0;
+    CGFloat imageH = 146.0;
+    if (entry.image) {
+        imageH = [self imageHeightForImage:entry.image fitWidth:cardWidth - 20];
     }
-    return 10 + imageH + 8 + 20 + 4 + 16 + 10;
+    CGFloat summaryH = entry.subtitleText.length > 0 ? 38.0 : 0.0;
+    return 10 + imageH + 10 + 42 + 6 + 16 + summaryH + 14;
 }
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:14].CGPath;
+    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:18.0].CGPath;
 }
 
 - (void)setEntry:(YALTimeLineEntryModel *)entry {
     _entry = entry;
-    _titleLabel.text = entry.titleText.length > 0 ? entry.titleText : entry.dateText;
-    _dateLabel.text = entry.subtitleText.length > 0 ? entry.subtitleText : entry.dateText;
+    self.titleLabel.text = entry.titleText.length > 0 ? entry.titleText : entry.dateText;
+    self.dateLabel.text = entry.dateText ?: @"";
+    self.summaryLabel.text = entry.subtitleText ?: @"";
 
     UIImage *placeholder = nil;
     if (@available(iOS 13.0, *)) {
         placeholder = [UIImage systemImageNamed:@"photo"];
     }
 
-    NSString *firstURLStr = (entry.imageURLStrings.count > 0) ? entry.imageURLStrings.firstObject : nil;
-    if (firstURLStr.length > 0) {
-        if (![firstURLStr hasPrefix:@"http://"] && ![firstURLStr hasPrefix:@"https://"]) {
-            firstURLStr = [NSString stringWithFormat:@"http://%@", firstURLStr];
-        }
-        NSURL *url = [NSURL URLWithString:firstURLStr];
-        _imageView.contentMode = UIViewContentModeScaleAspectFill;
-        _imageView.backgroundColor = [UIColor clearColor];
-        [_imageView sd_setImageWithURL:url
-                           placeholderImage:placeholder
-                                    options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
-    } else if (entry.image) {
-        _imageView.contentMode = UIViewContentModeScaleAspectFill;
-        _imageView.backgroundColor = [UIColor clearColor];
-        _imageView.image = entry.image;
+    NSString *firstURLStr = entry.imageURLStrings.count > 0 ? YALCardAbsoluteURLString(entry.imageURLStrings.firstObject) : nil;
+    NSString *secondURLStr = entry.imageURLStrings.count > 1 ? YALCardAbsoluteURLString(entry.imageURLStrings[1]) : nil;
+    if (secondURLStr.length > 0) {
+        self.stackImageView.alpha = 1.0;
+        [self.stackImageView sd_setImageWithURL:[NSURL URLWithString:secondURLStr]
+                               placeholderImage:placeholder
+                                        options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
     } else {
-        _imageView.contentMode = UIViewContentModeScaleAspectFit;
-        _imageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-        _imageView.image = placeholder;
+        self.stackImageView.alpha = 0.0;
+        self.stackImageView.image = nil;
+    }
+
+    if (firstURLStr.length > 0) {
+        self.imageView.contentMode = UIViewContentModeScaleAspectFill;
+        self.imageView.backgroundColor = [UIColor clearColor];
+        [self.imageView sd_setImageWithURL:[NSURL URLWithString:firstURLStr]
+                          placeholderImage:placeholder
+                                   options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+    } else if (entry.image) {
+        self.imageView.contentMode = UIViewContentModeScaleAspectFill;
+        self.imageView.backgroundColor = [UIColor clearColor];
+        self.imageView.image = entry.image;
+    } else {
+        self.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.imageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+        self.imageView.image = placeholder;
         if (@available(iOS 13.0, *)) {
-            _imageView.tintColor = [UIColor tertiaryLabelColor];
+            self.imageView.tintColor = [UIColor tertiaryLabelColor];
         }
     }
 
-    // 根据图片更新高度约束
-    UIImage *img = entry.image;
-    CGFloat imgH = [[self class] imageHeightForImage:img fitWidth:self.bounds.size.width - 20];
+    NSInteger imageCount = entry.imageURLStrings.count;
+    if (entry.image && imageCount == 0) {
+        imageCount = 1;
+    }
+    self.countBadgeLabel.hidden = (imageCount <= 1);
+    self.countBadgeLabel.text = imageCount > 1 ? [NSString stringWithFormat:@"+%ld", (long)(imageCount - 1)] : @"";
+
+    CGFloat imgH = entry.image ? [[self class] imageHeightForImage:entry.image fitWidth:self.bounds.size.width - 20] : 146.0;
     [self.imageHeightConstraint uninstall];
-    [_imageView mas_updateConstraints:^(MASConstraintMaker *make) {
-        // 占位图 / 图片加载前也要保持稳定高度
-        CGFloat finalH = (imgH > 0 ? imgH : 160.0);
-        self.imageHeightConstraint = make.height.mas_equalTo(finalH);
+    [self.imageView mas_updateConstraints:^(MASConstraintMaker *make) {
+        self.imageHeightConstraint = make.height.mas_equalTo(imgH);
     }];
 }
 

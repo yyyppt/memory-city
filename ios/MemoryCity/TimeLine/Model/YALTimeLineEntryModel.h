@@ -18,9 +18,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// 详情里要展示的正文内容
 @property (nonatomic, copy) NSString *contentText;
+@property (nonatomic, strong, nullable) NSNumber *contentId;
 
 /// 图片 URL 数组（用于 SDWebImage 异步加载）
 @property (nonatomic, copy) NSArray<NSString *> *imageURLStrings;
+@property (nonatomic, assign) NSInteger imageCount;
 
 /// 兼容旧 demo：直接持有UIImage
 @property (nonatomic, strong, nullable) UIImage *image;

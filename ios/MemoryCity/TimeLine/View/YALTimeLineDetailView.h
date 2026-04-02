@@ -11,7 +11,6 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface YALTimeLineDetailView : UIView
 
-@property (nonatomic, strong, readonly) UIImageView *coverImageView;
 @property (nonatomic, strong, readonly) UILabel *titleLabel;
 @property (nonatomic, strong, readonly) UILabel *dateLabel;
 @property (nonatomic, strong, readonly) UILabel *bodyLabel;
@@ -22,7 +21,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)configureWithTitle:(nullable NSString *)title
                    dateText:(NSString *)dateText
-                     imageURL:(nullable NSString *)imageURL
+                     imageURLs:(NSArray<NSString *> *)imageURLs
                         body:(NSString *)body
                    likeCount:(NSInteger)likeCount;
 

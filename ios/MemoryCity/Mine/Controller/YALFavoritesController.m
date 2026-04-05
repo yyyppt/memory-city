@@ -7,12 +7,21 @@
 
 #import "YALFavoritesController.h"
 #import <Masonry/Masonry.h>
+#import "YALContentManager.h"
+#import "YALPostModel.h"
+#import "YALPostDetailController.h"
+#import "YALAuthManager.h"
+
+static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
 
 @interface YALFavoritesController () <UITableViewDataSource, UITableViewDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSArray *favoritesData;
+@property (nonatomic, strong) NSMutableArray<YALPostModel *> *favoritesData;
 @property (nonatomic, strong) UILabel *emptyLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+@property (nonatomic, assign) BOOL isLoading;
+@property (nonatomic, assign) BOOL hasLoadedOnce;
 
 @end
 
@@ -20,25 +29,33 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
+    self.favoritesData = [NSMutableArray array];
     [self setupUI];
-    [self setupData];
+    [self loadData];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+
+    if (self.hasLoadedOnce) {
+        [self loadData];
+    }
 }
 
 - (void)setupUI {
     self.title = @"我的收藏";
     self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
-    
-    // 创建表格视图
+
     self.tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStyleInsetGrouped];
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
-    self.tableView.rowHeight = 80;
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 104;
     self.tableView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.tableView];
-    
-    // 创建空状态标签
+
     self.emptyLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.emptyLabel.text = @"还没有收藏内容\n发现喜欢的内容可以收藏起来哦！";
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
@@ -47,47 +64,84 @@
     self.emptyLabel.numberOfLines = 0;
     self.emptyLabel.hidden = YES;
     self.tableView.backgroundView = self.emptyLabel;
+
+    self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.loadingIndicator.hidesWhenStopped = YES;
+    [self.view addSubview:self.loadingIndicator];
+    [self.loadingIndicator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.center.equalTo(self.view);
+    }];
+
+    if (@available(iOS 10.0, *)) {
+        UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
+        [refreshControl addTarget:self action:@selector(loadData) forControlEvents:UIControlEventValueChanged];
+        self.tableView.refreshControl = refreshControl;
+    }
 }
 
-- (void)setupData {
-    // 模拟收藏数据
-    self.favoritesData = @[
-        @{
-            @"title": @"城市天际线夜景",
-            @"author": @"摄影爱好者",
-            @"preview": @"上海 · 外滩视角 · 昨天",
-            @"category": @"摄影",
-            @"isPrivate": @NO
-        },
-        @{
-            @"title": @"老街巷弄的美食地图",
-            @"author": @"美食探索家",
-            @"preview": @"苏州 · 平江路 · 3天前",
-            @"category": @"美食",
-            @"isPrivate": @NO
-        },
-        @{
-            @"title": @"骑行路线分享：环湖美景",
-            @"author": @"骑行达人",
-            @"preview": @"南京 · 玄武湖 · 1周前",
-            @"category": @"运动",
-            @"isPrivate": @YES
-        },
-        @{
-            @"title": @"独立书店巡礼",
-            @"author": @"书店常客",
-            @"preview": @"杭州 · 多家书店 · 2周前",
-            @"category": @"文化",
-            @"isPrivate": @NO
+- (void)loadData {
+    if (self.isLoading) {
+        return;
+    }
+
+    if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
+        self.emptyLabel.text = @"登录后可查看我的收藏\n先去登录，再回来看看收藏夹吧。";
+        [self.favoritesData removeAllObjects];
+        [self.tableView reloadData];
+        [self updateEmptyState];
+        return;
+    }
+
+    self.isLoading = YES;
+    [self.loadingIndicator startAnimating];
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] getMyCollectListWithCompletion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
         }
-    ];
-    
-    [self updateEmptyState];
-    [self.tableView reloadData];
+
+        strongSelf.isLoading = NO;
+        strongSelf.hasLoadedOnce = YES;
+        [strongSelf.loadingIndicator stopAnimating];
+
+        if (@available(iOS 10.0, *)) {
+            if (strongSelf.tableView.refreshControl.isRefreshing) {
+                [strongSelf.tableView.refreshControl endRefreshing];
+            }
+        }
+
+        if (!success) {
+            if (strongSelf.favoritesData.count == 0) {
+                NSString *displayMessage = message.length > 0 ? message : (error.localizedDescription ?: @"加载失败");
+                [strongSelf showMessage:displayMessage type:1];
+            }
+            [strongSelf updateEmptyState];
+            return;
+        }
+
+        [strongSelf.favoritesData removeAllObjects];
+        for (id item in contentList) {
+            if (![item isKindOfClass:[YALPostModel class]]) {
+                continue;
+            }
+            YALPostModel *model = (YALPostModel *)item;
+            // /interact/collect/my 返回的就是“我的收藏”，这里以后端结果为准，
+            // 避免本地旧缓存把已收藏状态覆盖成未收藏。
+            model.isCollected = YES;
+            [strongSelf persistCollectedStatus:YES contentId:model.contentId];
+            [strongSelf.favoritesData addObject:model];
+        }
+
+        [strongSelf.tableView reloadData];
+        [strongSelf updateEmptyState];
+    }];
 }
 
 - (void)updateEmptyState {
     self.emptyLabel.hidden = (self.favoritesData.count > 0);
+    self.tableView.backgroundView.hidden = self.emptyLabel.hidden;
 }
 
 #pragma mark - UITableViewDataSource
@@ -105,29 +159,37 @@
         cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
         cell.detailTextLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
         cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-        cell.detailTextLabel.numberOfLines = 2;
+        cell.detailTextLabel.numberOfLines = 0;
     }
-    
+
     if (indexPath.row < self.favoritesData.count) {
-        NSDictionary *favorite = self.favoritesData[indexPath.row];
-        
-        // 设置图标
+        YALPostModel *favorite = self.favoritesData[indexPath.row];
+
         if (@available(iOS 13.0, *)) {
-            NSString *iconName = [favorite[@"isPrivate"] boolValue] ? @"lock.fill" : @"heart.fill";
-            cell.imageView.image = [UIImage systemImageNamed:iconName];
-            cell.imageView.tintColor = [favorite[@"isPrivate"] boolValue] ? [UIColor systemGrayColor] : [self accentColor];
+            cell.imageView.image = [UIImage systemImageNamed:@"star.fill"];
+            cell.imageView.tintColor = [UIColor systemOrangeColor];
         }
-        
-        // 设置标题
-        cell.textLabel.text = favorite[@"title"] ?: @"收藏内容";
-        
-        // 设置详细信息
-        NSString *author = favorite[@"author"] ?: @"作者";
-        NSString *preview = favorite[@"preview"] ?: @"";
-        NSString *category = favorite[@"category"] ?: @"";
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ · %@\n%@", author, category, preview];
+
+        NSString *title = favorite.title.length > 0 ? favorite.title : @"收藏内容";
+        cell.textLabel.text = title;
+
+        NSMutableArray<NSString *> *details = [NSMutableArray array];
+        if (favorite.city.length > 0) {
+            [details addObject:favorite.city];
+        }
+        if (favorite.year.length > 0) {
+            [details addObject:favorite.year];
+        }
+        NSString *metaText = details.count > 0 ? [details componentsJoinedByString:@" · "] : @"已收藏";
+        NSString *preview = favorite.content.length > 0 ? favorite.content : @"点击查看内容详情";
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@\n❤️ %ld  💬 %ld  ⭐️ %ld\n%@",
+                                     metaText,
+                                     (long)MAX(favorite.likeCount, 0),
+                                     (long)MAX(favorite.commentCount, 0),
+                                     (long)MAX(favorite.collectCount, 0),
+                                     preview];
     }
-    
+
     return cell;
 }
 
@@ -135,18 +197,18 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    
+
     if (indexPath.row < self.favoritesData.count) {
-        NSDictionary *favorite = self.favoritesData[indexPath.row];
+        YALPostModel *favorite = self.favoritesData[indexPath.row];
         [self showFavoriteDetail:favorite];
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"这里显示你收藏的其他用户的内容";
+    return @"这里显示你收藏过的内容";
 }
 
-- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_AVAILABLE(ios(11.0)) {
+- (nullable UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath API_AVAILABLE(ios(11.0)) {
     if (indexPath.row >= self.favoritesData.count) {
         return nil;
     }
@@ -156,6 +218,10 @@
                                                                                 title:@"取消收藏"
                                                                               handler:^(__unused UIContextualAction * _Nonnull action, __unused UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            completionHandler(NO);
+            return;
+        }
         [strongSelf confirmUnfavoriteAtIndexPath:indexPath completion:completionHandler];
     }];
     deleteAction.backgroundColor = [UIColor systemOrangeColor];
@@ -165,92 +231,38 @@
     return config;
 }
 
-- (void)showFavoriteDetail:(NSDictionary *)favorite {
-    NSString *title = favorite[@"title"] ?: @"收藏内容";
-    NSString *author = favorite[@"author"] ?: @"作者";
-    NSString *category = favorite[@"category"] ?: @"";
-    NSString *preview = favorite[@"preview"] ?: @"";
-    BOOL isPrivate = [favorite[@"isPrivate"] boolValue];
-    
-    NSString *privacyStatus = isPrivate ? @"私密内容" : @"公开内容";
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:[NSString stringWithFormat:@"作者：%@\n分类：%@\n状态：%@\n\n%@", 
-                                                                            author, 
-                                                                            category,
-                                                                            privacyStatus,
-                                                                            preview]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"查看内容"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        // 这里可以跳转到收藏的内容详情页面
-        [self showMessage:@"跳转到内容详情页面" type:0];
-    }]];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消收藏"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        [self confirmUnfavoriteForFavorite:favorite];
-    }]];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    
-    [self presentViewController:alert animated:YES completion:nil];
+#pragma mark - Detail / Unfavorite
+
+- (void)showFavoriteDetail:(YALPostModel *)favorite {
+    YALPostDetailController *detailController = [[YALPostDetailController alloc] init];
+    detailController.post = favorite;
+    detailController.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:detailController animated:YES];
 }
 
 - (void)confirmUnfavoriteAtIndexPath:(NSIndexPath *)indexPath completion:(void (^)(BOOL finished))completion {
     if (indexPath.row >= self.favoritesData.count) {
-        if (completion) completion(NO);
+        if (completion) {
+            completion(NO);
+        }
         return;
     }
-    
-    NSDictionary *favorite = self.favoritesData[indexPath.row];
+
+    YALPostModel *favorite = self.favoritesData[indexPath.row];
     [self showUnfavoriteConfirmAlertWithFavorite:favorite confirmHandler:^{
-        // 在实际项目中，这里应该调用API取消收藏
-        // 这里模拟取消收藏操作
-        NSMutableArray *mutableData = [self.favoritesData mutableCopy];
-        [mutableData removeObjectAtIndex:indexPath.row];
-        self.favoritesData = [mutableData copy];
-        
-        [self.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-        [self updateEmptyState];
-        
-        [self showMessage:@"已取消收藏" type:0];
-        if (completion) completion(YES);
+        [self unfavoritePost:favorite indexPath:indexPath completion:completion];
     } cancelHandler:^{
-        if (completion) completion(NO);
+        if (completion) {
+            completion(NO);
+        }
     }];
 }
 
-- (void)confirmUnfavoriteForFavorite:(NSDictionary *)favorite {
-    [self showUnfavoriteConfirmAlertWithFavorite:favorite confirmHandler:^{
-        // 在实际项目中，这里应该调用API取消收藏
-        // 这里模拟取消收藏操作
-        NSUInteger index = [self.favoritesData indexOfObject:favorite];
-        if (index != NSNotFound) {
-            NSMutableArray *mutableData = [self.favoritesData mutableCopy];
-            [mutableData removeObjectAtIndex:index];
-            self.favoritesData = [mutableData copy];
-            
-            [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]] 
-                                  withRowAnimation:UITableViewRowAnimationAutomatic];
-            [self updateEmptyState];
-            
-            [self showMessage:@"已取消收藏" type:0];
-        }
-    } cancelHandler:nil];
-}
-
-- (void)showUnfavoriteConfirmAlertWithFavorite:(NSDictionary *)favorite
+- (void)showUnfavoriteConfirmAlertWithFavorite:(YALPostModel *)favorite
                                 confirmHandler:(dispatch_block_t)confirmHandler
                                  cancelHandler:(nullable dispatch_block_t)cancelHandler {
-    NSString *title = @"确认取消收藏";
-    NSString *message = [NSString stringWithFormat:@"确定取消收藏《%@》吗？", favorite[@"title"] ?: @"这条内容"];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+    NSString *message = [NSString stringWithFormat:@"确定取消收藏《%@》吗？", favorite.title.length > 0 ? favorite.title : @"这条内容"];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"确认取消收藏"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
@@ -270,21 +282,129 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 工具方法
+- (void)unfavoritePost:(YALPostModel *)favorite
+             indexPath:(nullable NSIndexPath *)indexPath
+            completion:(void (^ _Nullable)(BOOL finished))completion {
+    if (favorite.contentId.integerValue <= 0) {
+        [self showMessage:@"内容ID无效，无法取消收藏" type:1];
+        if (completion) {
+            completion(NO);
+        }
+        return;
+    }
 
-- (UIColor *)accentColor {
-    return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    [self.loadingIndicator startAnimating];
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] toggleCollectContentWithId:favorite.contentId completion:^(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        [strongSelf.loadingIndicator stopAnimating];
+
+        BOOL isCollected = NO;
+        id collectedStatusObj = result[@"is_collected"];
+        if (![collectedStatusObj respondsToSelector:@selector(boolValue)]) {
+            collectedStatusObj = result[@"is_collect"];
+        }
+        if (![collectedStatusObj respondsToSelector:@selector(boolValue)]) {
+            collectedStatusObj = result[@"collected"];
+        }
+        if (![collectedStatusObj respondsToSelector:@selector(boolValue)]) {
+            collectedStatusObj = result[@"collect_status"];
+        }
+        if ([collectedStatusObj respondsToSelector:@selector(boolValue)]) {
+            isCollected = [collectedStatusObj boolValue];
+        }
+
+        if (success && !isCollected) {
+            NSUInteger index = NSNotFound;
+            if (indexPath && indexPath.row < strongSelf.favoritesData.count) {
+                YALPostModel *target = strongSelf.favoritesData[indexPath.row];
+                if ([target.contentId isEqual:favorite.contentId]) {
+                    index = indexPath.row;
+                }
+            }
+            if (index == NSNotFound) {
+                index = [strongSelf.favoritesData indexOfObjectPassingTest:^BOOL(YALPostModel * _Nonnull obj, NSUInteger idx, __unused BOOL * _Nonnull stop) {
+                    return [obj.contentId isEqual:favorite.contentId];
+                }];
+            }
+
+            if (index != NSNotFound && index < strongSelf.favoritesData.count) {
+                [strongSelf.favoritesData removeObjectAtIndex:index];
+                [strongSelf.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]]
+                                             withRowAnimation:UITableViewRowAnimationAutomatic];
+            } else {
+                [strongSelf.tableView reloadData];
+            }
+            [strongSelf persistCollectedStatus:NO contentId:favorite.contentId];
+            [strongSelf updateEmptyState];
+            [strongSelf showMessage:@"已取消收藏" type:0];
+            if (completion) {
+                completion(YES);
+            }
+            return;
+        }
+
+        NSString *displayMessage = error.localizedDescription.length > 0 ? error.localizedDescription : @"取消收藏失败";
+        [strongSelf showMessage:displayMessage type:1];
+        if (completion) {
+            completion(NO);
+        }
+    }];
 }
 
+#pragma mark - Cache
+
+- (BOOL)cachedBoolStatusForPrefix:(NSString *)prefix contentId:(NSNumber *)contentId hasValue:(BOOL *)hasValue {
+    if (prefix.length == 0 || contentId.integerValue <= 0) {
+        if (hasValue) {
+            *hasValue = NO;
+        }
+        return NO;
+    }
+
+    NSInteger userId = [YALAuthManager sharedManager].currentUser.userId;
+    NSString *key = userId > 0 ? [NSString stringWithFormat:@"%@_%ld_%@", prefix, (long)userId, contentId]
+                               : [NSString stringWithFormat:@"%@_%@", prefix, contentId];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:key] == nil) {
+        if (hasValue) {
+            *hasValue = NO;
+        }
+        return NO;
+    }
+    if (hasValue) {
+        *hasValue = YES;
+    }
+    return [defaults boolForKey:key];
+}
+
+- (void)persistCollectedStatus:(BOOL)value contentId:(NSNumber *)contentId {
+    if (contentId.integerValue <= 0) {
+        return;
+    }
+
+    NSInteger userId = [YALAuthManager sharedManager].currentUser.userId;
+    NSString *key = userId > 0 ? [NSString stringWithFormat:@"%@_%ld_%@", kYALCollectedStatusCachePrefix, (long)userId, contentId]
+                               : [NSString stringWithFormat:@"%@_%@", kYALCollectedStatusCachePrefix, contentId];
+    [[NSUserDefaults standardUserDefaults] setBool:value forKey:key];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+#pragma mark - Helpers
+
 - (void)showMessage:(NSString *)message type:(NSInteger)type {
+    (void)type;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    
     [alert addAction:[UIAlertAction actionWithTitle:@"确定"
                                               style:UIAlertActionStyleDefault
                                             handler:nil]];
-    
     [self presentViewController:alert animated:YES completion:nil];
 }
 

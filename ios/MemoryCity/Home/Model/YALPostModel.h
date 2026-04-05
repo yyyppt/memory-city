@@ -31,6 +31,11 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) NSArray<NSString *> *images;
 @property (nonatomic, copy) NSString *createTime;
 @property (nonatomic, assign) BOOL isPublic;
+@property (nonatomic, assign) NSInteger likeCount;
+@property (nonatomic, assign) NSInteger collectCount;
+@property (nonatomic, assign) NSInteger commentCount;
+@property (nonatomic, assign) BOOL isLiked;
+@property (nonatomic, assign) BOOL isCollected;
 
 /// 从字典初始化模型
 /// @param dict 字典数据

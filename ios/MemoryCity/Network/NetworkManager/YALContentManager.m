@@ -8,6 +8,7 @@
 #import "YALContentManager.h"
 #import "YALNetworkManager.h"
 #import "YALAuthManager.h"
+#import "YALPostModel.h"
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 //static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
@@ -370,6 +371,8 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
     [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSLog(@"💬 评论列表请求: url=%@ params=%@", url, parameters);
+        NSLog(@"💬 评论列表响应: %@", responseObject);
         NSArray *comments = nil;
         if ([responseObject isKindOfClass:[NSArray class]]) {
             comments = (NSArray *)responseObject;
@@ -628,6 +631,169 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
         NSLog(@"❌ 获取我的内容列表失败: %@", error);
+        if (completion) {
+            completion(NO, nil, @"网络请求失败", error);
+        }
+    }];
+}
+
+- (void)getAllContentListWithPage:(NSInteger)page
+                         pageSize:(NSInteger)pageSize
+                       completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/content/list", kYALAPIBaseURL];
+
+    NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
+    parameters[@"page"] = @(MAX(page, 1));
+    parameters[@"pageSize"] = @(MAX(pageSize, 1));
+    parameters[@"size"] = @(MAX(pageSize, 1));
+    parameters[@"limit"] = @(MAX(pageSize, 1));
+
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    NSLog(@"📡 获取全部内容列表请求详情：");
+    NSLog(@"🔗 URL: %@", url);
+    NSLog(@"📦 参数: %@", parameters);
+    NSLog(@"🔑 Headers: %@", headers);
+
+    [network GET:url
+      parameters:parameters
+         headers:headers
+        progress:nil
+         success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSLog(@"✅ 获取全部内容列表成功，收到响应：%@", responseObject);
+
+        if (![responseObject isKindOfClass:[NSDictionary class]]) {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
+            if (completion) {
+                completion(NO, nil, @"无效的响应格式", error);
+            }
+            return;
+        }
+
+        NSDictionary *response = (NSDictionary *)responseObject;
+        NSInteger code = [response[@"code"] respondsToSelector:@selector(integerValue)] ? [response[@"code"] integerValue] : 200;
+        NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
+        id data = response[@"data"];
+        NSArray *listData = nil;
+
+        if ([data isKindOfClass:[NSDictionary class]]) {
+            if ([data[@"list"] isKindOfClass:[NSArray class]]) {
+                listData = data[@"list"];
+            } else if ([data[@"records"] isKindOfClass:[NSArray class]]) {
+                listData = data[@"records"];
+            }
+        } else if ([data isKindOfClass:[NSArray class]]) {
+            listData = (NSArray *)data;
+        } else if ([response[@"list"] isKindOfClass:[NSArray class]]) {
+            listData = response[@"list"];
+        }
+
+        if (code != 200) {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:code
+                                             userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"获取内容列表失败"}];
+            if (completion) {
+                completion(NO, nil, msg, error);
+            }
+            return;
+        }
+
+        NSMutableArray<YALPostModel *> *contentList = [NSMutableArray array];
+        for (id item in listData) {
+            if (![item isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+            YALPostModel *model = [[YALPostModel alloc] initWithDictionary:(NSDictionary *)item];
+            [contentList addObject:model];
+        }
+
+        if (completion) {
+            completion(YES, [contentList copy], msg, nil);
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        NSLog(@"❌ 获取全部内容列表失败: %@", error);
+        if (completion) {
+            completion(NO, nil, @"网络请求失败", error);
+        }
+    }];
+}
+
+- (void)getMyCollectListWithCompletion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/collect/my", kYALAPIBaseURL];
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    NSLog(@"📡 获取我的收藏列表请求详情：");
+    NSLog(@"🔗 URL: %@", url);
+    NSLog(@"🔑 Headers: %@", headers);
+
+    [network GET:url
+      parameters:nil
+         headers:headers
+        progress:nil
+         success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSLog(@"✅ 获取我的收藏列表成功，收到响应：%@", responseObject);
+
+        NSArray *rawList = nil;
+        NSString *message = @"";
+
+        if ([responseObject isKindOfClass:[NSArray class]]) {
+            rawList = (NSArray *)responseObject;
+        } else if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *response = (NSDictionary *)responseObject;
+            NSInteger code = [response[@"code"] respondsToSelector:@selector(integerValue)] ? [response[@"code"] integerValue] : 200;
+            message = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
+            if (code != 200) {
+                NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                     code:code
+                                                 userInfo:@{NSLocalizedDescriptionKey: message.length > 0 ? message : @"获取我的收藏失败"}];
+                if (completion) {
+                    completion(NO, nil, message, error);
+                }
+                return;
+            }
+
+            id data = response[@"data"];
+            if ([data isKindOfClass:[NSArray class]]) {
+                rawList = (NSArray *)data;
+            } else if ([data isKindOfClass:[NSDictionary class]]) {
+                if ([data[@"list"] isKindOfClass:[NSArray class]]) {
+                    rawList = data[@"list"];
+                } else if ([data[@"records"] isKindOfClass:[NSArray class]]) {
+                    rawList = data[@"records"];
+                }
+            } else if ([response[@"list"] isKindOfClass:[NSArray class]]) {
+                rawList = response[@"list"];
+            }
+        }
+
+        if (![rawList isKindOfClass:[NSArray class]]) {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:-1
+                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
+            if (completion) {
+                completion(NO, nil, @"无效的响应格式", error);
+            }
+            return;
+        }
+
+        NSMutableArray<YALPostModel *> *contentList = [NSMutableArray array];
+        for (id item in rawList) {
+            if (![item isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+            YALPostModel *model = [[YALPostModel alloc] initWithDictionary:(NSDictionary *)item];
+            [contentList addObject:model];
+        }
+
+        if (completion) {
+            completion(YES, [contentList copy], message, nil);
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        NSLog(@"❌ 获取我的收藏列表失败: %@", error);
         if (completion) {
             completion(NO, nil, @"网络请求失败", error);
         }

@@ -65,6 +65,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)toggleCollectContentWithId:(NSNumber *)contentId
                         completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion;
 
+/// 获取我的收藏列表
+- (void)getMyCollectListWithCompletion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
+
 /// 获取我的内容列表
 /// @param page 页码（从1开始）
 /// @param pageSize 每页数量

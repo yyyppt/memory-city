@@ -7,22 +7,45 @@
 
 #import "YALLikesController.h"
 #import <Masonry/Masonry.h>
+#import "YALContentManager.h"
+#import "YALPostModel.h"
+#import "YALPostDetailController.h"
+#import "YALAuthManager.h"
 
 @interface YALLikesController () <UITableViewDataSource, UITableViewDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSArray *likesData;
+@property (nonatomic, strong) NSMutableArray<YALPostModel *> *likesData;
 @property (nonatomic, strong) UILabel *emptyLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+@property (nonatomic, assign) NSInteger currentPage;
+@property (nonatomic, assign) BOOL isLoading;
+@property (nonatomic, assign) BOOL hasMoreData;
+@property (nonatomic, assign) BOOL hasLoadedOnce;
 
 @end
 
 @implementation YALLikesController
 
+static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
+    self.likesData = [NSMutableArray array];
+    self.currentPage = 1;
+    self.hasMoreData = YES;
+
     [self setupUI];
-    [self setupData];
+    [self loadData];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+
+    if (self.hasLoadedOnce) {
+        [self refreshData];
+    }
 }
 
 - (void)setupUI {
@@ -34,60 +57,117 @@
     self.tableView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
-    self.tableView.rowHeight = 80;
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 110;
     self.tableView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.tableView];
     
     // 创建空状态标签
     self.emptyLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    self.emptyLabel.text = @"还没有收到点赞\n快去发布内容与大家互动吧！";
+    self.emptyLabel.text = @"还没有点赞内容\n去首页逛逛，把喜欢的内容点亮吧！";
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
     self.emptyLabel.numberOfLines = 0;
     self.emptyLabel.hidden = YES;
     self.tableView.backgroundView = self.emptyLabel;
+
+    self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.loadingIndicator.hidesWhenStopped = YES;
+    [self.view addSubview:self.loadingIndicator];
+    [self.loadingIndicator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.center.equalTo(self.view);
+    }];
+
+    if (@available(iOS 10.0, *)) {
+        UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
+        [refreshControl addTarget:self action:@selector(refreshData) forControlEvents:UIControlEventValueChanged];
+        self.tableView.refreshControl = refreshControl;
+    }
 }
 
-- (void)setupData {
-    // 模拟点赞数据
-    self.likesData = @[
-        @{
-            @"userName": @"城市探索者",
-            @"userAvatar": @"person.crop.circle.fill",
-            @"contentTitle": @"武康路晚霞散步",
-            @"contentPreview": @"上海 · 2小时前",
-            @"time": @"刚刚"
-        },
-        @{
-            @"userName": @"摄影爱好者",
-            @"userAvatar": @"person.crop.circle.fill",
-            @"contentTitle": @"老街早餐铺的热气",
-            @"contentPreview": @"苏州 · 昨天",
-            @"time": @"1小时前"
-        },
-        @{
-            @"userName": @"骑行达人",
-            @"userAvatar": @"person.crop.circle.fill",
-            @"contentTitle": @"江边骑行的风",
-            @"contentPreview": @"南京 · 3天前",
-            @"time": @"3小时前"
-        },
-        @{
-            @"userName": @"书店常客",
-            @"userAvatar": @"person.crop.circle.fill",
-            @"contentTitle": @"雨后的旧书店门口",
-            @"contentPreview": @"杭州 · 待发布",
-            @"time": @"昨天"
+- (void)loadData {
+    if (self.isLoading) {
+        return;
+    }
+
+    if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
+        self.emptyLabel.text = @"登录后可查看我的点赞\n先去登录，再回来看看喜欢过的内容吧。";
+        [self.likesData removeAllObjects];
+        [self.tableView reloadData];
+        [self updateEmptyState];
+        return;
+    }
+
+    self.isLoading = YES;
+    [self.loadingIndicator startAnimating];
+
+    [[YALContentManager sharedManager] getAllContentListWithPage:self.currentPage
+                                                        pageSize:20
+                                                      completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+        self.isLoading = NO;
+        self.hasLoadedOnce = YES;
+        [self.loadingIndicator stopAnimating];
+
+        if (@available(iOS 10.0, *)) {
+            if (self.tableView.refreshControl.isRefreshing) {
+                [self.tableView.refreshControl endRefreshing];
+            }
         }
-    ];
-    
-    [self updateEmptyState];
-    [self.tableView reloadData];
+
+        if (!success) {
+            if (self.likesData.count == 0) {
+                [self showMessage:message.length > 0 ? message : (error.localizedDescription ?: @"加载失败") type:1];
+            }
+            [self updateEmptyState];
+            return;
+        }
+
+        if (self.currentPage == 1) {
+            [self.likesData removeAllObjects];
+        }
+
+        NSMutableArray<YALPostModel *> *likedPosts = [NSMutableArray array];
+        for (id item in contentList) {
+            if (![item isKindOfClass:[YALPostModel class]]) {
+                continue;
+            }
+            YALPostModel *model = (YALPostModel *)item;
+            BOOL hasCachedValue = NO;
+            BOOL cachedLiked = [self cachedBoolStatusForPrefix:kYALLikedStatusCachePrefix contentId:model.contentId hasValue:&hasCachedValue];
+            if (hasCachedValue) {
+                model.isLiked = cachedLiked;
+            }
+            if (model.isLiked) {
+                [likedPosts addObject:model];
+            }
+        }
+
+        [self.likesData addObjectsFromArray:likedPosts];
+        self.hasMoreData = contentList.count >= 20;
+        if (self.hasMoreData) {
+            self.currentPage += 1;
+        }
+
+        if (likedPosts.count == 0 && self.likesData.count == 0 && self.hasMoreData) {
+            [self loadData];
+            return;
+        }
+
+        [self.tableView reloadData];
+        [self updateEmptyState];
+    }];
+}
+
+- (void)refreshData {
+    self.currentPage = 1;
+    self.hasMoreData = YES;
+    [self loadData];
 }
 
 - (void)updateEmptyState {
     self.emptyLabel.hidden = (self.likesData.count > 0);
+    self.tableView.backgroundView.hidden = self.emptyLabel.hidden;
 }
 
 #pragma mark - UITableViewDataSource
@@ -105,27 +185,35 @@
         cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
         cell.detailTextLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
         cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-        cell.detailTextLabel.numberOfLines = 2;
+        cell.detailTextLabel.numberOfLines = 0;
     }
     
     if (indexPath.row < self.likesData.count) {
-        NSDictionary *like = self.likesData[indexPath.row];
+        YALPostModel *like = self.likesData[indexPath.row];
         
-        // 设置头像
         if (@available(iOS 13.0, *)) {
-            cell.imageView.image = [UIImage systemImageNamed:like[@"userAvatar"]];
-            cell.imageView.tintColor = [self accentColor];
+            cell.imageView.image = [UIImage systemImageNamed:@"heart.fill"];
+            cell.imageView.tintColor = [UIColor systemRedColor];
         }
         
-        // 设置用户名和内容标题
-        NSString *userName = like[@"userName"] ?: @"用户";
-        NSString *contentTitle = like[@"contentTitle"] ?: @"内容";
-        cell.textLabel.text = [NSString stringWithFormat:@"%@ 赞了你的《%@》", userName, contentTitle];
-        
-        // 设置详细信息和时间
-        NSString *contentPreview = like[@"contentPreview"] ?: @"";
-        NSString *time = like[@"time"] ?: @"";
-        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@\n%@", contentPreview, time];
+        NSString *contentTitle = like.title.length > 0 ? like.title : @"未命名内容";
+        cell.textLabel.text = contentTitle;
+
+        NSMutableArray<NSString *> *details = [NSMutableArray array];
+        if (like.city.length > 0) {
+            [details addObject:like.city];
+        }
+        if (like.year.length > 0) {
+            [details addObject:like.year];
+        }
+        NSString *metaText = details.count > 0 ? [details componentsJoinedByString:@" · "] : @"已点赞";
+        NSString *contentPreview = like.content.length > 0 ? like.content : @"点击查看内容详情";
+        cell.detailTextLabel.text = [NSString stringWithFormat:@"%@\n❤️ %ld  💬 %ld  ⭐️ %ld\n%@",
+                                     metaText,
+                                     (long)MAX(like.likeCount, 0),
+                                     (long)MAX(like.commentCount, 0),
+                                     (long)MAX(like.collectCount, 0),
+                                     contentPreview];
     }
     
     return cell;
@@ -137,38 +225,52 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     
     if (indexPath.row < self.likesData.count) {
-        NSDictionary *like = self.likesData[indexPath.row];
+        YALPostModel *like = self.likesData[indexPath.row];
         [self showLikeDetail:like];
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"这里显示其他用户对你内容的点赞记录";
+    return @"这里显示你点赞过的内容";
 }
 
-- (void)showLikeDetail:(NSDictionary *)like {
-    NSString *userName = like[@"userName"] ?: @"用户";
-    NSString *contentTitle = like[@"contentTitle"] ?: @"内容";
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"点赞详情"
-                                                                   message:[NSString stringWithFormat:@"%@ 赞了你的《%@》\n\n%@", 
-                                                                            userName, 
-                                                                            contentTitle,
-                                                                            like[@"contentPreview"] ?: @""]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"查看内容"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        // 这里可以跳转到被点赞的内容详情页面
-        [self showMessage:@"跳转到内容详情页面" type:0];
-    }]];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    
-    [self presentViewController:alert animated:YES completion:nil];
+- (void)showLikeDetail:(YALPostModel *)like {
+    YALPostDetailController *detailController = [[YALPostDetailController alloc] init];
+    detailController.post = like;
+    detailController.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:detailController animated:YES];
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
+    (void)tableView;
+    (void)cell;
+    if (indexPath.row == self.likesData.count - 1 && self.hasMoreData && !self.isLoading) {
+        [self loadData];
+    }
+}
+
+- (BOOL)cachedBoolStatusForPrefix:(NSString *)prefix contentId:(NSNumber *)contentId hasValue:(BOOL *)hasValue {
+    if (prefix.length == 0 || contentId.integerValue <= 0) {
+        if (hasValue) {
+            *hasValue = NO;
+        }
+        return NO;
+    }
+
+    NSInteger userId = [YALAuthManager sharedManager].currentUser.userId;
+    NSString *key = userId > 0 ? [NSString stringWithFormat:@"%@_%ld_%@", prefix, (long)userId, contentId]
+                               : [NSString stringWithFormat:@"%@_%@", prefix, contentId];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if ([defaults objectForKey:key] == nil) {
+        if (hasValue) {
+            *hasValue = NO;
+        }
+        return NO;
+    }
+    if (hasValue) {
+        *hasValue = YES;
+    }
+    return [defaults boolForKey:key];
 }
 
 #pragma mark - 工具方法

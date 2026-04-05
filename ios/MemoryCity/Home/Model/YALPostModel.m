@@ -7,6 +7,27 @@
 
 #import "YALPostModel.h"
 
+static BOOL YALPostModelBoolValue(id value, BOOL fallback) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [((NSNumber *)value) integerValue] != 0;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *text = [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (text.length == 0) {
+            return fallback;
+        }
+        NSString *lower = [text lowercaseString];
+        if ([lower isEqualToString:@"true"] || [lower isEqualToString:@"yes"]) {
+            return YES;
+        }
+        if ([lower isEqualToString:@"false"] || [lower isEqualToString:@"no"]) {
+            return NO;
+        }
+        return text.integerValue != 0;
+    }
+    return fallback;
+}
+
 @implementation YALPostModel
 
 - (instancetype)initWithDictionary:(NSDictionary *)dict {
@@ -27,6 +48,50 @@
         self.year = [dict[@"year"] isKindOfClass:[NSString class]] ? dict[@"year"] : @"";
         self.mood = [dict[@"mood"] isKindOfClass:[NSString class]] ? dict[@"mood"] : @"";
         self.createTime = [dict[@"create_time"] isKindOfClass:[NSString class]] ? dict[@"create_time"] : @"";
+        if (self.createTime.length == 0 && [dict[@"created_at"] isKindOfClass:[NSString class]]) {
+            self.createTime = dict[@"created_at"];
+        }
+        id likeCountValue = dict[@"like_count"];
+        if ([likeCountValue respondsToSelector:@selector(integerValue)]) {
+            self.likeCount = MAX([likeCountValue integerValue], 0);
+        }
+        id collectCountValue = dict[@"collect_count"];
+        if (![collectCountValue respondsToSelector:@selector(integerValue)]) {
+            collectCountValue = dict[@"favorite_count"];
+        }
+        if ([collectCountValue respondsToSelector:@selector(integerValue)]) {
+            self.collectCount = MAX([collectCountValue integerValue], 0);
+        }
+        id commentCountValue = dict[@"comment_count"];
+        if ([commentCountValue respondsToSelector:@selector(integerValue)]) {
+            self.commentCount = MAX([commentCountValue integerValue], 0);
+        }
+        id likedValue = dict[@"is_liked"];
+        if (![likedValue respondsToSelector:@selector(boolValue)]) {
+            likedValue = dict[@"is_likeed"];
+        }
+        if (![likedValue respondsToSelector:@selector(boolValue)]) {
+            likedValue = dict[@"is_like"];
+        }
+        if (![likedValue respondsToSelector:@selector(boolValue)]) {
+            likedValue = dict[@"liked"];
+        }
+        if ([likedValue respondsToSelector:@selector(boolValue)]) {
+            self.isLiked = YALPostModelBoolValue(likedValue, NO);
+        }
+        id collectedValue = dict[@"is_collected"];
+        if (![collectedValue respondsToSelector:@selector(boolValue)]) {
+            collectedValue = dict[@"is_collect"];
+        }
+        if (![collectedValue respondsToSelector:@selector(boolValue)]) {
+            collectedValue = dict[@"collect_status"];
+        }
+        if (![collectedValue respondsToSelector:@selector(boolValue)]) {
+            collectedValue = dict[@"collected"];
+        }
+        if ([collectedValue respondsToSelector:@selector(boolValue)]) {
+            self.isCollected = YALPostModelBoolValue(collectedValue, NO);
+        }
         id publicValue = dict[@"is_public"];
         if ([publicValue respondsToSelector:@selector(boolValue)]) {
             self.isPublic = [publicValue boolValue];

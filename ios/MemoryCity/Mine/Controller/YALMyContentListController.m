@@ -9,7 +9,10 @@
 #import "YALMyContentModel.h"
 #import "YALContentManager.h"
 #import "YALAuthManager.h"
+#import "YALPostModel.h"
+#import "YALPostDetailController.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
 
 static BOOL YALBoolFromPublicValue(id value) {
     if ([value isKindOfClass:[NSNumber class]]) {
@@ -167,6 +170,7 @@ static BOOL YALBoolFromPublicValue(id value) {
     
     // 清除旧图片
     for (UIImageView *imageView in self.imageViews) {
+        [imageView sd_cancelCurrentImageLoad];
         [imageView removeFromSuperview];
     }
     [self.imageViews removeAllObjects];
@@ -182,12 +186,20 @@ static BOOL YALBoolFromPublicValue(id value) {
             imageView.clipsToBounds = YES;
             imageView.layer.cornerRadius = 6;
             imageView.backgroundColor = [UIColor systemGray6Color];
-            
-            // 在实际项目中，这里应该使用SDWebImage等库加载图片
-            // 这里使用占位图
+
             if (@available(iOS 13.0, *)) {
                 imageView.image = [UIImage systemImageNamed:@"photo"];
                 imageView.tintColor = [UIColor systemGray3Color];
+            }
+
+            NSString *imageURLString = model.images[i];
+            if ([imageURLString isKindOfClass:[NSString class]] && imageURLString.length > 0) {
+                NSURL *imageURL = [NSURL URLWithString:imageURLString];
+                if (imageURL && imageURL.scheme.length > 0) {
+                    [imageView sd_setImageWithURL:imageURL
+                                 placeholderImage:imageView.image
+                                          options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+                }
             }
             
             [self.imageContainerView addSubview:imageView];
@@ -233,6 +245,7 @@ static BOOL YALBoolFromPublicValue(id value) {
 @property (nonatomic, assign) BOOL isLoading;
 @property (nonatomic, assign) NSInteger currentPage;
 @property (nonatomic, assign) BOOL hasMoreData;
+@property (nonatomic, assign) BOOL hasPresentedEmptyPrivateAlert;
 
 @end
 
@@ -305,6 +318,7 @@ static BOOL YALBoolFromPublicValue(id value) {
     
     self.isLoading = YES;
     [self.loadingIndicator startAnimating];
+    BOOL isFirstPageRequest = (self.currentPage == 1);
     
     NSLog(@"📡 开始加载第 %ld 页数据", (long)self.currentPage);
     
@@ -348,8 +362,13 @@ static BOOL YALBoolFromPublicValue(id value) {
                 
                 [self updateEmptyState];
                 [self.tableView reloadData];
+
+                if (isFirstPageRequest && self.contentList.count == 0 && [self isPrivateContentPage]) {
+                    [self presentEmptyPrivateAlertIfNeeded];
+                    return;
+                }
                 
-                if (contentList.count == 0 && self.currentPage == 1) {
+                if (contentList.count == 0 && isFirstPageRequest) {
                     [self showMessage:@"暂无发布内容" type:0];
                 }
             } else {
@@ -373,6 +392,29 @@ static BOOL YALBoolFromPublicValue(id value) {
 
     BOOL isPublic = YALBoolFromPublicValue(dict[@"is_public"]);
     return shouldShowPublicOnly ? isPublic : !isPublic;
+}
+
+- (BOOL)isPrivateContentPage {
+    return [self.pageTitle isEqualToString:@"私人内容"] || [self.pageTitle isEqualToString:@"私密内容"];
+}
+
+- (void)presentEmptyPrivateAlertIfNeeded {
+    if (self.hasPresentedEmptyPrivateAlert) {
+        return;
+    }
+    self.hasPresentedEmptyPrivateAlert = YES;
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"暂无私密内容"
+                                                                   message:@"你当前还没有私密发布，先返回上一页看看公开内容吧。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:@"知道了"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(__unused UIAlertAction * _Nonnull action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        [strongSelf.navigationController popViewControllerAnimated:YES];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)refreshData {
@@ -453,32 +495,35 @@ static BOOL YALBoolFromPublicValue(id value) {
 #pragma mark - 内容详情
 
 - (void)showContentDetail:(YALMyContentModel *)model {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:model.title
-                                                                   message:[NSString stringWithFormat:@"%@\n\n地点：%@\n时间：%@\n心情：%@",
-                                                                            model.content ?: @"",
-                                                                            model.city ?: @"",
-                                                                            model.year ?: @"",
-                                                                            model.mood ?: @""]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"查看详情"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        // 这里可以跳转到内容详情页面
-        [self showMessage:@"跳转到内容详情页面" type:0];
-    }]];
+    if (!model) {
+        return;
+    }
+    YALPostDetailController *detailController = [[YALPostDetailController alloc] init];
+    detailController.post = [self postModelFromMyContent:model];
+    detailController.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:detailController animated:YES];
+}
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"删除"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(__unused UIAlertAction * _Nonnull action) {
-        [self confirmDeleteForModel:model];
-    }]];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-    
-    [self presentViewController:alert animated:YES completion:nil];
+- (YALPostModel *)postModelFromMyContent:(YALMyContentModel *)model {
+    YALPostModel *post = [[YALPostModel alloc] init];
+    post.contentId = model.contentId;
+    post.title = model.title ?: @"";
+    post.content = model.content ?: @"";
+    post.desc = model.content ?: @"";
+    post.city = model.city ?: @"";
+    post.year = model.year ?: @"";
+    post.mood = model.mood ?: @"";
+    post.images = model.images ?: @[];
+    post.createTime = model.createTime ?: @"";
+    post.imageURLString = model.images.firstObject ?: @"";
+    if (@available(iOS 13.0, *)) {
+        post.image = [UIImage systemImageNamed:@"photo"];
+    } else {
+        post.image = [[UIImage alloc] init];
+    }
+    post.imageWidth = MAX(post.image.size.width, 1.0);
+    post.imageHeight = MAX(post.image.size.height, 1.0);
+    return post;
 }
 
 #pragma mark - 工具方法

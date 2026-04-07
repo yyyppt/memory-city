@@ -24,11 +24,14 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
     return [UIImage imageWithData:data];
 }
 
-@interface YALPostDetailController () <UITableViewDataSource, UITableViewDelegate, UITextViewDelegate, UIGestureRecognizerDelegate>
+@interface YALPostDetailController () <UITableViewDataSource, UITableViewDelegate, UITextViewDelegate, UIGestureRecognizerDelegate, UIScrollViewDelegate>
 
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) UIImageView *imageView;
+@property (nonatomic, strong) UIView *imageContainerView;
+@property (nonatomic, strong) UIScrollView *imageGalleryScrollView;
+@property (nonatomic, strong) UIPageControl *imagePageControl;
+@property (nonatomic, strong) NSMutableArray<UIImageView *> *imageGalleryViews;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *descLabel;
 @property (nonatomic, strong) UITableView *tableView;
@@ -70,6 +73,88 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
 static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
 static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionCache";
+
+- (NSArray<NSString *> *)normalizedImageSourceStringsFromArray:(NSArray *)images {
+    NSMutableArray<NSString *> *result = [NSMutableArray array];
+    for (id obj in images) {
+        if ([obj isKindOfClass:[NSString class]]) {
+            NSString *value = [(NSString *)obj stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (value.length > 0) {
+                [result addObject:value];
+            }
+        }
+    }
+    return [result copy];
+}
+
+- (void)updateImageGalleryWithSources:(NSArray<NSString *> *)imageSources placeholder:(UIImage *)placeholder {
+    for (UIImageView *imageView in self.imageGalleryViews) {
+        [imageView sd_cancelCurrentImageLoad];
+        [imageView removeFromSuperview];
+    }
+    [self.imageGalleryViews removeAllObjects];
+
+    NSArray<NSString *> *normalizedSources = [self normalizedImageSourceStringsFromArray:imageSources];
+    if (normalizedSources.count == 0 && self.post.imageURLString.length > 0) {
+        normalizedSources = @[self.post.imageURLString];
+    }
+
+    if (normalizedSources.count == 0) {
+        UIImageView *imageView = [[UIImageView alloc] init];
+        imageView.contentMode = UIViewContentModeScaleAspectFill;
+        imageView.clipsToBounds = YES;
+        imageView.image = placeholder;
+        imageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+        [self.imageGalleryScrollView addSubview:imageView];
+        [self.imageGalleryViews addObject:imageView];
+    } else {
+        for (NSString *source in normalizedSources) {
+            UIImageView *imageView = [[UIImageView alloc] init];
+            imageView.contentMode = UIViewContentModeScaleAspectFill;
+            imageView.clipsToBounds = YES;
+            imageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+            imageView.image = placeholder;
+
+            UIImage *embeddedImage = YALPostDetailImageFromDataURLString(source);
+            if (embeddedImage) {
+                imageView.image = embeddedImage;
+            } else {
+                NSURL *imageURL = [NSURL URLWithString:source];
+                if (imageURL && imageURL.scheme.length > 0) {
+                    [imageView sd_setImageWithURL:imageURL
+                                 placeholderImage:placeholder
+                                          options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+                }
+            }
+
+            [self.imageGalleryScrollView addSubview:imageView];
+            [self.imageGalleryViews addObject:imageView];
+        }
+    }
+
+    NSInteger pageCount = MAX(self.imageGalleryViews.count, 1);
+    self.imagePageControl.numberOfPages = pageCount;
+    self.imagePageControl.hidden = pageCount <= 1;
+    self.imagePageControl.currentPage = 0;
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
+
+- (void)layoutImageGalleryIfNeeded {
+    CGFloat width = CGRectGetWidth(self.imageGalleryScrollView.bounds);
+    CGFloat height = CGRectGetHeight(self.imageGalleryScrollView.bounds);
+    if (width <= 0 || height <= 0 || self.imageGalleryViews.count == 0) {
+        return;
+    }
+
+    [self.imageGalleryViews enumerateObjectsUsingBlock:^(UIImageView * _Nonnull imageView, NSUInteger idx, __unused BOOL * _Nonnull stop) {
+        imageView.frame = CGRectMake(width * idx, 0, width, height);
+    }];
+    self.imageGalleryScrollView.contentSize = CGSizeMake(width * self.imageGalleryViews.count, height);
+
+    NSInteger currentPage = MIN(MAX(self.imagePageControl.currentPage, 0), MAX(self.imageGalleryViews.count - 1, 0));
+    self.imageGalleryScrollView.contentOffset = CGPointMake(width * currentPage, 0);
+}
 
 - (NSString *)cacheKeyForPrefix:(NSString *)prefix {
     NSNumber *contentId = self.post.contentId;
@@ -576,20 +661,11 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     } else if ([content[@"Images"] isKindOfClass:[NSArray class]]) {
         images = content[@"Images"];
     }
-    NSString *detailImageURL = nil;
-    for (id obj in images) {
-        if ([obj isKindOfClass:[NSString class]] && [obj length] > 0) {
-            detailImageURL = (NSString *)obj;
-            break;
-        }
-    }
-    if (detailImageURL.length > 0) {
-        self.post.imageURLString = detailImageURL;
-        self.post.images = images;
-        [self.imageView sd_setImageWithURL:[NSURL URLWithString:detailImageURL]
-                          placeholderImage:self.post.image
-                                   options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages
-                                 completed:nil];
+    NSArray<NSString *> *normalizedImages = [self normalizedImageSourceStringsFromArray:images];
+    if (normalizedImages.count > 0) {
+        self.post.imageURLString = normalizedImages.firstObject;
+        self.post.images = normalizedImages;
+        [self updateImageGalleryWithSources:normalizedImages placeholder:self.post.image];
     }
 }
 
@@ -720,11 +796,22 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     self.contentCard.layer.shadowRadius = 20.0;
     [self.contentView addSubview:self.contentCard];
 
-    self.imageView = [[UIImageView alloc] init];
-    self.imageView.contentMode = UIViewContentModeScaleAspectFill;
-    self.imageView.clipsToBounds = YES;
-    self.imageView.layer.cornerRadius = 16.0;
-    self.imageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.imageContainerView = [[UIView alloc] init];
+    self.imageContainerView.layer.cornerRadius = 16.0;
+    self.imageContainerView.layer.masksToBounds = YES;
+    self.imageContainerView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+
+    self.imageGalleryScrollView = [[UIScrollView alloc] init];
+    self.imageGalleryScrollView.pagingEnabled = YES;
+    self.imageGalleryScrollView.showsHorizontalScrollIndicator = NO;
+    self.imageGalleryScrollView.delegate = self;
+    self.imageGalleryScrollView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+
+    self.imagePageControl = [[UIPageControl alloc] init];
+    self.imagePageControl.currentPageIndicatorTintColor = [UIColor colorWithRed:0.96 green:0.73 blue:0.20 alpha:1.0];
+    self.imagePageControl.pageIndicatorTintColor = [UIColor colorWithWhite:1.0 alpha:0.45];
+    self.imagePageControl.hidesForSinglePage = YES;
+    self.imageGalleryViews = [NSMutableArray array];
 
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
@@ -750,7 +837,9 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     self.tableView.backgroundColor = [UIColor clearColor];
     [self.tableView registerClass:[YALCommentCell class] forCellReuseIdentifier:@"YALCommentCell"];
 
-    [self.contentCard addSubview:self.imageView];
+    [self.contentCard addSubview:self.imageContainerView];
+    [self.imageContainerView addSubview:self.imageGalleryScrollView];
+    [self.imageContainerView addSubview:self.imagePageControl];
     [self.contentCard addSubview:self.titleLabel];
     [self.contentCard addSubview:self.descLabel];
     [self.contentCard addSubview:self.commentHeader];
@@ -886,32 +975,41 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         make.bottom.equalTo(self.contentView.mas_bottom).offset(-padding);
     }];
 
-    [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
+    [self.imageContainerView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.contentCard.mas_top).offset(14.0);
         make.left.equalTo(self.contentCard.mas_left).offset(14.0);
         make.right.equalTo(self.contentCard.mas_right).offset(-14.0);
-        make.height.equalTo(self.imageView.mas_width).multipliedBy(0.95);
+        make.height.equalTo(self.imageContainerView.mas_width).multipliedBy(0.95);
+    }];
+
+    [self.imageGalleryScrollView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.imageContainerView);
+    }];
+
+    [self.imagePageControl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(self.imageContainerView.mas_centerX);
+        make.bottom.equalTo(self.imageContainerView.mas_bottom).offset(-8.0);
     }];
 
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.imageView.mas_bottom).offset(12.0);
-        make.left.right.equalTo(self.imageView);
+        make.top.equalTo(self.imageContainerView.mas_bottom).offset(12.0);
+        make.left.right.equalTo(self.imageContainerView);
     }];
 
     [self.descLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.titleLabel.mas_bottom).offset(6.0);
-        make.left.right.equalTo(self.imageView);
+        make.left.right.equalTo(self.imageContainerView);
     }];
 
     [self.commentHeader mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.descLabel.mas_bottom).offset(16.0);
-        make.left.right.equalTo(self.imageView);
+        make.left.right.equalTo(self.imageContainerView);
         make.height.mas_equalTo(22.0);
     }];
 
     [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.commentHeader.mas_bottom).offset(8.0);
-        make.left.right.equalTo(self.imageView);
+        make.left.right.equalTo(self.imageContainerView);
         self.tableHeightConstraint = make.height.mas_equalTo(1.0);
         make.bottom.equalTo(self.contentCard.mas_bottom).offset(-padding);
     }];
@@ -976,15 +1074,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         self.titleLabel.text = titleText;
         self.descLabel.text = descText;
 
-        if (self.post.imageURLString.length > 0) {
-            NSURL *url = [NSURL URLWithString:self.post.imageURLString];
-            [self.imageView sd_setImageWithURL:url
-                              placeholderImage:self.post.image
-                                       options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages
-                                     completed:nil];
-        } else {
-            self.imageView.image = self.post.image;
-        }
+        [self updateImageGalleryWithSources:self.post.images placeholder:self.post.image];
 
         self.likeCount = MAX(self.post.likeCount, 0);
         self.favoriteCount = MAX(self.post.collectCount, 0);
@@ -1011,6 +1101,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         self.tableHeightConstraint.offset = MAX([self calculatedCommentsHeight], 1.0);
     }
     [self.view layoutIfNeeded];
+    [self layoutImageGalleryIfNeeded];
     self.contentCard.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.contentCard.bounds cornerRadius:22.0].CGPath;
     CGFloat contentHeight = CGRectGetMaxY(self.contentCard.frame);
     UIEdgeInsets adjustedInset = UIEdgeInsetsZero;
@@ -1023,6 +1114,19 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     BOOL canScroll = (contentHeight > visibleHeight + 0.5);
     self.scrollView.alwaysBounceVertical = canScroll;
     self.scrollView.bounces = canScroll;
+}
+
+- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
+    if (scrollView != self.imageGalleryScrollView) {
+        return;
+    }
+    CGFloat width = CGRectGetWidth(scrollView.bounds);
+    if (width <= 0) {
+        return;
+    }
+    NSInteger currentPage = (NSInteger)lround(scrollView.contentOffset.x / width);
+    currentPage = MIN(MAX(currentPage, 0), MAX(self.imageGalleryViews.count - 1, 0));
+    self.imagePageControl.currentPage = currentPage;
 }
 
 - (void)setupDummyComments {
@@ -1049,14 +1153,23 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
             toggleCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:toggleCellId];
             toggleCell.selectionStyle = UITableViewCellSelectionStyleNone;
             toggleCell.backgroundColor = [UIColor clearColor];
-            toggleCell.textLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-            toggleCell.textLabel.textColor = [UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0];
+            UILabel *toggleLabel = [[UILabel alloc] init];
+            toggleLabel.tag = 1001;
+            toggleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+            toggleLabel.textColor = [UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0];
+            toggleLabel.numberOfLines = 1;
+            [toggleCell.contentView addSubview:toggleLabel];
+            [toggleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+                make.left.equalTo(toggleCell.contentView.mas_left).offset(56.0);
+                make.centerY.equalTo(toggleCell.contentView.mas_centerY);
+                make.right.lessThanOrEqualTo(toggleCell.contentView.mas_right).offset(-12.0);
+            }];
         }
-        toggleCell.textLabel.text = [row[@"title"] isKindOfClass:[NSString class]] ? row[@"title"] : @"展开回复";
-        toggleCell.textLabel.textAlignment = NSTextAlignmentLeft;
+        UILabel *toggleLabel = [toggleCell.contentView viewWithTag:1001];
+        if ([toggleLabel isKindOfClass:[UILabel class]]) {
+            toggleLabel.text = [row[@"title"] isKindOfClass:[NSString class]] ? row[@"title"] : @"展开回复";
+        }
         toggleCell.separatorInset = UIEdgeInsetsMake(0, 999, 0, 0);
-        toggleCell.indentationLevel = 3;
-        toggleCell.indentationWidth = 18.0;
         return toggleCell;
     }
 
@@ -1185,15 +1298,25 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 
 - (void)didTapComment {
     [self animateActionButton:self.commentButton];
+    [self scrollToCommentSectionIfNeededAnimated:YES];
+}
+
+- (void)scrollToCommentSectionIfNeededAnimated:(BOOL)animated {
     if (self.comments.count == 0) {
         return;
     }
     [self.view layoutIfNeeded];
     CGRect headerFrameInScroll = [self.commentHeader convertRect:self.commentHeader.bounds toView:self.scrollView];
     CGFloat targetY = MAX(0, headerFrameInScroll.origin.y - 12.0);
-    CGFloat maxOffsetY = MAX(0, self.scrollView.contentSize.height - CGRectGetHeight(self.scrollView.bounds) + self.scrollView.adjustedContentInset.bottom);
+    UIEdgeInsets adjustedInset = UIEdgeInsetsZero;
+    if (@available(iOS 11.0, *)) {
+        adjustedInset = self.scrollView.adjustedContentInset;
+    } else {
+        adjustedInset = self.scrollView.contentInset;
+    }
+    CGFloat maxOffsetY = MAX(0, self.scrollView.contentSize.height - CGRectGetHeight(self.scrollView.bounds) + adjustedInset.bottom);
     CGPoint offset = CGPointMake(0, MIN(targetY, maxOffsetY));
-    [self.scrollView setContentOffset:offset animated:YES];
+    [self.scrollView setContentOffset:offset animated:animated];
 }
 
 - (void)didTapLike {
@@ -1371,6 +1494,10 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     [UIView beginAnimations:nil context:NULL];
     [UIView setAnimationDuration:duration];
     [UIView setAnimationCurve:curve];
+    // 键盘弹起时同步把页面滚到评论区，避免只有输入栏上移、正文不动。
+    if (keyboardHeightInView > 0 && self.inputTextView.isFirstResponder) {
+        [self scrollToCommentSectionIfNeededAnimated:NO];
+    }
     [self.view layoutIfNeeded];
     [UIView commitAnimations];
 }
@@ -1378,6 +1505,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 #pragma mark - UITextViewDelegate
 
 - (void)textViewDidBeginEditing:(UITextView *)textView {
+    (void)textView;
     [self updateBottomBarForEditing:YES animated:YES];
 }
 

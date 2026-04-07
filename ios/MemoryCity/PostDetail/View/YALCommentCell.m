@@ -99,7 +99,7 @@
     }];
 
     [self.contentLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.edges.equalTo(self.bubbleView).insets(UIEdgeInsetsMake(9.0, 12.0, 9.0, 12.0));
+        make.edges.equalTo(self.bubbleView).insets(UIEdgeInsetsMake(9.0, 12.0, 9.0, 16.0));
     }];
 }
 
@@ -143,12 +143,12 @@
     self.bubbleView.backgroundColor = isReply
         ? [UIColor colorWithRed:1.0 green:0.976 blue:0.925 alpha:1.0]
         : [UIColor colorWithRed:0.985 green:0.985 blue:0.985 alpha:1.0];
-    self.nameLabel.textColor = isReply ? [UIColor colorWithRed:0.78 green:0.52 blue:0.16 alpha:1.0] : [UIColor labelColor];
+    self.nameLabel.textColor = [UIColor labelColor];
 
     // 富文本：长文时在末尾加“ 展开/收起”
     NSString *suffix = @"";
     if (content.length > 40) {
-        suffix = expanded ? @"  收起" : @"  展开";
+        suffix = expanded ? @"收起" : @"展开";
     }
     NSString *full = [content stringByAppendingString:suffix];
     NSMutableAttributedString *attr =

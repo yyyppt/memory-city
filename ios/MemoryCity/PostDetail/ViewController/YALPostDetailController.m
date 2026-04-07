@@ -853,6 +853,22 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         if ([parentId respondsToSelector:@selector(integerValue)]) {
             commentDict[@"parent_id"] = @([parentId integerValue]);
         }
+        NSNumber *userId = [self firstPositiveNumberFromDictionary:item keys:@[@"user_id", @"uid", @"userid", @"author_id"]];
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo2 keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo3 keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo4 keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (userId.integerValue > 0) {
+            commentDict[@"user_id"] = userId;
+        }
         if (replyTargetName.length > 0) {
             commentDict[@"reply_to_name"] = replyTargetName;
         }
@@ -1106,6 +1122,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     if (self.authorBio.length == 0) {
         self.authorBio = [self firstNonEmptyStringFromDictionary:authorInfo keys:@[@"bio", @"user_bio", @"signature", @"intro"]];
     }
+    NSLog(@"📥 详情页解析作者信息: user_id=%@ nickname=%@", self.authorUserId, self.authorNickname ?: @"");
 
     id likeObj = content[@"like_count"];
     if ([likeObj respondsToSelector:@selector(integerValue)]) {
@@ -1687,10 +1704,119 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     [self updateBottomBarForEditing:self.inputExpanded animated:NO];
 }
 
+- (NSNumber *)currentLoginUserId {
+    YALAuthUserModel *currentUser = [YALAuthManager sharedManager].currentUser;
+    if (currentUser.userId > 0) {
+        return @(currentUser.userId);
+    }
+    return nil;
+}
+
+- (BOOL)isCommentOwnedByCurrentUser:(NSDictionary *)comment {
+    NSNumber *commentUserId = [comment[@"user_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"user_id"] integerValue]) : nil;
+    NSNumber *currentUserId = [self currentLoginUserId];
+    if (commentUserId.integerValue > 0 && currentUserId.integerValue > 0) {
+        return [commentUserId isEqualToNumber:currentUserId];
+    }
+    NSString *commentName = [comment[@"name"] isKindOfClass:[NSString class]] ? comment[@"name"] : @"";
+    NSString *myNickname = [YALAuthManager sharedManager].currentUser.nickname ?: @"";
+    return (myNickname.length > 0 && [commentName isEqualToString:myNickname]);
+}
+
+- (void)deleteComment:(NSDictionary *)comment {
+    NSNumber *commentId = [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : nil;
+    if (commentId.integerValue <= 0) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] deleteCommentWithId:commentId completion:^(BOOL success, NSString *message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                NSMutableArray<NSDictionary *> *filtered = [NSMutableArray array];
+                for (NSDictionary *item in strongSelf.flatComments) {
+                    NSNumber *itemCommentId = [item[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([item[@"comment_id"] integerValue]) : nil;
+                    NSNumber *rootCommentId = [item[@"root_comment_id"] respondsToSelector:@selector(integerValue)] ? @([item[@"root_comment_id"] integerValue]) : nil;
+                    NSNumber *parentId = [item[@"parent_id"] respondsToSelector:@selector(integerValue)] ? @([item[@"parent_id"] integerValue]) : nil;
+                    if ([itemCommentId isEqualToNumber:commentId] ||
+                        [rootCommentId isEqualToNumber:commentId] ||
+                        [parentId isEqualToNumber:commentId]) {
+                        continue;
+                    }
+                    [filtered addObject:item];
+                }
+                strongSelf.flatComments = [filtered copy];
+                strongSelf.comments = [strongSelf displayRowsFromFlatComments:strongSelf.flatComments];
+                strongSelf.viewCount = strongSelf.flatComments.count;
+                strongSelf.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.viewCount];
+                [strongSelf.tableView reloadData];
+                [strongSelf refreshTableHeight];
+                return;
+            }
+            NSString *errorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"删除失败，后端可能尚未提供评论删除接口");
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"删除失败"
+                                                                           message:errorText
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        });
+    }];
+}
+
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return self.comments.count;
+}
+
+- (nullable UIContextMenuConfiguration *)tableView:(UITableView *)tableView
+                      contextMenuConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
+                                                          point:(CGPoint)point API_AVAILABLE(ios(13.0)) {
+    (void)tableView;
+    (void)point;
+    if (indexPath.row >= self.comments.count) {
+        return nil;
+    }
+    NSDictionary *row = self.comments[indexPath.row];
+    NSString *rowType = [row[@"row_type"] isKindOfClass:[NSString class]] ? row[@"row_type"] : @"comment";
+    if (![rowType isEqualToString:@"comment"]) {
+        return nil;
+    }
+    NSDictionary *comment = [row[@"comment"] isKindOfClass:[NSDictionary class]] ? row[@"comment"] : nil;
+    if (![comment isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    if (![self isCommentOwnedByCurrentUser:comment]) {
+        return nil;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    return [UIContextMenuConfiguration configurationWithIdentifier:nil
+                                                   previewProvider:nil
+                                                    actionProvider:^UIMenu * _Nullable(NSArray<UIMenuElement *> * _Nonnull suggestedActions) {
+        (void)suggestedActions;
+        UIAction *deleteAction = [UIAction actionWithTitle:@"删除评论"
+                                                     image:[UIImage systemImageNamed:@"trash"]
+                                                identifier:nil
+                                                   handler:^(__kindof UIAction * _Nonnull action) {
+            (void)action;
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"删除这条评论？"
+                                                                           message:@"删除后将无法恢复。"
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"删除"
+                                                      style:UIAlertActionStyleDestructive
+                                                    handler:^(__unused UIAlertAction * _Nonnull action2) {
+                [strongSelf deleteComment:comment];
+            }]];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        }];
+        return [UIMenu menuWithTitle:@"" children:@[deleteAction]];
+    }];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1849,6 +1975,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 - (void)ownerTapped {
     NSNumber *targetUserId = self.authorUserId;
     if (targetUserId.integerValue > 0) {
+        NSLog(@"👤 ownerTapped 直进用户页: user_id=%@", targetUserId);
         YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
         controller.userId = targetUserId;
         controller.prefilledNickname = self.authorNickname;
@@ -1878,6 +2005,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                 [strongSelf applyDetailData:content];
             }
             if (strongSelf.authorUserId.integerValue > 0) {
+                NSLog(@"👤 ownerTapped 详情回填后进用户页: user_id=%@", strongSelf.authorUserId);
                 YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
                 controller.userId = strongSelf.authorUserId;
                 controller.prefilledNickname = strongSelf.authorNickname;
@@ -2158,6 +2286,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                 @"comment_id": [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : @(0),
                 @"parent_id": [comment[@"parent_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"parent_id"] integerValue]) : ([comment[@"ParentID"] respondsToSelector:@selector(integerValue)] ? @([comment[@"ParentID"] integerValue]) : parentId),
                 @"root_comment_id": rootCommentId ?: @(0),
+                @"user_id": [strongSelf currentLoginUserId] ?: @(0),
                 @"name": name.length > 0 ? name : ([YALAuthManager sharedManager].currentUser.nickname ?: @"我"),
                 @"content": text,
                 @"time": [strongSelf displayTimeStringFromRaw:comment[@"created_at"]],

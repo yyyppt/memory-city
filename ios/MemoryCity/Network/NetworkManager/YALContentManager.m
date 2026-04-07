@@ -492,6 +492,98 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     sendRequest();
 }
 
+- (void)deleteCommentWithId:(NSNumber *)commentId
+                 completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSNumber *userId = YALResolvedUserId();
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+    NSString *commentIdString = [NSString stringWithFormat:@"%@", commentId ?: @(0)];
+    NSString *userIdString = [NSString stringWithFormat:@"%@", userId ?: @(0)];
+
+    NSArray<NSDictionary *> *requestCandidates = @[
+        @{
+            @"method": @"DELETE",
+            @"url": [NSString stringWithFormat:@"%@/interact/comment/delete", kYALAPIBaseURL],
+            @"parameters": @{@"comment_id": commentId ?: @(0), @"user_id": userId}
+        },
+        @{
+            @"method": @"POST",
+            @"url": [NSString stringWithFormat:@"%@/interact/comment/delete", kYALAPIBaseURL],
+            @"parameters": @{@"comment_id": commentId ?: @(0), @"user_id": userId}
+        },
+        @{
+            @"method": @"DELETE",
+            @"url": [NSString stringWithFormat:@"%@/interact/comment?comment_id=%@&user_id=%@", kYALAPIBaseURL, commentIdString, userIdString],
+            @"parameters": [NSNull null]
+        },
+        @{
+            @"method": @"POST",
+            @"url": [NSString stringWithFormat:@"%@/interact/comment/delete", kYALAPIBaseURL],
+            @"parameters": @{@"commentId": commentId ?: @(0), @"userId": userId}
+        }
+    ];
+
+    __block NSInteger candidateIndex = 0;
+    __block void (^sendRequest)(void) = ^{
+        NSDictionary *candidate = requestCandidates[candidateIndex];
+        NSString *method = candidate[@"method"];
+        NSString *url = candidate[@"url"];
+        id paramsObj = candidate[@"parameters"];
+        NSDictionary *parameters = [paramsObj isKindOfClass:[NSDictionary class]] ? (NSDictionary *)paramsObj : nil;
+        NSLog(@"🗑️ 删除评论请求[%ld]: method=%@ url=%@ body=%@", (long)candidateIndex, method, url, parameters ?: @{});
+
+        void (^handleSuccess)(id) = ^(id responseObject) {
+            NSInteger code = YALResponseCode(responseObject);
+            NSString *msg = YALResponseMessage(responseObject);
+            if (code == 200) {
+                if (completion) completion(YES, msg.length > 0 ? msg : @"删除成功", nil);
+                return;
+            }
+            if ((YALShouldRetryAlternatePayload(responseObject) || code == 400 || code == 404 || code == 405 || code == 500) &&
+                candidateIndex + 1 < requestCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:code
+                                             userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"评论删除失败"}];
+            if (completion) completion(NO, msg, error);
+        };
+
+        void (^handleFailure)(NSError *) = ^(NSError *error) {
+            if (candidateIndex + 1 < requestCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+            if (completion) completion(NO, error.localizedDescription ?: @"评论删除失败", error);
+        };
+
+        if ([method isEqualToString:@"DELETE"]) {
+            [network DELETE:url
+                 parameters:parameters
+                    headers:headers
+                    success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+                handleSuccess(responseObject);
+            } failure:^(__unused NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+                handleFailure(error);
+            }];
+        } else {
+            [network POST:url
+               parameters:parameters
+                  headers:headers
+                 progress:nil
+                  success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+                handleSuccess(responseObject);
+            } failure:^(__unused NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+                handleFailure(error);
+            }];
+        }
+    };
+    sendRequest();
+}
+
 - (void)toggleCollectContentWithId:(NSNumber *)contentId
                         completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];

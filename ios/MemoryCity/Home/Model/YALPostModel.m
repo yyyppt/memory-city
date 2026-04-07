@@ -6,6 +6,8 @@
 //
 
 #import "YALPostModel.h"
+#import <float.h>
+#import <math.h>
 
 static BOOL YALPostModelBoolValue(id value, BOOL fallback) {
     if ([value isKindOfClass:[NSNumber class]]) {
@@ -26,6 +28,49 @@ static BOOL YALPostModelBoolValue(id value, BOOL fallback) {
         return text.integerValue != 0;
     }
     return fallback;
+}
+
+static double YALPostModelCoordinateValue(id value) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [((NSNumber *)value) doubleValue];
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *text = [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        return text.length > 0 ? text.doubleValue : 0.0;
+    }
+    return 0.0;
+}
+
+static NSString * _Nullable YALPostModelFirstString(NSDictionary *dict, NSArray<NSString *> *keys) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value isKindOfClass:[NSString class]]) {
+            NSString *text = [(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (text.length > 0) {
+                return text;
+            }
+        }
+    }
+    return nil;
+}
+
+static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<NSString *> *keys) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value respondsToSelector:@selector(integerValue)]) {
+            NSInteger integerValue = [value integerValue];
+            if (integerValue > 0) {
+                return @(integerValue);
+            }
+        }
+    }
+    return nil;
 }
 
 @implementation YALPostModel
@@ -50,6 +95,18 @@ static BOOL YALPostModelBoolValue(id value, BOOL fallback) {
         self.createTime = [dict[@"create_time"] isKindOfClass:[NSString class]] ? dict[@"create_time"] : @"";
         if (self.createTime.length == 0 && [dict[@"created_at"] isKindOfClass:[NSString class]]) {
             self.createTime = dict[@"created_at"];
+        }
+        self.locationName = [dict[@"location_name"] isKindOfClass:[NSString class]] ? dict[@"location_name"] : @"";
+        self.latitude = YALPostModelCoordinateValue(dict[@"latitude"]);
+        if (fabs(self.latitude) < DBL_EPSILON) {
+            self.latitude = YALPostModelCoordinateValue(dict[@"lat"]);
+        }
+        self.longitude = YALPostModelCoordinateValue(dict[@"longitude"]);
+        if (fabs(self.longitude) < DBL_EPSILON) {
+            self.longitude = YALPostModelCoordinateValue(dict[@"lng"]);
+        }
+        if (fabs(self.longitude) < DBL_EPSILON) {
+            self.longitude = YALPostModelCoordinateValue(dict[@"lon"]);
         }
         id likeCountValue = dict[@"like_count"];
         if ([likeCountValue respondsToSelector:@selector(integerValue)]) {
@@ -91,6 +148,33 @@ static BOOL YALPostModelBoolValue(id value, BOOL fallback) {
         }
         if ([collectedValue respondsToSelector:@selector(boolValue)]) {
             self.isCollected = YALPostModelBoolValue(collectedValue, NO);
+        }
+
+        NSDictionary *authorInfo = [dict[@"user"] isKindOfClass:[NSDictionary class]] ? dict[@"user"] : nil;
+        if (!authorInfo) {
+            authorInfo = [dict[@"author"] isKindOfClass:[NSDictionary class]] ? dict[@"author"] : nil;
+        }
+        if (!authorInfo) {
+            authorInfo = [dict[@"publisher"] isKindOfClass:[NSDictionary class]] ? dict[@"publisher"] : nil;
+        }
+        if (!authorInfo) {
+            authorInfo = [dict[@"user_info"] isKindOfClass:[NSDictionary class]] ? dict[@"user_info"] : nil;
+        }
+        self.authorUserId = YALPostModelFirstNumber(dict, @[@"user_id", @"author_id", @"publisher_id", @"uid", @"userid"]);
+        if (!self.authorUserId) {
+            self.authorUserId = YALPostModelFirstNumber(authorInfo, @[@"user_id", @"author_id", @"id", @"uid", @"userid"]);
+        }
+        self.authorNickname = YALPostModelFirstString(dict, @[@"user_nickname", @"nickname", @"author_name", @"publisher_name", @"user_name", @"username"]);
+        if (self.authorNickname.length == 0) {
+            self.authorNickname = YALPostModelFirstString(authorInfo, @[@"nickname", @"user_nickname", @"name", @"author_name", @"user_name", @"username"]);
+        }
+        self.authorAvatar = YALPostModelFirstString(dict, @[@"user_avatar", @"avatar", @"avatar_url", @"author_avatar"]);
+        if (self.authorAvatar.length == 0) {
+            self.authorAvatar = YALPostModelFirstString(authorInfo, @[@"avatar", @"avatar_url", @"user_avatar", @"author_avatar"]);
+        }
+        self.authorBio = YALPostModelFirstString(dict, @[@"user_bio", @"bio", @"author_bio"]);
+        if (self.authorBio.length == 0) {
+            self.authorBio = YALPostModelFirstString(authorInfo, @[@"bio", @"user_bio", @"signature", @"intro"]);
         }
         id publicValue = dict[@"is_public"];
         if ([publicValue respondsToSelector:@selector(boolValue)]) {

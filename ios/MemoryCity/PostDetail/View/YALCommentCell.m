@@ -114,6 +114,7 @@
                       content:content
                          time:time
                       isReply:NO
+                   replyLevel:0
                      expanded:expanded];
 }
 
@@ -123,6 +124,7 @@
                      content:(NSString *)content
                         time:(NSString *)time
                      isReply:(BOOL)isReply
+                   replyLevel:(NSInteger)replyLevel
                     expanded:(BOOL)expanded {
     [self.avatarView sd_cancelCurrentImageLoad];
     self.avatarView.image = avatar;
@@ -137,10 +139,11 @@
     self.nameLabel.text = name;
     self.timeLabel.text = time;
     self.expanded = expanded;
-    CGFloat indent = isReply ? 34.0 : 0.0;
+    NSInteger normalizedLevel = MAX(0, replyLevel);
+    CGFloat indent = normalizedLevel > 0 ? MIN((CGFloat)normalizedLevel, 3.0) * 24.0 : 0.0;
     self.avatarLeftConstraint.offset = 12.0 + indent;
-    self.bubbleLeftConstraint.offset = isReply ? 16.0 : 0.0;
-    self.bubbleView.backgroundColor = isReply
+    self.bubbleLeftConstraint.offset = normalizedLevel > 0 ? 12.0 + MIN((CGFloat)normalizedLevel, 3.0) * 6.0 : 0.0;
+    self.bubbleView.backgroundColor = normalizedLevel > 0
         ? [UIColor colorWithRed:1.0 green:0.976 blue:0.925 alpha:1.0]
         : [UIColor colorWithRed:0.985 green:0.985 blue:0.985 alpha:1.0];
     self.nameLabel.textColor = [UIColor labelColor];
@@ -167,7 +170,7 @@
             } range:range];
         }
     }
-    if (isReply && [content hasPrefix:@"回复 "]) {
+    if (normalizedLevel > 0 && [content hasPrefix:@"回复 "]) {
         NSRange colonRange = [content rangeOfString:@"："];
         if (colonRange.location != NSNotFound) {
             NSRange prefixRange = NSMakeRange(0, colonRange.location + 1);
@@ -178,6 +181,7 @@
         }
     }
     self.contentLabel.attributedText = attr;
+    self.contentLabel.userInteractionEnabled = (suffix.length > 0);
 }
 
 - (void)didTapContent {

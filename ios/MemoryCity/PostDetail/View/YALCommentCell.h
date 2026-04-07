@@ -23,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
                      content:(NSString *)content
                         time:(NSString *)time
                      isReply:(BOOL)isReply
+                   replyLevel:(NSInteger)replyLevel
                     expanded:(BOOL)expanded;
 
 @property (nonatomic, copy) void (^toggleExpandBlock)(void);

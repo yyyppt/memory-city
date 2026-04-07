@@ -53,6 +53,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// 拉取当前登录用户信息（GET /user/info）
 - (void)fetchUserInfoWithCompletion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
 
+/// 拉取指定用户主页信息（GET /user/profile）
+- (void)fetchUserProfileWithUserId:(NSNumber * _Nonnull)userId
+                        completion:(void (^ _Nonnull)(NSDictionary * _Nullable profile, NSError * _Nullable error))completion;
+
 /// 修改密码
 - (void)updatePasswordWithOldPassword:(NSString * _Nonnull)oldPassword
                           newPassword:(NSString * _Nonnull)newPassword
@@ -62,4 +66,3 @@ NS_ASSUME_NONNULL_BEGIN
 @end
 
 NS_ASSUME_NONNULL_END
-

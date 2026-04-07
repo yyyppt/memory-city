@@ -24,6 +24,419 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
     return [UIImage imageWithData:data];
 }
 
+@interface YALAuthorProfileController : UIViewController
+
+@property (nonatomic, strong) NSNumber *userId;
+@property (nonatomic, copy, nullable) NSString *prefilledNickname;
+@property (nonatomic, copy, nullable) NSString *prefilledAvatar;
+@property (nonatomic, copy, nullable) NSString *prefilledBio;
+
+@end
+
+@interface YALAuthorProfileController ()
+
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *contentView;
+@property (nonatomic, strong) UIView *headerCard;
+@property (nonatomic, strong) UIImageView *avatarView;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *bioLabel;
+@property (nonatomic, strong) UILabel *joinDateLabel;
+@property (nonatomic, strong) UIView *statsCard;
+@property (nonatomic, strong) UILabel *publishedValueLabel;
+@property (nonatomic, strong) UILabel *likesValueLabel;
+@property (nonatomic, strong) UILabel *identityLabel;
+@property (nonatomic, strong) UIView *worksCard;
+@property (nonatomic, strong) UILabel *worksTitleLabel;
+@property (nonatomic, strong) UILabel *worksHintLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+
+@end
+
+@implementation YALAuthorProfileController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"作者主页";
+    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    [self setupViews];
+    [self applyPrefilledValues];
+    [self fetchProfile];
+}
+
+- (void)setupViews {
+    self.scrollView = [[UIScrollView alloc] init];
+    self.scrollView.backgroundColor = [UIColor clearColor];
+    self.scrollView.showsVerticalScrollIndicator = NO;
+    [self.view addSubview:self.scrollView];
+    [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
+
+    self.contentView = [[UIView alloc] init];
+    [self.scrollView addSubview:self.contentView];
+    [self.contentView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.scrollView);
+        make.width.equalTo(self.scrollView);
+    }];
+
+    self.headerCard = [[UIView alloc] init];
+    self.headerCard.backgroundColor = [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+    self.headerCard.layer.cornerRadius = 24.0;
+    self.headerCard.layer.masksToBounds = YES;
+    [self.contentView addSubview:self.headerCard];
+
+    self.avatarView = [[UIImageView alloc] init];
+    self.avatarView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.avatarView.layer.cornerRadius = 38.0;
+    self.avatarView.layer.masksToBounds = YES;
+    self.avatarView.contentMode = UIViewContentModeScaleAspectFill;
+    if (@available(iOS 13.0, *)) {
+        self.avatarView.image = [UIImage systemImageNamed:@"person.crop.circle.fill"];
+        self.avatarView.tintColor = [UIColor systemGray2Color];
+    }
+    [self.headerCard addSubview:self.avatarView];
+
+    self.nameLabel = [[UILabel alloc] init];
+    self.nameLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
+    self.nameLabel.textColor = [UIColor labelColor];
+    self.nameLabel.text = @"作者";
+    [self.headerCard addSubview:self.nameLabel];
+
+    self.joinDateLabel = [[UILabel alloc] init];
+    self.joinDateLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    self.joinDateLabel.textColor = [UIColor secondaryLabelColor];
+    self.joinDateLabel.text = @"正在加载主页信息";
+    [self.headerCard addSubview:self.joinDateLabel];
+
+    self.bioLabel = [[UILabel alloc] init];
+    self.bioLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+    self.bioLabel.textColor = [UIColor secondaryLabelColor];
+    self.bioLabel.numberOfLines = 0;
+    self.bioLabel.text = @"这个作者还没有留下个签。";
+    [self.headerCard addSubview:self.bioLabel];
+
+    self.statsCard = [[UIView alloc] init];
+    self.statsCard.backgroundColor = [UIColor systemBackgroundColor];
+    self.statsCard.layer.cornerRadius = 20.0;
+    self.statsCard.layer.masksToBounds = YES;
+    [self.contentView addSubview:self.statsCard];
+
+    self.publishedValueLabel = [self statValueLabelWithText:@"--"];
+    self.likesValueLabel = [self statValueLabelWithText:@"--"];
+    self.identityLabel = [self statValueLabelWithText:@"访客"];
+    [self.statsCard addSubview:self.publishedValueLabel];
+    [self.statsCard addSubview:self.likesValueLabel];
+    [self.statsCard addSubview:self.identityLabel];
+
+    NSArray<UILabel *> *titles = @[
+        [self statTitleLabelWithText:@"公开作品"],
+        [self statTitleLabelWithText:@"累计获赞"],
+        [self statTitleLabelWithText:@"主页类型"]
+    ];
+    for (UILabel *label in titles) {
+        [self.statsCard addSubview:label];
+    }
+
+    [self.publishedValueLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.statsCard.mas_top).offset(18.0);
+        make.left.equalTo(self.statsCard.mas_left).offset(18.0);
+    }];
+    [titles[0] mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.publishedValueLabel.mas_bottom).offset(4.0);
+        make.left.equalTo(self.publishedValueLabel);
+        make.bottom.equalTo(self.statsCard.mas_bottom).offset(-18.0);
+    }];
+
+    [self.likesValueLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.publishedValueLabel);
+        make.centerX.equalTo(self.statsCard.mas_centerX);
+    }];
+    [titles[1] mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.likesValueLabel.mas_bottom).offset(4.0);
+        make.centerX.equalTo(self.likesValueLabel.mas_centerX);
+        make.bottom.equalTo(self.statsCard.mas_bottom).offset(-18.0);
+    }];
+
+    [self.identityLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.publishedValueLabel);
+        make.right.equalTo(self.statsCard.mas_right).offset(-18.0);
+    }];
+    [titles[2] mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.identityLabel.mas_bottom).offset(4.0);
+        make.centerX.equalTo(self.identityLabel.mas_centerX);
+        make.bottom.equalTo(self.statsCard.mas_bottom).offset(-18.0);
+    }];
+
+    self.worksCard = [[UIView alloc] init];
+    self.worksCard.backgroundColor = [UIColor systemBackgroundColor];
+    self.worksCard.layer.cornerRadius = 20.0;
+    self.worksCard.layer.masksToBounds = YES;
+    [self.contentView addSubview:self.worksCard];
+
+    self.worksTitleLabel = [[UILabel alloc] init];
+    self.worksTitleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+    self.worksTitleLabel.textColor = [UIColor labelColor];
+    self.worksTitleLabel.text = @"公开内容";
+    [self.worksCard addSubview:self.worksTitleLabel];
+
+    self.worksHintLabel = [[UILabel alloc] init];
+    self.worksHintLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+    self.worksHintLabel.textColor = [UIColor secondaryLabelColor];
+    self.worksHintLabel.numberOfLines = 0;
+    self.worksHintLabel.text = @"作者主页资料已接入。等你补上作者公开内容接口后，这里就能直接展示 Ta 的发布列表。";
+    [self.worksCard addSubview:self.worksHintLabel];
+
+    self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.loadingIndicator.hidesWhenStopped = YES;
+    [self.view addSubview:self.loadingIndicator];
+    [self.loadingIndicator mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(self.view);
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(18.0);
+    }];
+
+    [self.headerCard mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.contentView.mas_top).offset(18.0);
+        make.left.equalTo(self.contentView.mas_left).offset(16.0);
+        make.right.equalTo(self.contentView.mas_right).offset(-16.0);
+    }];
+    [self.avatarView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.headerCard.mas_top).offset(20.0);
+        make.left.equalTo(self.headerCard.mas_left).offset(18.0);
+        make.width.height.mas_equalTo(76.0);
+    }];
+    [self.nameLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.avatarView.mas_top).offset(4.0);
+        make.left.equalTo(self.avatarView.mas_right).offset(14.0);
+        make.right.equalTo(self.headerCard.mas_right).offset(-18.0);
+    }];
+    [self.joinDateLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.nameLabel.mas_bottom).offset(6.0);
+        make.left.equalTo(self.nameLabel);
+        make.right.equalTo(self.nameLabel);
+    }];
+    [self.bioLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.avatarView.mas_bottom).offset(16.0);
+        make.left.equalTo(self.headerCard.mas_left).offset(18.0);
+        make.right.equalTo(self.headerCard.mas_right).offset(-18.0);
+        make.bottom.equalTo(self.headerCard.mas_bottom).offset(-20.0);
+    }];
+
+    [self.statsCard mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.headerCard.mas_bottom).offset(14.0);
+        make.left.right.equalTo(self.headerCard);
+    }];
+
+    [self.worksCard mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.statsCard.mas_bottom).offset(14.0);
+        make.left.right.equalTo(self.headerCard);
+        make.bottom.equalTo(self.contentView.mas_bottom).offset(-24.0);
+    }];
+    [self.worksTitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.worksCard.mas_top).offset(18.0);
+        make.left.equalTo(self.worksCard.mas_left).offset(18.0);
+        make.right.equalTo(self.worksCard.mas_right).offset(-18.0);
+    }];
+    [self.worksHintLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.worksTitleLabel.mas_bottom).offset(12.0);
+        make.left.equalTo(self.worksCard.mas_left).offset(18.0);
+        make.right.equalTo(self.worksCard.mas_right).offset(-18.0);
+        make.bottom.equalTo(self.worksCard.mas_bottom).offset(-18.0);
+    }];
+}
+
+- (UILabel *)statValueLabelWithText:(NSString *)text {
+    UILabel *label = [[UILabel alloc] init];
+    label.font = [UIFont systemFontOfSize:21 weight:UIFontWeightBold];
+    label.textColor = [UIColor labelColor];
+    label.text = text;
+    return label;
+}
+
+- (UILabel *)statTitleLabelWithText:(NSString *)text {
+    UILabel *label = [[UILabel alloc] init];
+    label.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    label.textColor = [UIColor secondaryLabelColor];
+    label.text = text;
+    return label;
+}
+
+- (void)applyPrefilledValues {
+    if (self.prefilledNickname.length > 0) {
+        self.nameLabel.text = self.prefilledNickname;
+    }
+    if (self.prefilledBio.length > 0) {
+        self.bioLabel.text = self.prefilledBio;
+    }
+    if (self.prefilledAvatar.length > 0) {
+        UIImage *decodedImage = YALPostDetailImageFromDataURLString(self.prefilledAvatar);
+        if (decodedImage) {
+            self.avatarView.image = decodedImage;
+        } else {
+            NSURL *avatarURL = [NSURL URLWithString:self.prefilledAvatar];
+            if (avatarURL && avatarURL.scheme.length > 0) {
+                [self.avatarView sd_setImageWithURL:avatarURL
+                                   placeholderImage:self.avatarView.image
+                                            options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+            }
+        }
+    }
+}
+
+- (nullable NSString *)firstNonEmptyStringFromDictionary:(NSDictionary *)dict keys:(NSArray<NSString *> *)keys {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value isKindOfClass:[NSString class]]) {
+            NSString *text = [(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (text.length > 0) {
+                return text;
+            }
+        }
+    }
+    return nil;
+}
+
+- (nullable NSNumber *)firstPositiveNumberFromDictionary:(NSDictionary *)dict keys:(NSArray<NSString *> *)keys {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value respondsToSelector:@selector(integerValue)]) {
+            NSInteger integerValue = [value integerValue];
+            if (integerValue > 0) {
+                return @(integerValue);
+            }
+        }
+    }
+    return nil;
+}
+
+- (nullable NSString *)firstNonEmptyStringRecursivelyFromObject:(id)obj keys:(NSArray<NSString *> *)keys {
+    if ([obj isKindOfClass:[NSDictionary class]]) {
+        NSString *direct = [self firstNonEmptyStringFromDictionary:(NSDictionary *)obj keys:keys];
+        if (direct.length > 0) {
+            return direct;
+        }
+        for (id value in [(NSDictionary *)obj allValues]) {
+            NSString *nested = [self firstNonEmptyStringRecursivelyFromObject:value keys:keys];
+            if (nested.length > 0) {
+                return nested;
+            }
+        }
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)obj) {
+            NSString *nested = [self firstNonEmptyStringRecursivelyFromObject:value keys:keys];
+            if (nested.length > 0) {
+                return nested;
+            }
+        }
+    }
+    return nil;
+}
+
+- (nullable NSNumber *)firstPositiveNumberRecursivelyFromObject:(id)obj keys:(NSArray<NSString *> *)keys {
+    if ([obj isKindOfClass:[NSDictionary class]]) {
+        NSNumber *direct = [self firstPositiveNumberFromDictionary:(NSDictionary *)obj keys:keys];
+        if (direct.integerValue > 0) {
+            return direct;
+        }
+        for (id value in [(NSDictionary *)obj allValues]) {
+            NSNumber *nested = [self firstPositiveNumberRecursivelyFromObject:value keys:keys];
+            if (nested.integerValue > 0) {
+                return nested;
+            }
+        }
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)obj) {
+            NSNumber *nested = [self firstPositiveNumberRecursivelyFromObject:value keys:keys];
+            if (nested.integerValue > 0) {
+                return nested;
+            }
+        }
+    }
+    return nil;
+}
+
+- (NSInteger)integerValueFromObject:(id)value fallback:(NSInteger)fallback {
+    if ([value respondsToSelector:@selector(integerValue)]) {
+        return [value integerValue];
+    }
+    return fallback;
+}
+
+- (BOOL)boolValueFromObject:(id)value fallback:(BOOL)fallback {
+    if ([value respondsToSelector:@selector(boolValue)]) {
+        return [value boolValue];
+    }
+    return fallback;
+}
+
+- (void)fetchProfile {
+    if (self.userId.integerValue <= 0) {
+        self.joinDateLabel.text = @"缺少作者ID，暂时无法拉取主页";
+        return;
+    }
+
+    [self.loadingIndicator startAnimating];
+    __weak typeof(self) weakSelf = self;
+    [[YALAuthManager sharedManager] fetchUserProfileWithUserId:self.userId completion:^(NSDictionary * _Nullable profile, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [strongSelf.loadingIndicator stopAnimating];
+            if (![profile isKindOfClass:[NSDictionary class]]) {
+                strongSelf.joinDateLabel.text = error.localizedDescription.length > 0 ? error.localizedDescription : @"主页信息加载失败";
+                return;
+            }
+
+            NSString *nickname = [strongSelf firstNonEmptyStringFromDictionary:profile keys:@[@"nickname", @"user_nickname", @"name"]];
+            if (nickname.length > 0) {
+                strongSelf.nameLabel.text = nickname;
+            }
+
+            NSString *bio = [strongSelf firstNonEmptyStringFromDictionary:profile keys:@[@"bio", @"signature", @"intro"]];
+            strongSelf.bioLabel.text = bio.length > 0 ? bio : @"这个作者还没有留下个签。";
+
+            NSString *avatar = [strongSelf firstNonEmptyStringFromDictionary:profile keys:@[@"avatar", @"user_avatar", @"avatar_url"]];
+            if (avatar.length > 0) {
+                UIImage *decodedImage = YALPostDetailImageFromDataURLString(avatar);
+                if (decodedImage) {
+                    strongSelf.avatarView.image = decodedImage;
+                } else {
+                    NSURL *avatarURL = [NSURL URLWithString:avatar];
+                    if (avatarURL && avatarURL.scheme.length > 0) {
+                        [strongSelf.avatarView sd_setImageWithURL:avatarURL
+                                                  placeholderImage:strongSelf.avatarView.image
+                                                           options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+                    }
+                }
+            }
+
+            NSString *createTime = [strongSelf firstNonEmptyStringFromDictionary:profile keys:@[@"create_time", @"created_at", @"join_time"]];
+            strongSelf.joinDateLabel.text = createTime.length > 0 ? [NSString stringWithFormat:@"加入于 %@", createTime] : @"主页资料已加载";
+
+            NSInteger publishedCount = [strongSelf integerValueFromObject:profile[@"public_content_count"] fallback:[strongSelf integerValueFromObject:profile[@"content_count"] fallback:0]];
+            NSInteger likeTotal = [strongSelf integerValueFromObject:profile[@"like_total"] fallback:[strongSelf integerValueFromObject:profile[@"likes_total"] fallback:0]];
+            BOOL isSelf = [strongSelf boolValueFromObject:profile[@"is_self"] fallback:([YALAuthManager sharedManager].currentUser.userId > 0 && [YALAuthManager sharedManager].currentUser.userId == strongSelf.userId.integerValue)];
+
+            strongSelf.publishedValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(publishedCount, 0)];
+            strongSelf.likesValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(likeTotal, 0)];
+            strongSelf.identityLabel.text = isSelf ? @"我自己" : @"作者";
+            strongSelf.worksHintLabel.text = isSelf
+                ? @"这里预留给你的公开作品区。等你补上作者内容列表接口后，这里就能直接展示自己的公开发布。"
+                : @"这里预留给作者的公开作品区。等你补上作者内容列表接口后，这里就能直接展示 Ta 的公开发布。";
+        });
+    }];
+}
+
+@end
+
 @interface YALPostDetailController () <UITableViewDataSource, UITableViewDelegate, UITextViewDelegate, UIGestureRecognizerDelegate, UIScrollViewDelegate>
 
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -39,6 +452,7 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 @property (nonatomic, strong) NSArray<NSDictionary *> *comments;
 @property (nonatomic, strong, nullable) NSDictionary *pendingInsertedComment;
 @property (nonatomic, strong) UIView *bottomBar;
+@property (nonatomic, strong) UIView *bottomBarContentView;
 @property (nonatomic, strong) UIView *inputContainer;
 @property (nonatomic, strong) UITextView *inputTextView;
 @property (nonatomic, strong) UILabel *inputPlaceholderLabel;
@@ -65,6 +479,10 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 @property (nonatomic, assign) BOOL isLiked;
 @property (nonatomic, assign) BOOL isCollected;
 @property (nonatomic, strong) UIView *contentCard;
+@property (nonatomic, strong, nullable) NSNumber *authorUserId;
+@property (nonatomic, copy, nullable) NSString *authorNickname;
+@property (nonatomic, copy, nullable) NSString *authorAvatar;
+@property (nonatomic, copy, nullable) NSString *authorBio;
 
 @end
 
@@ -300,11 +718,75 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     return nil;
 }
 
-- (NSArray<NSDictionary *> *)flattenCommentTree:(NSArray *)comments {
-    return [self flattenCommentTree:comments replyTargetName:nil];
+- (nullable NSNumber *)firstPositiveNumberFromDictionary:(NSDictionary *)dict keys:(NSArray<NSString *> *)keys {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value respondsToSelector:@selector(integerValue)]) {
+            NSInteger integerValue = [value integerValue];
+            if (integerValue > 0) {
+                return @(integerValue);
+            }
+        }
+    }
+    return nil;
 }
 
-- (NSArray<NSDictionary *> *)flattenCommentTree:(NSArray *)comments replyTargetName:(nullable NSString *)replyTargetName {
+- (nullable NSString *)firstNonEmptyStringRecursivelyFromObject:(id)obj keys:(NSArray<NSString *> *)keys {
+    if ([obj isKindOfClass:[NSDictionary class]]) {
+        NSString *direct = [self firstNonEmptyStringFromDictionary:(NSDictionary *)obj keys:keys];
+        if (direct.length > 0) {
+            return direct;
+        }
+        for (id value in [(NSDictionary *)obj allValues]) {
+            NSString *nested = [self firstNonEmptyStringRecursivelyFromObject:value keys:keys];
+            if (nested.length > 0) {
+                return nested;
+            }
+        }
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)obj) {
+            NSString *nested = [self firstNonEmptyStringRecursivelyFromObject:value keys:keys];
+            if (nested.length > 0) {
+                return nested;
+            }
+        }
+    }
+    return nil;
+}
+
+- (nullable NSNumber *)firstPositiveNumberRecursivelyFromObject:(id)obj keys:(NSArray<NSString *> *)keys {
+    if ([obj isKindOfClass:[NSDictionary class]]) {
+        NSNumber *direct = [self firstPositiveNumberFromDictionary:(NSDictionary *)obj keys:keys];
+        if (direct.integerValue > 0) {
+            return direct;
+        }
+        for (id value in [(NSDictionary *)obj allValues]) {
+            NSNumber *nested = [self firstPositiveNumberRecursivelyFromObject:value keys:keys];
+            if (nested.integerValue > 0) {
+                return nested;
+            }
+        }
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)obj) {
+            NSNumber *nested = [self firstPositiveNumberRecursivelyFromObject:value keys:keys];
+            if (nested.integerValue > 0) {
+                return nested;
+            }
+        }
+    }
+    return nil;
+}
+
+- (NSArray<NSDictionary *> *)flattenCommentTree:(NSArray *)comments {
+    return [self flattenCommentTree:comments replyTargetName:nil depth:0];
+}
+
+- (NSArray<NSDictionary *> *)flattenCommentTree:(NSArray *)comments
+                                replyTargetName:(nullable NSString *)replyTargetName
+                                          depth:(NSInteger)depth {
     NSMutableArray<NSDictionary *> *result = [NSMutableArray array];
     for (id obj in comments) {
         if (![obj isKindOfClass:[NSDictionary class]]) { continue; }
@@ -357,7 +839,8 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         NSMutableDictionary *commentDict = [@{
             @"name": name,
             @"content": content,
-            @"time": time
+            @"time": time,
+            @"depth": @(MAX(depth, 0))
         } mutableCopy];
         id commentId = item[@"comment_id"];
         if ([commentId respondsToSelector:@selector(integerValue)]) {
@@ -373,6 +856,10 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         if (replyTargetName.length > 0) {
             commentDict[@"reply_to_name"] = replyTargetName;
         }
+        NSString *rawTime = [item[@"created_at"] isKindOfClass:[NSString class]] ? item[@"created_at"] : @"";
+        if (rawTime.length > 0) {
+            commentDict[@"raw_time"] = rawTime;
+        }
         if (avatar.length > 0) {
             commentDict[@"avatar"] = avatar;
         }
@@ -380,7 +867,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 
         NSArray *replies = [item[@"replies"] isKindOfClass:[NSArray class]] ? item[@"replies"] : nil;
         if (replies.count > 0) {
-            [result addObjectsFromArray:[self flattenCommentTree:replies replyTargetName:name]];
+            [result addObjectsFromArray:[self flattenCommentTree:replies replyTargetName:name depth:depth + 1]];
         }
     }
     return result;
@@ -414,6 +901,8 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                 }
                 NSNumber *parentRootId = [parentComment[@"root_comment_id"] respondsToSelector:@selector(integerValue)] ? @([parentComment[@"root_comment_id"] integerValue]) : nil;
                 rootCommentId = parentRootId ?: @(parentValue);
+                NSInteger parentDepth = [parentComment[@"depth"] respondsToSelector:@selector(integerValue)] ? [parentComment[@"depth"] integerValue] : 0;
+                mutableComment[@"depth"] = @(parentDepth + 1);
             }
         }
         if (rootCommentId) {
@@ -468,18 +957,13 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         }
     }
 
-    [rootComments sortUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-        NSString *time1 = [obj1[@"time"] isKindOfClass:[NSString class]] ? obj1[@"time"] : @"";
-        NSString *time2 = [obj2[@"time"] isKindOfClass:[NSString class]] ? obj2[@"time"] : @"";
-        return [time2 compare:time1];
-    }];
-
     NSMutableArray<NSDictionary *> *rows = [NSMutableArray array];
     for (NSDictionary *rootComment in rootComments) {
         [rows addObject:@{
             @"row_type": @"comment",
             @"comment": rootComment,
-            @"is_reply": @NO
+            @"is_reply": @NO,
+            @"reply_level": @0
         }];
 
         NSNumber *rootId = [rootComment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([rootComment[@"comment_id"] integerValue]) : nil;
@@ -488,20 +972,17 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
             continue;
         }
 
-        replies = [replies sortedArrayUsingComparator:^NSComparisonResult(NSDictionary *obj1, NSDictionary *obj2) {
-            NSString *time1 = [obj1[@"time"] isKindOfClass:[NSString class]] ? obj1[@"time"] : @"";
-            NSString *time2 = [obj2[@"time"] isKindOfClass:[NSString class]] ? obj2[@"time"] : @"";
-            return [time1 compare:time2];
-        }];
-
         BOOL expandedThread = rootId ? [self.expandedReplyThreads containsObject:rootId] : NO;
-        NSInteger defaultVisibleCount = 0;
+        NSInteger defaultVisibleCount = replies.count;
         NSInteger visibleCount = expandedThread ? replies.count : MIN(defaultVisibleCount, replies.count);
         for (NSInteger i = 0; i < visibleCount; i++) {
+            NSDictionary *replyComment = replies[i];
+            NSInteger replyLevel = [replyComment[@"depth"] respondsToSelector:@selector(integerValue)] ? [replyComment[@"depth"] integerValue] : 1;
             [rows addObject:@{
                 @"row_type": @"comment",
-                @"comment": replies[i],
-                @"is_reply": @YES
+                @"comment": replyComment,
+                @"is_reply": @YES,
+                @"reply_level": @(MAX(replyLevel, 1))
             }];
         }
 
@@ -579,10 +1060,52 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     NSString *titleText = [content[@"title"] isKindOfClass:[NSString class]] ? content[@"title"] : self.post.title;
     NSString *descText = [content[@"content"] isKindOfClass:[NSString class]] ? content[@"content"] : self.post.desc;
     if (titleText.length == 0) {
-        titleText = @"未命名内容";
+        titleText = @"加载中...";
     }
     self.titleLabel.text = titleText;
-    self.descLabel.text = descText ?: @"";
+    self.descLabel.text = descText.length > 0 ? descText : @"正在加载内容详情";
+
+    NSDictionary *authorInfo = [content[@"user"] isKindOfClass:[NSDictionary class]] ? content[@"user"] : nil;
+    if (!authorInfo) {
+        authorInfo = [content[@"author"] isKindOfClass:[NSDictionary class]] ? content[@"author"] : nil;
+    }
+    if (!authorInfo) {
+        authorInfo = [content[@"publisher"] isKindOfClass:[NSDictionary class]] ? content[@"publisher"] : nil;
+    }
+    if (!authorInfo) {
+        authorInfo = [content[@"user_info"] isKindOfClass:[NSDictionary class]] ? content[@"user_info"] : nil;
+    }
+    if (!authorInfo) {
+        authorInfo = [content[@"profile"] isKindOfClass:[NSDictionary class]] ? content[@"profile"] : nil;
+    }
+    self.authorUserId = self.post.authorUserId;
+    if (!self.authorUserId) {
+        self.authorUserId = [self firstPositiveNumberRecursivelyFromObject:content keys:@[@"user_id", @"author_id", @"publisher_id", @"uid", @"userid", @"id"]];
+    }
+    if (!self.authorUserId) {
+        self.authorUserId = [self firstPositiveNumberFromDictionary:authorInfo keys:@[@"user_id", @"author_id", @"id", @"uid", @"userid"]];
+    }
+    self.authorNickname = self.post.authorNickname;
+    if (self.authorNickname.length == 0) {
+        self.authorNickname = [self firstNonEmptyStringRecursivelyFromObject:content keys:@[@"user_nickname", @"nickname", @"author_name", @"publisher_name", @"user_name", @"username", @"name"]];
+    }
+    if (self.authorNickname.length == 0) {
+        self.authorNickname = [self firstNonEmptyStringFromDictionary:authorInfo keys:@[@"nickname", @"user_nickname", @"name", @"author_name", @"user_name", @"username"]];
+    }
+    self.authorAvatar = self.post.authorAvatar;
+    if (self.authorAvatar.length == 0) {
+        self.authorAvatar = [self firstNonEmptyStringRecursivelyFromObject:content keys:@[@"user_avatar", @"avatar", @"avatar_url", @"author_avatar"]];
+    }
+    if (self.authorAvatar.length == 0) {
+        self.authorAvatar = [self firstNonEmptyStringFromDictionary:authorInfo keys:@[@"avatar", @"avatar_url", @"user_avatar", @"author_avatar"]];
+    }
+    self.authorBio = self.post.authorBio;
+    if (self.authorBio.length == 0) {
+        self.authorBio = [self firstNonEmptyStringRecursivelyFromObject:content keys:@[@"user_bio", @"bio", @"author_bio", @"signature", @"intro"]];
+    }
+    if (self.authorBio.length == 0) {
+        self.authorBio = [self firstNonEmptyStringFromDictionary:authorInfo keys:@[@"bio", @"user_bio", @"signature", @"intro"]];
+    }
 
     id likeObj = content[@"like_count"];
     if ([likeObj respondsToSelector:@selector(integerValue)]) {
@@ -773,6 +1296,11 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     [self loadComments];
 }
 
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self updateBottomBarForEditing:self.inputExpanded animated:NO];
+}
+
 - (void)setupViews {
     self.scrollView = [[UIScrollView alloc] init];
     self.scrollView.backgroundColor = [UIColor systemBackgroundColor];
@@ -847,11 +1375,17 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 
     // 底部工具栏：评论输入 + 点赞 / 收藏 / 评论数
     self.bottomBar = [[UIView alloc] init];
+    self.bottomBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.bottomBar.backgroundColor = [UIColor secondarySystemBackgroundColor];
     [self.view addSubview:self.bottomBar];
+    self.bottomBarContentView = [[UIView alloc] init];
+    self.bottomBarContentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bottomBarContentView.backgroundColor = [UIColor clearColor];
+    [self.bottomBar addSubview:self.bottomBarContentView];
 
     // 左侧：可增长的评论输入区
     self.inputContainer = [[UIView alloc] init];
+    self.inputContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.inputContainer.layer.cornerRadius = 20.0;
     self.inputContainer.layer.masksToBounds = YES;
     UIColor *pillBg = (@available(iOS 13.0, *)) ? [UIColor systemBackgroundColor] : [UIColor whiteColor];
@@ -861,6 +1395,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     self.inputContainer.layer.borderColor = inputBorderColor.CGColor;
     UIColor *placeholderColor = (@available(iOS 13.0, *)) ? [UIColor secondaryLabelColor] : [UIColor lightGrayColor];
     self.inputTextView = [[UITextView alloc] init];
+    self.inputTextView.translatesAutoresizingMaskIntoConstraints = NO;
     self.inputTextView.backgroundColor = [UIColor clearColor];
     self.inputTextView.font = [UIFont systemFontOfSize:15];
     self.inputTextView.textColor = [UIColor labelColor];
@@ -874,11 +1409,13 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     self.inputTextView.textContainer.lineFragmentPadding = 0;
 
     self.inputPlaceholderLabel = [[UILabel alloc] init];
+    self.inputPlaceholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.inputPlaceholderLabel.text = @"说点什么...";
     self.inputPlaceholderLabel.font = self.inputTextView.font;
     self.inputPlaceholderLabel.textColor = placeholderColor;
 
     self.publishButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.publishButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.publishButton setTitle:@"发布" forState:UIControlStateNormal];
     self.publishButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     self.publishButton.backgroundColor = [UIColor colorWithRed:0.98 green:0.89 blue:0.58 alpha:1.0];
@@ -892,7 +1429,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     [self.inputContainer addSubview:self.inputTextView];
     [self.inputContainer addSubview:self.inputPlaceholderLabel];
     [self.inputContainer addSubview:self.publishButton];
-    [self.bottomBar addSubview:self.inputContainer];
+    [self.bottomBarContentView addSubview:self.inputContainer];
 
     // 右侧：点赞 / 收藏 / 评论 数字
     UIColor *iconColor = [UIColor labelColor];
@@ -942,18 +1479,22 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     self.commentCountLabel.font = countFont;
     self.commentCountLabel.textColor = countColor;
 
-    [self.bottomBar addSubview:self.likeButton];
-    [self.bottomBar addSubview:self.favoriteButton];
-    [self.bottomBar addSubview:self.commentButton];
-    [self.bottomBar addSubview:self.likeCountLabel];
-    [self.bottomBar addSubview:self.favoriteCountLabel];
-    [self.bottomBar addSubview:self.commentCountLabel];
+    [self.bottomBarContentView addSubview:self.likeButton];
+    [self.bottomBarContentView addSubview:self.favoriteButton];
+    [self.bottomBarContentView addSubview:self.commentButton];
+    [self.bottomBarContentView addSubview:self.likeCountLabel];
+    [self.bottomBarContentView addSubview:self.favoriteCountLabel];
+    [self.bottomBarContentView addSubview:self.commentCountLabel];
 
     // Layout with Masonry
     [self.bottomBar mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.right.equalTo(self.view);
         self.bottomBarBottomConstraint = make.bottom.equalTo(self.view.mas_bottom);
-        self.bottomBarHeightConstraint = make.height.mas_equalTo(64.0);
+        self.bottomBarHeightConstraint = make.height.mas_equalTo([self targetBottomBarHeightForEditing:NO]);
+    }];
+    [self.bottomBarContentView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.right.top.equalTo(self.bottomBar);
+        make.bottom.equalTo(self.bottomBar.mas_safeAreaLayoutGuideBottom);
     }];
 
     [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -1019,8 +1560,8 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     CGFloat spacing = 10.0;
 
     [self.commentButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.right.equalTo(self.bottomBar.mas_right).offset(-paddingBar);
-        make.centerY.equalTo(self.bottomBar.mas_centerY);
+        make.right.equalTo(self.bottomBarContentView.mas_right).offset(-paddingBar);
+        make.centerY.equalTo(self.bottomBarContentView.mas_centerY);
         make.width.height.mas_equalTo(26.0);
     }];
     [self.commentCountLabel mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -1065,14 +1606,18 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     }];
 
     if (self.post) {
+        self.authorUserId = self.post.authorUserId;
+        self.authorNickname = self.post.authorNickname;
+        self.authorAvatar = self.post.authorAvatar;
+        self.authorBio = self.post.authorBio;
         NSString *titleText = [self.post.title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         NSString *descText = [self.post.desc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (titleText.length == 0) {
-            titleText = @"未命名内容";
+            titleText = @"加载中...";
         }
 
         self.titleLabel.text = titleText;
-        self.descLabel.text = descText;
+        self.descLabel.text = descText.length > 0 ? descText : @"正在加载内容详情";
 
         [self updateImageGalleryWithSources:self.post.images placeholder:self.post.image];
 
@@ -1114,6 +1659,11 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     BOOL canScroll = (contentHeight > visibleHeight + 0.5);
     self.scrollView.alwaysBounceVertical = canScroll;
     self.scrollView.bounces = canScroll;
+}
+
+- (void)viewSafeAreaInsetsDidChange {
+    [super viewSafeAreaInsetsDidChange];
+    [self updateBottomBarForEditing:self.inputExpanded animated:NO];
 }
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
@@ -1181,6 +1731,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     NSDictionary *comment = [row[@"comment"] isKindOfClass:[NSDictionary class]] ? row[@"comment"] : @{};
     NSNumber *commentId = [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : nil;
     BOOL expanded = commentId ? [self.expandedCommentIds containsObject:commentId] : NO;
+    NSInteger replyLevel = [row[@"reply_level"] respondsToSelector:@selector(integerValue)] ? [row[@"reply_level"] integerValue] : ([row[@"is_reply"] boolValue] ? 1 : 0);
 
     UIImage *avatar;
     if (@available(iOS 13.0, *)) {
@@ -1217,6 +1768,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                       content:[self displayContentForComment:comment]
                          time:comment[@"time"]
                       isReply:[row[@"is_reply"] boolValue]
+                   replyLevel:replyLevel
                      expanded:expanded];
     return cell;
 }
@@ -1237,6 +1789,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     NSDictionary *comment = [row[@"comment"] isKindOfClass:[NSDictionary class]] ? row[@"comment"] : @{};
     NSNumber *commentId = [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : nil;
     BOOL expanded = commentId ? [self.expandedCommentIds containsObject:commentId] : NO;
+    NSInteger replyLevel = [row[@"reply_level"] respondsToSelector:@selector(integerValue)] ? [row[@"reply_level"] integerValue] : ([row[@"is_reply"] boolValue] ? 1 : 0);
     UIImage *avatar = [[UIImage alloc] init];
     [sizingCell configureWithAvatar:avatar
                     avatarURLString:nil
@@ -1244,6 +1797,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                             content:[self displayContentForComment:comment]
                                time:comment[@"time"]
                             isReply:[row[@"is_reply"] boolValue]
+                        replyLevel:replyLevel
                            expanded:expanded];
 
     CGFloat width = CGRectGetWidth(tableView.bounds);
@@ -1293,7 +1847,52 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 }
 
 - (void)ownerTapped {
-    // 预留：跳转到作品主人的主页
+    NSNumber *targetUserId = self.authorUserId;
+    if (targetUserId.integerValue > 0) {
+        YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
+        controller.userId = targetUserId;
+        controller.prefilledNickname = self.authorNickname;
+        controller.prefilledAvatar = self.authorAvatar;
+        controller.prefilledBio = self.authorBio;
+        [self.navigationController pushViewController:controller animated:YES];
+        return;
+    }
+
+    if (self.post.contentId.integerValue <= 0) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"暂时无法进入"
+                                                                       message:@"这条内容还没有拿到发布人信息。"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] getContentDetailWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success && [content isKindOfClass:[NSDictionary class]]) {
+                [strongSelf applyDetailData:content];
+            }
+            if (strongSelf.authorUserId.integerValue > 0) {
+                YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
+                controller.userId = strongSelf.authorUserId;
+                controller.prefilledNickname = strongSelf.authorNickname;
+                controller.prefilledAvatar = strongSelf.authorAvatar;
+                controller.prefilledBio = strongSelf.authorBio;
+                [strongSelf.navigationController pushViewController:controller animated:YES];
+            } else {
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"暂时无法进入"
+                                                                               message:(error.localizedDescription.length > 0 ? error.localizedDescription : @"后端还没有返回发布人 user_id。")
+                                                                        preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+                [strongSelf presentViewController:alert animated:YES completion:nil];
+            }
+        });
+    }];
 }
 
 - (void)didTapComment {
@@ -1474,17 +2073,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     CGFloat keyboardHeightInView = CGRectGetMaxY(self.view.bounds) - [self.view convertRect:endFrame fromView:nil].origin.y;
     if (keyboardHeightInView < 0) keyboardHeightInView = 0;
 
-    CGFloat safeBottom = 0;
-    if (@available(iOS 11.0, *)) {
-        safeBottom = self.view.safeAreaInsets.bottom;
-    }
-    CGFloat keyboardGap = 0;
-    if (keyboardHeightInView > 0) {
-        // 再多抬一点，确保整个输入框完全露出
-        CGFloat desiredGap = [self targetInputHeightForEditing:self.inputExpanded] * 0.55;
-        keyboardGap = MIN(32.0, MAX(20.0, desiredGap));
-    }
-    CGFloat offset = -MAX(0, keyboardHeightInView - safeBottom + keyboardGap);
+    CGFloat offset = -MAX(0, keyboardHeightInView);
 
     [self.bottomBarBottomConstraint uninstall];
     [self.bottomBar mas_updateConstraints:^(MASConstraintMaker *make) {
@@ -1567,12 +2156,13 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
             }
             NSMutableDictionary *pendingComment = [@{
                 @"comment_id": [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : @(0),
-                @"parent_id": [comment[@"ParentID"] respondsToSelector:@selector(integerValue)] ? @([comment[@"ParentID"] integerValue]) : parentId,
+                @"parent_id": [comment[@"parent_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"parent_id"] integerValue]) : ([comment[@"ParentID"] respondsToSelector:@selector(integerValue)] ? @([comment[@"ParentID"] integerValue]) : parentId),
                 @"root_comment_id": rootCommentId ?: @(0),
                 @"name": name.length > 0 ? name : ([YALAuthManager sharedManager].currentUser.nickname ?: @"我"),
                 @"content": text,
                 @"time": [strongSelf displayTimeStringFromRaw:comment[@"created_at"]],
-                @"reply_to_name": [strongSelf.replyTargetComment[@"name"] isKindOfClass:[NSString class]] ? strongSelf.replyTargetComment[@"name"] : @""
+                @"reply_to_name": [strongSelf.replyTargetComment[@"name"] isKindOfClass:[NSString class]] ? strongSelf.replyTargetComment[@"name"] : @"",
+                @"depth": @(([strongSelf.replyTargetComment[@"depth"] respondsToSelector:@selector(integerValue)] ? [strongSelf.replyTargetComment[@"depth"] integerValue] : -1) + 1)
             } mutableCopy];
             if (avatar.length > 0) {
                 pendingComment[@"avatar"] = avatar;
@@ -1623,15 +2213,14 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 
     [self.bottomBarHeightConstraint uninstall];
     [self.bottomBar mas_updateConstraints:^(MASConstraintMaker *make) {
-        CGFloat inputHeight = [self targetInputHeightForEditing:editing];
-        self.bottomBarHeightConstraint = make.height.mas_equalTo(inputHeight + 20.0);
+        self.bottomBarHeightConstraint = make.height.mas_equalTo([self targetBottomBarHeightForEditing:editing]);
     }];
 
     [self.inputContainer mas_remakeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.bottomBar.mas_left).offset(12.0);
-        make.top.equalTo(self.bottomBar.mas_top).offset(8.0);
+        make.left.equalTo(self.bottomBarContentView.mas_left).offset(12.0);
+        make.centerY.equalTo(self.bottomBarContentView.mas_centerY);
         if (editing) {
-            make.right.equalTo(self.bottomBar.mas_right).offset(-12.0);
+            make.right.equalTo(self.bottomBarContentView.mas_right).offset(-12.0);
         } else {
             make.right.equalTo(self.likeCountLabel.mas_left).offset(-8.0);
         }
@@ -1699,6 +2288,14 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     CGFloat maxHeight = 108.0;
     self.inputTextView.scrollEnabled = height > maxHeight;
     return MIN(height, maxHeight);
+}
+
+- (CGFloat)targetBottomBarHeightForEditing:(BOOL)editing {
+    CGFloat safeBottom = 0.0;
+    if (@available(iOS 11.0, *)) {
+        safeBottom = self.view.safeAreaInsets.bottom;
+    }
+    return [self targetInputHeightForEditing:editing] + 20.0 + safeBottom;
 }
 
 - (void)updatePublishButtonState {

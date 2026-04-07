@@ -36,6 +36,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSInteger commentCount;
 @property (nonatomic, assign) BOOL isLiked;
 @property (nonatomic, assign) BOOL isCollected;
+@property (nonatomic, copy) NSString *locationName;
+@property (nonatomic, assign) double latitude;
+@property (nonatomic, assign) double longitude;
+@property (nonatomic, strong, nullable) NSNumber *authorUserId;
+@property (nonatomic, copy, nullable) NSString *authorNickname;
+@property (nonatomic, copy, nullable) NSString *authorAvatar;
+@property (nonatomic, copy, nullable) NSString *authorBio;
 
 /// 从字典初始化模型
 /// @param dict 字典数据

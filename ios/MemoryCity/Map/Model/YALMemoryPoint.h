@@ -8,6 +8,8 @@
 #import <Foundation/Foundation.h>
 #import <MapKit/MapKit.h>
 
+@class YALPostModel;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface YALMemoryPoint : MKPointAnnotation
@@ -15,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *memoryID;
 @property (nonatomic, copy) NSString *detailText;
 @property (nonatomic, assign) BOOL userCreated;
+@property (nonatomic, strong, nullable) YALPostModel *postModel;
 
 + (instancetype)pointWithCoordinate:(CLLocationCoordinate2D)coordinate
                               title:(NSString *)title

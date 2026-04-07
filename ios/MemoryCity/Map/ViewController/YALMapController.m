@@ -9,10 +9,13 @@
 #import "YALMemoryPoint.h"
 #import "YALPostDetailController.h"
 #import "YALPostModel.h"
+#import "YALContentManager.h"
 #import <MapKit/MapKit.h>
 #import <CoreLocation/CoreLocation.h>
 #import "YALReleaseController.h"
 #import <Masonry/Masonry.h>
+#import <float.h>
+#import <math.h>
 
 @interface YALMapController () <MKMapViewDelegate, CLLocationManagerDelegate, UITextFieldDelegate>
 
@@ -23,6 +26,7 @@
 @property (nonatomic, strong) UITextField *searchTextField;
 @property (nonatomic, strong) UIButton *searchButton;
 @property (nonatomic, strong) MASConstraint *searchBottomConstraint;
+@property (nonatomic, assign) BOOL hasLoadedContentPoints;
 
 @end
 
@@ -78,6 +82,7 @@
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self applyMapStyleForCurrentTrait];
+    [self loadPublishedMemoryPointsIfNeeded:YES];
     static BOOL sDidShowHint = NO;
     if (!sDidShowHint) {
         sDidShowHint = YES;
@@ -107,7 +112,7 @@
     hint.alpha = 0.0;
 
     UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
-    label.text = @"长按地图添加回忆点";
+    label.text = @"长按地图发布作品";
     label.textColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
     label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium];
     label.textAlignment = NSTextAlignmentCenter;
@@ -222,17 +227,6 @@
     }];
 }
 
-- (void)addMemoryPointAtCoordinate:(CLLocationCoordinate2D)coordinate {
-    YALMemoryPoint *annotation = [YALMemoryPoint pointWithCoordinate:coordinate
-                                                               title:@"新的回忆"
-                                                            subtitle:@"点气泡后，左删右看"
-                                                          detailText:@"刚刚在地图上留下的新记忆"
-                                                         userCreated:YES];
-
-    [self.mapView addAnnotation:annotation];
-    [self.mapView selectAnnotation:annotation animated:YES];
-}
-
 - (void)setupLocateButton {
     self.locateButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.locateButton.layer.cornerRadius = 26.0;
@@ -266,9 +260,95 @@
 }
 
 - (void)openReleaseController {
+    [self openReleaseControllerWithCoordinate:kCLLocationCoordinate2DInvalid locationName:nil];
+}
+
+- (void)openReleaseControllerWithCoordinate:(CLLocationCoordinate2D)coordinate
+                               locationName:(NSString *)locationName {
     YALReleaseController *release = [[YALReleaseController alloc] init];
+    if (CLLocationCoordinate2DIsValid(coordinate)) {
+        release.presetCoordinate = coordinate;
+        release.hasPresetCoordinate = YES;
+        release.presetLocationName = locationName.length > 0
+            ? locationName
+            : [NSString stringWithFormat:@"地图选点 %.4f, %.4f", coordinate.latitude, coordinate.longitude];
+    }
     release.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:release animated:YES];
+}
+
+- (void)loadPublishedMemoryPointsIfNeeded:(BOOL)forceReload {
+    if (self.hasLoadedContentPoints && !forceReload) {
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] getMyContentListWithPage:1
+                                                      pageSize:1000
+                                                    completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            if (!success) {
+                NSLog(@"❌ 地图加载我的作品失败: %@ %@", message, error);
+                return;
+            }
+            [strongSelf reloadMapAnnotationsWithContentList:contentList ?: @[]];
+            strongSelf.hasLoadedContentPoints = YES;
+        });
+    }];
+}
+
+- (void)reloadMapAnnotationsWithContentList:(NSArray *)contentList {
+    NSMutableArray<id<MKAnnotation>> *removableAnnotations = [NSMutableArray array];
+    for (id<MKAnnotation> annotation in self.mapView.annotations) {
+        if (![annotation isKindOfClass:[MKUserLocation class]]) {
+            [removableAnnotations addObject:annotation];
+        }
+    }
+    if (removableAnnotations.count > 0) {
+        [self.mapView removeAnnotations:removableAnnotations];
+    }
+
+    NSMutableArray<YALMemoryPoint *> *points = [NSMutableArray array];
+    for (id item in contentList) {
+        if (![item isKindOfClass:[NSDictionary class]]) {
+            continue;
+        }
+
+        YALPostModel *post = [[YALPostModel alloc] initWithDictionary:(NSDictionary *)item];
+        BOOL hasLocationName = post.locationName.length > 0;
+        BOOL hasCoordinate = CLLocationCoordinate2DIsValid(CLLocationCoordinate2DMake(post.latitude, post.longitude)) &&
+                             !(fabs(post.latitude) < DBL_EPSILON && fabs(post.longitude) < DBL_EPSILON);
+        if (!hasLocationName && !hasCoordinate) {
+            continue;
+        }
+
+        NSString *subtitle = post.locationName.length > 0 ? post.locationName : post.createTime;
+        if (subtitle.length == 0) {
+            subtitle = post.isPublic ? @"已发布作品" : @"私密作品";
+        }
+
+        YALMemoryPoint *point = [YALMemoryPoint pointWithCoordinate:CLLocationCoordinate2DMake(post.latitude, post.longitude)
+                                                              title:(post.title.length > 0 ? post.title : @"未命名作品")
+                                                           subtitle:subtitle
+                                                         detailText:(post.content.length > 0 ? post.content : post.desc)
+                                                        userCreated:NO];
+        if (!hasCoordinate) {
+            // 只有地址没有经纬度时，放在当前可视区域中心附近，避免丢失此类作品。
+            CLLocationCoordinate2D fallbackCoordinate = self.mapView.centerCoordinate;
+            if (!CLLocationCoordinate2DIsValid(fallbackCoordinate) ||
+                (fabs(fallbackCoordinate.latitude) < DBL_EPSILON && fabs(fallbackCoordinate.longitude) < DBL_EPSILON)) {
+                fallbackCoordinate = CLLocationCoordinate2DMake(39.9042, 116.4074);
+            }
+            point.coordinate = fallbackCoordinate;
+        }
+        point.postModel = post;
+        [points addObject:point];
+    }
+
+    if (points.count > 0) {
+        [self.mapView addAnnotations:points];
+    }
 }
 
 - (void)handleSearchButtonTapped {
@@ -377,24 +457,19 @@
                                      preferredStyle:UIAlertControllerStyleActionSheet];
 
     __weak typeof(self) weakSelf = self;
-    [sheet addAction:[UIAlertAction actionWithTitle:@"添加标点"
+    [sheet addAction:[UIAlertAction actionWithTitle:@"发布作品"
                                               style:UIAlertActionStyleDefault
                                             handler:^(__unused UIAlertAction *action) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) { return; }
-        [strongSelf addMemoryPointAtCoordinate:coordinate];
-    }]];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"去发布"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(__unused UIAlertAction *action) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) { return; }
-        YALReleaseController *release = [[YALReleaseController alloc] init];
-        release.hidesBottomBarWhenPushed = YES;
         if (strongSelf.navigationController) {
-            [strongSelf.navigationController pushViewController:release animated:YES];
+            [strongSelf openReleaseControllerWithCoordinate:coordinate locationName:nil];
         } else {
+            YALReleaseController *release = [[YALReleaseController alloc] init];
+            release.hidesBottomBarWhenPushed = YES;
+            release.presetCoordinate = coordinate;
+            release.hasPresetCoordinate = YES;
+            release.presetLocationName = [NSString stringWithFormat:@"地图选点 %.4f, %.4f", coordinate.latitude, coordinate.longitude];
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:release];
             [strongSelf presentViewController:nav animated:YES completion:nil];
         }
@@ -532,6 +607,14 @@ calloutAccessoryControlTapped:(UIControl *)control {
 }
 
 - (void)showDetailForAnnotation:(YALMemoryPoint *)annotation {
+    if (annotation.postModel) {
+        YALPostDetailController *detail = [[YALPostDetailController alloc] init];
+        detail.post = annotation.postModel;
+        detail.hidesBottomBarWhenPushed = YES;
+        [self.navigationController pushViewController:detail animated:YES];
+        return;
+    }
+
     YALPostModel *post = [[YALPostModel alloc] init];
     if (@available(iOS 13.0, *)) {
         post.image = [UIImage systemImageNamed:@"photo"];

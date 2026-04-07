@@ -525,6 +525,108 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     }];
 }
 
+- (void)fetchUserProfileWithUserId:(NSNumber * _Nonnull)userId
+                        completion:(void (^ _Nonnull)(NSDictionary * _Nullable profile, NSError * _Nullable error))completion {
+    if (userId.integerValue <= 0) {
+        if (completion) {
+            NSError *e = [NSError errorWithDomain:@"YALAuthManager"
+                                             code:-42
+                                         userInfo:@{NSLocalizedDescriptionKey: @"用户ID无效"}];
+            completion(nil, e);
+        }
+        return;
+    }
+
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/user/profile", kYALAPIBaseURL];
+    NSDictionary *headers = [self getAuthHeadersWithToken];
+    NSString *userIdString = [NSString stringWithFormat:@"%@", userId];
+    NSArray<NSDictionary *> *parameterCandidates = @[
+        @{@"user_id": userId},
+        @{@"user_id": userIdString},
+        @{@"userId": userId},
+        @{@"userId": userIdString},
+        @{@"id": userId},
+        @{@"id": userIdString}
+    ];
+
+    __block NSInteger candidateIndex = 0;
+    __weak typeof(self) weakSelf = self;
+    __block void (^sendRequest)(void) = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        NSDictionary *parameters = nil;
+        NSString *requestURL = url;
+        if (candidateIndex < parameterCandidates.count) {
+            parameters = parameterCandidates[candidateIndex];
+        } else {
+            requestURL = [NSString stringWithFormat:@"%@?user_id=%@", url, userIdString];
+        }
+
+        NSLog(@"📡 拉取指定用户主页请求(GET)[%ld]: %@ params=%@", (long)candidateIndex, requestURL, parameters);
+
+        [network GET:requestURL
+           parameters:parameters
+              headers:headers
+             progress:nil
+              success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+            NSLog(@"✅ 拉取指定用户主页响应[%ld]: %@", (long)candidateIndex, responseObject);
+            if (![responseObject isKindOfClass:[NSDictionary class]]) {
+                if (completion) {
+                    NSError *e = [NSError errorWithDomain:@"YALAuthManager"
+                                                     code:-43
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的响应格式"}];
+                    completion(nil, e);
+                }
+                return;
+            }
+
+            NSDictionary *response = (NSDictionary *)responseObject;
+            NSInteger code = [response[@"code"] respondsToSelector:@selector(integerValue)] ? [response[@"code"] integerValue] : 200;
+            NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
+            NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
+
+            BOOL shouldRetry = (code != 200 &&
+                                candidateIndex < parameterCandidates.count &&
+                                [msg isKindOfClass:[NSString class]] &&
+                                ([msg containsString:@"user_id"] || [msg containsString:@"userId"] || [msg containsString:@"缺少"] || [msg containsString:@"参数"]));
+            if (shouldRetry) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+
+            if (code != 200 || !data) {
+                if (completion) {
+                    NSError *e = [NSError errorWithDomain:@"YALAuthManager"
+                                                     code:(code == 200 ? -44 : code)
+                                                 userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"获取用户主页失败"}];
+                    completion(nil, e);
+                }
+                return;
+            }
+
+            if (completion) {
+                completion(data, nil);
+            }
+        } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+            NSLog(@"❌ 拉取指定用户主页失败(网络层)[%ld]: %@", (long)candidateIndex, error);
+            if (candidateIndex < parameterCandidates.count) {
+                candidateIndex += 1;
+                sendRequest();
+                return;
+            }
+            if (completion) {
+                completion(nil, error);
+            }
+        }];
+    };
+    sendRequest();
+}
+
 /// 注册接口（使用 completion 回调）
 /// user != nil 表示成功
 /// error != nil 表示失败

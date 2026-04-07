@@ -182,6 +182,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     [self buildUI];
     self.bodyPlaceholderText = @"写下此刻的心情…";
     [self applyPrefillIfNeeded];
+    [self updateTitleForSelectedLocation];
 
     // 点击空白收起键盘
     UITapGestureRecognizer *tap =
@@ -515,9 +516,9 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   // year 参数承载发布时间（你的 dateStringFromDate 格式为 yyyy.MM.dd）
   NSString *year = dateText;
   NSString *mood = @"开心";
-  NSString *locationName = @"北京市海淀区";
-  double latitude = 39.9042;
-  double longitude = 116.4074;
+  NSString *locationName = self.presetLocationName.length > 0 ? self.presetLocationName : @"地图选点";
+  double latitude = self.hasPresetCoordinate ? self.presetCoordinate.latitude : 39.9042;
+  double longitude = self.hasPresetCoordinate ? self.presetCoordinate.longitude : 116.4074;
   BOOL isPublic = self.isPublic;
 
   // 打印发布参数
@@ -636,6 +637,19 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   self.textView.text = self.bodyPlaceholderText;
   self.textView.textColor = [UIColor placeholderTextColor];
   [self updatePhotoSelectionUI];
+  [self updateTitleForSelectedLocation];
+}
+
+- (void)updateTitleForSelectedLocation {
+  if (self.hasPresetCoordinate) {
+    self.navigationItem.prompt = self.presetLocationName.length > 0
+      ? self.presetLocationName
+      : [NSString stringWithFormat:@"地图选点 %.4f, %.4f",
+         self.presetCoordinate.latitude,
+         self.presetCoordinate.longitude];
+  } else {
+    self.navigationItem.prompt = nil;
+  }
 }
 
 #pragma mark - Keyboard

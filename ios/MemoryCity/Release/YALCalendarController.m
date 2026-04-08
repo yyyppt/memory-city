@@ -14,7 +14,17 @@
     self.title = @"选择日期";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
 
-    UIColor *accent = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+    UIColor *accent;
+    if (@available(iOS 13.0, *)) {
+        accent = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor systemOrangeColor];
+            }
+            return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+        }];
+    } else {
+        accent = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    }
     self.navigationController.navigationBar.tintColor = accent;
     self.navigationItem.rightBarButtonItem =
         [[UIBarButtonItem alloc] initWithTitle:@"完成"
@@ -66,4 +76,3 @@
 }
 
 @end
-

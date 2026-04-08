@@ -21,6 +21,7 @@
 
 @property (nonatomic, strong) MKMapView *mapView;
 @property (nonatomic, strong) CLLocationManager *locationManager;
+@property (nonatomic, strong) CLGeocoder *geocoder;
 @property (nonatomic, strong) UIButton *locateButton;
 @property (nonatomic, strong) UIView *searchContainerView;
 @property (nonatomic, strong) UITextField *searchTextField;
@@ -45,6 +46,7 @@
 
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.extendedLayoutIncludesOpaqueBars = YES;
+    self.geocoder = [[CLGeocoder alloc] init];
     [self setupNavigationBar];
 
     self.mapView = [[MKMapView alloc] initWithFrame:CGRectZero];
@@ -92,7 +94,7 @@
     [self applyMapStyleForCurrentTrait];
     [self loadPublishedMemoryPointsIfNeeded:YES];
     static BOOL sDidShowHint = NO;
-    if (!sDidShowHint) {
+    if (!self.selectionMode && !sDidShowHint) {
         sDidShowHint = YES;
         [self showAddMemoryHint];
     }
@@ -156,7 +158,7 @@
 }
 
 - (void)setupNavigationBar {
-    self.title = @"Map";
+    self.title = self.selectionMode ? @"选择地点" : @"Map";
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.navigationController.navigationBar.translucent = YES;
 
@@ -462,6 +464,11 @@
     CLLocationCoordinate2D coordinate =
     [self.mapView convertPoint:point toCoordinateFromView:self.mapView];
 
+    if (self.selectionMode) {
+        [self handleLocationSelectionAtCoordinate:coordinate];
+        return;
+    }
+
     UIAlertController *sheet =
         [UIAlertController alertControllerWithTitle:@"长按操作"
                                             message:nil
@@ -497,6 +504,73 @@
     }
 
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)handleLocationSelectionAtCoordinate:(CLLocationCoordinate2D)coordinate {
+    __weak typeof(self) weakSelf = self;
+    CLLocation *location = [[CLLocation alloc] initWithLatitude:coordinate.latitude longitude:coordinate.longitude];
+    NSLog(@"📍 地图页开始反向解析坐标：%.4f, %.4f", coordinate.latitude, coordinate.longitude);
+    [self.geocoder reverseGeocodeLocation:location completionHandler:^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+
+            if (error) {
+                NSLog(@"❌ 地图页反向地理解析失败: %@", error);
+            } else {
+                NSLog(@"✅ 地图页反向地理解析成功，placemarks: %@", placemarks);
+            }
+
+            CLPlacemark *placemark = placemarks.firstObject;
+            if (placemark) {
+                NSLog(@"📍 地图页首个 placemark: %@", placemark);
+                NSLog(@"📍 placemark.name = %@", placemark.name);
+                NSLog(@"📍 placemark.locality = %@", placemark.locality);
+                NSLog(@"📍 placemark.subLocality = %@", placemark.subLocality);
+                NSLog(@"📍 placemark.administrativeArea = %@", placemark.administrativeArea);
+                NSLog(@"📍 placemark.thoroughfare = %@", placemark.thoroughfare);
+            }
+            NSString *name = [strongSelf displayNameForPlacemark:placemark coordinate:coordinate];
+            NSLog(@"📍 地图页最终回传地点名: %@", name);
+            NSString *message = [NSString stringWithFormat:@"%@\n\n经纬度：%.4f, %.4f", name, coordinate.latitude, coordinate.longitude];
+            if (error && name.length == 0) {
+                message = [NSString stringWithFormat:@"经纬度：%.4f, %.4f", coordinate.latitude, coordinate.longitude];
+            }
+
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"添加这个地点？"
+                                                                           message:message
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"添加" style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction * _Nonnull action) {
+                if (strongSelf.onLocationSelected) {
+                    strongSelf.onLocationSelected(coordinate, name);
+                }
+                [strongSelf.navigationController popViewControllerAnimated:YES];
+            }]];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        });
+    }];
+}
+
+- (NSString *)displayNameForPlacemark:(CLPlacemark *)placemark coordinate:(CLLocationCoordinate2D)coordinate {
+    if (placemark) {
+        NSMutableArray<NSString *> *parts = [NSMutableArray array];
+        if (placemark.locality.length > 0) {
+            [parts addObject:placemark.locality];
+        } else if (placemark.administrativeArea.length > 0) {
+            [parts addObject:placemark.administrativeArea];
+        }
+        if (placemark.subLocality.length > 0) {
+            [parts addObject:placemark.subLocality];
+        }
+        if (placemark.name.length > 0 && ![parts containsObject:placemark.name]) {
+            [parts addObject:placemark.name];
+        }
+        if (parts.count > 0) {
+            return [parts componentsJoinedByString:@" "];
+        }
+    }
+    return [NSString stringWithFormat:@"地图选点 %.4f, %.4f", coordinate.latitude, coordinate.longitude];
 }
 
 

@@ -9,6 +9,8 @@
 #import "YALNetworkManager.h"
 #import "YALAuthManager.h"
 #import "YALPostModel.h"
+#import "YALSearchContentModel.h"
+#import "YALAIAnalyzeResultModel.h"
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 //static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
@@ -308,6 +310,111 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
         if (completion) {
             completion(NO, nil, error);
+        }
+    }];
+}
+
+- (void)searchContentWithKeyword:(NSString *)keyword
+                            page:(NSInteger)page
+                        pageSize:(NSInteger)pageSize
+                      completion:(void (^)(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/content/search", kYALAPIBaseURL];
+
+    NSDictionary *parameters = @{
+        @"keyword": keyword ?: @"",
+        @"page": @(MAX(page, 1)),
+        @"size": @(MAX(pageSize, 1))
+    };
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSInteger code = YALResponseCode(responseObject);
+        NSString *msg = YALResponseMessage(responseObject);
+        NSDictionary *data = YALResponseData(responseObject);
+
+        if (code != 200) {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:code
+                                             userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"搜索失败"}];
+            if (completion) {
+                completion(NO, nil, 0, msg, error);
+            }
+            return;
+        }
+
+        NSArray *rawList = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
+        NSMutableArray<YALSearchContentModel *> *models = [NSMutableArray arrayWithCapacity:rawList.count];
+        for (id item in rawList) {
+            if (![item isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+            [models addObject:[[YALSearchContentModel alloc] initWithDictionary:item]];
+        }
+
+        NSInteger total = 0;
+        id totalValue = data[@"total"];
+        if ([totalValue respondsToSelector:@selector(integerValue)]) {
+            total = MAX([totalValue integerValue], 0);
+        } else {
+            total = models.count;
+        }
+
+        if (completion) {
+            completion(YES, [models copy], total, msg, nil);
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) {
+            completion(NO, nil, 0, @"网络请求失败", error);
+        }
+    }];
+}
+
+- (void)analyzeText:(NSString *)text
+         completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/ai/analyze", kYALAPIBaseURL];
+    NSDictionary *parameters = @{@"text": text ?: @""};
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSDictionary *payload = nil;
+        NSString *msg = @"success";
+        NSInteger code = 200;
+
+        if ([responseObject isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *response = (NSDictionary *)responseObject;
+            if ([response[@"summary"] isKindOfClass:[NSString class]] ||
+                [response[@"tags"] isKindOfClass:[NSArray class]] ||
+                [response[@"mood"] isKindOfClass:[NSString class]]) {
+                payload = response;
+            } else {
+                code = YALResponseCode(responseObject);
+                msg = YALResponseMessage(responseObject);
+                NSDictionary *data = YALResponseData(responseObject);
+                if ([data isKindOfClass:[NSDictionary class]]) {
+                    payload = data;
+                }
+            }
+        }
+
+        if (code != 200 || ![payload isKindOfClass:[NSDictionary class]]) {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:(code == 200 ? -1 : code)
+                                             userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"AI 分析失败"}];
+            if (completion) {
+                completion(NO, nil, msg, error);
+            }
+            return;
+        }
+
+        YALAIAnalyzeResultModel *model = [[YALAIAnalyzeResultModel alloc] initWithDictionary:payload];
+        if (completion) {
+            completion(YES, model, msg, nil);
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) {
+            completion(NO, nil, @"网络请求失败", error);
         }
     }];
 }

@@ -6,13 +6,16 @@
 //
 
 #import "YALSearchController.h"
+#import "../Model/YALSearchContentModel.h"
+#import "../Model/YALAIAnalyzeResultModel.h"
+#import "../../Network/NetworkManager/YALContentManager.h"
 #import <Masonry/Masonry.h>
 
 @interface YALSearchController ()
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UISearchBar *searchBar;
-@property (nonatomic, strong) NSArray<NSDictionary *> *results;
+@property (nonatomic, strong) NSArray<YALSearchContentModel *> *results;
 
 @property (nonatomic, strong) UIView *aiHeaderView;
 @property (nonatomic, strong) UIView *aiCardView;
@@ -25,6 +28,8 @@
 @property (nonatomic, copy) NSString *displayedAIText;
 @property (nonatomic, assign) NSInteger streamIndex;
 @property (nonatomic, assign) BOOL isResultPage;
+@property (nonatomic, assign) BOOL isSearching;
+@property (nonatomic, strong, nullable) YALAIAnalyzeResultModel *aiResult;
 
 @end
 
@@ -242,41 +247,68 @@
     self.isResultPage = YES;
     self.keyword = keyword;
     self.searchBar.text = keyword;
+    self.isSearching = YES;
+    self.aiResult = nil;
 
     [self.streamTimer invalidate];
     self.streamTimer = nil;
 
-    self.results = [self fakeResultsForKeyword:keyword];
-    self.emptyLabel.hidden = (self.results.count > 0);
+    self.results = @[];
+    self.emptyLabel.text = @"搜索中...";
+    self.emptyLabel.hidden = NO;
     [self.tableView reloadData];
 
-    self.fullAIText = [NSString stringWithFormat:@"我帮你找到了与「%@」相关的记忆，一起来看看吧。", keyword];
+    self.fullAIText = [NSString stringWithFormat:@"正在分析「%@」相关内容，请稍候...", keyword];
     self.displayedAIText = @"";
     self.streamIndex = 0;
     [self updateAIHeaderWithText:self.displayedAIText];
 
-    self.streamTimer = [NSTimer scheduledTimerWithTimeInterval:0.045
-                                                        target:self
-                                                      selector:@selector(handleStreamTimer)
-                                                      userInfo:nil
-                                                       repeats:YES];
-}
-
-- (NSArray<NSDictionary *> *)fakeResultsForKeyword:(NSString *)keyword {
-    return @[
-        @{
-            @"title": [NSString stringWithFormat:@"与「%@」相关的老街记忆", keyword],
-            @"desc": @"巷口的风、旧招牌和傍晚的光线，都会把回忆慢慢拉回来。"
-        },
-        @{
-            @"title": [NSString stringWithFormat:@"关于「%@」的地图足迹", keyword],
-            @"desc": @"一些地点并不显眼，但它们在记忆里总有自己的坐标。"
-        },
-        @{
-            @"title": [NSString stringWithFormat:@"你可能会喜欢的「%@」瞬间", keyword],
-            @"desc": @"从照片、时间线到地图标点，都可以继续延展成完整故事。"
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] searchContentWithKeyword:keyword
+                                                           page:1
+                                                       pageSize:10
+                                                     completion:^(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || ![self.keyword isEqualToString:keyword]) {
+            return;
         }
-    ];
+
+        self.isSearching = NO;
+        if (success) {
+            self.results = contentList ?: @[];
+            self.emptyLabel.text = self.results.count > 0 ? @"" : @"没有找到相关内容";
+            self.emptyLabel.hidden = (self.results.count > 0);
+        } else {
+            self.results = @[];
+            self.emptyLabel.text = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
+            self.emptyLabel.hidden = NO;
+        }
+        (void)total;
+        [self.tableView reloadData];
+    }];
+
+    [[YALContentManager sharedManager] analyzeText:keyword
+                                        completion:^(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || ![self.keyword isEqualToString:keyword]) {
+            return;
+        }
+
+        if (success && result) {
+            self.aiResult = result;
+            self.fullAIText = [self aiDescriptionTextFromResult:result keyword:keyword];
+        } else {
+            self.fullAIText = [NSString stringWithFormat:@"已完成「%@」的搜索，但 AI 分析暂时不可用。%@", keyword, (error.localizedDescription.length > 0 ? error.localizedDescription : (message ?: @""))];
+        }
+        self.displayedAIText = @"";
+        self.streamIndex = 0;
+        [self.streamTimer invalidate];
+        self.streamTimer = [NSTimer scheduledTimerWithTimeInterval:0.03
+                                                            target:self
+                                                          selector:@selector(handleStreamTimer)
+                                                          userInfo:nil
+                                                           repeats:YES];
+    }];
 }
 
 - (void)handleStreamTimer {
@@ -345,9 +377,27 @@
         cell.detailTextLabel.numberOfLines = 2;
     }
 
-    NSDictionary *item = self.results[indexPath.row];
-    cell.textLabel.text = item[@"title"];
-    cell.detailTextLabel.text = item[@"desc"];
+    YALSearchContentModel *item = self.results[indexPath.row];
+    cell.textLabel.text = item.title.length > 0 ? item.title : @"未命名内容";
+
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    if (item.content.length > 0) {
+        [parts addObject:item.content];
+    }
+    NSMutableArray<NSString *> *meta = [NSMutableArray array];
+    if (item.city.length > 0) {
+        [meta addObject:item.city];
+    }
+    if (item.year.length > 0) {
+        [meta addObject:item.year];
+    }
+    if (item.mood.length > 0) {
+        [meta addObject:item.mood];
+    }
+    if (meta.count > 0) {
+        [parts addObject:[meta componentsJoinedByString:@" · "]];
+    }
+    cell.detailTextLabel.text = [parts componentsJoinedByString:@"\n"];
     return cell;
 }
 
@@ -374,6 +424,22 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+}
+
+- (NSString *)aiDescriptionTextFromResult:(YALAIAnalyzeResultModel *)result keyword:(NSString *)keyword {
+    NSMutableArray<NSString *> *segments = [NSMutableArray array];
+    if (result.summary.length > 0) {
+        [segments addObject:[NSString stringWithFormat:@"摘要：%@", result.summary]];
+    } else {
+        [segments addObject:[NSString stringWithFormat:@"已完成「%@」的语义分析。", keyword]];
+    }
+    if (result.tags.count > 0) {
+        [segments addObject:[NSString stringWithFormat:@"标签：%@", [result.tags componentsJoinedByString:@"、"]]];
+    }
+    if (result.mood.length > 0) {
+        [segments addObject:[NSString stringWithFormat:@"情绪：%@", result.mood]];
+    }
+    return [segments componentsJoinedByString:@"\n"];
 }
 
 

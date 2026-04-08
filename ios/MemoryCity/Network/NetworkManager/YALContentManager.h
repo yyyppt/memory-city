@@ -7,6 +7,9 @@
 
 #import <Foundation/Foundation.h>
 
+@class YALSearchContentModel;
+@class YALAIAnalyzeResultModel;
+
 NS_ASSUME_NONNULL_BEGIN
 
 @interface YALContentManager : NSObject
@@ -83,6 +86,16 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)getAllContentListWithPage:(NSInteger)page
                          pageSize:(NSInteger)pageSize
                        completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
+
+/// 搜索内容
+- (void)searchContentWithKeyword:(NSString *)keyword
+                            page:(NSInteger)page
+                        pageSize:(NSInteger)pageSize
+                      completion:(void (^)(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion;
+
+/// AI 文本分析
+- (void)analyzeText:(NSString *)text
+         completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion;
 
 /// 删除内容（仅作者可删除）
 /// @param contentId 内容ID

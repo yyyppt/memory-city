@@ -7,10 +7,12 @@
 
 #import "YALReleaseController.h"
 #import "YALCalendarController.h"
+#import "../Map/ViewController/YALMapController.h"
 #import "../Network/NetworkManager/YALContentManager.h"
 #import <Masonry/Masonry.h>
 #import <AVFoundation/AVFoundation.h>
 #import <PhotosUI/PhotosUI.h>
+#import <CoreLocation/CoreLocation.h>
 
 static NSInteger const kYALReleaseMaxImageCount = 9;
 static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
@@ -113,6 +115,9 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 @property (nonatomic, strong) UICollectionView *photoCollectionView;
 @property (nonatomic, strong) MASConstraint *photoCollectionHeightConstraint;
 @property (nonatomic, strong) UILabel *dateLabel;
+@property (nonatomic, strong) UIControl *locationControl;
+@property (nonatomic, strong) UIImageView *locationIconView;
+@property (nonatomic, strong) UILabel *locationLabel;
 @property (nonatomic, strong) UITextField *titleField;
 @property (nonatomic, strong) UITextView *textView;
 @property (nonatomic, strong) UILabel *visibilityTitleLabel;
@@ -126,10 +131,96 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 @property (nonatomic, strong) NSMutableArray<UIImage *> *selectedImages;
 
 @property (nonatomic, strong, nullable) NSDate *selectedDate;
+@property (nonatomic, strong) CLGeocoder *geocoder;
+@property (nonatomic, copy, nullable) NSString *resolvedCityName;
 
 @end
 
 @implementation YALReleaseController
+
+- (UIColor *)accentColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor systemOrangeColor];
+      }
+      return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+}
+
+- (UIColor *)cardBackgroundColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor secondarySystemBackgroundColor];
+      }
+      return [UIColor colorWithRed:1.0 green:0.985 blue:0.965 alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:1.0 green:0.985 blue:0.965 alpha:1.0];
+}
+
+- (UIColor *)fieldBackgroundColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor tertiarySystemBackgroundColor];
+      }
+      return [[UIColor whiteColor] colorWithAlphaComponent:0.72];
+    }];
+  }
+  return [[UIColor whiteColor] colorWithAlphaComponent:0.72];
+}
+
+- (UIColor *)softBorderColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor separatorColor];
+      }
+      return [UIColor colorWithRed:0.93 green:0.74 blue:0.5 alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:0.93 green:0.74 blue:0.5 alpha:1.0];
+}
+
+- (UIColor *)addPhotoBackgroundColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor tertiarySystemFillColor];
+      }
+      return [UIColor colorWithRed:0.98 green:0.93 blue:0.86 alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:0.98 green:0.93 blue:0.86 alpha:1.0];
+}
+
+- (UIColor *)photoHintColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor secondaryLabelColor];
+      }
+      return [UIColor colorWithRed:0.76 green:0.45 blue:0.16 alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:0.76 green:0.45 blue:0.16 alpha:1.0];
+}
+
+- (UIColor *)addPhotoTitleColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [UIColor labelColor];
+      }
+      return [UIColor colorWithRed:0.45 green:0.29 blue:0.12 alpha:1.0];
+    }];
+  }
+  return [UIColor colorWithRed:0.45 green:0.29 blue:0.12 alpha:1.0];
+}
 
 - (instancetype)initWithEditCoverImage:(UIImage *)coverImage
                               dateText:(NSString *)dateText
@@ -155,8 +246,9 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
     self.selectedImages = [NSMutableArray array];
+    self.geocoder = [[CLGeocoder alloc] init];
 
-    UIColor *accent = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+    UIColor *accent = [self accentColor];
     self.navigationController.navigationBar.tintColor = accent;
 
     BOOL isEdit = (self.editCoverImage != nil) || (self.editBody.length > 0) || (self.editDateText.length > 0);
@@ -183,6 +275,8 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     self.bodyPlaceholderText = @"写下此刻的心情…";
     [self applyPrefillIfNeeded];
     [self updateTitleForSelectedLocation];
+    [self updateLocationUI];
+    [self resolveLocationDetailsIfNeeded];
 
     // 点击空白收起键盘
     UITapGestureRecognizer *tap =
@@ -217,7 +311,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   }];
 
   UIView *card = [[UIView alloc] init];
-  card.backgroundColor = [UIColor colorWithRed:1.0 green:0.985 blue:0.965 alpha:1.0];
+  card.backgroundColor = [self cardBackgroundColor];
   card.layer.cornerRadius = 24.0;
   card.layer.shadowColor = [UIColor blackColor].CGColor;
   card.layer.shadowOpacity = 0.08;
@@ -236,7 +330,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 
   self.photoHintLabel = [[UILabel alloc] init];
   self.photoHintLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-  self.photoHintLabel.textColor = [UIColor colorWithRed:0.76 green:0.45 blue:0.16 alpha:1.0];
+  self.photoHintLabel.textColor = [self photoHintColor];
   self.photoHintLabel.textAlignment = NSTextAlignmentRight;
   [self.photoSectionHeaderView addSubview:self.photoHintLabel];
 
@@ -255,7 +349,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   self.dateLabel = [[UILabel alloc] init];
   self.dateLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
   self.dateLabel.textColor = [UIColor secondaryLabelColor];
-  self.dateLabel.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
+  self.dateLabel.backgroundColor = [self fieldBackgroundColor];
   self.dateLabel.layer.cornerRadius = 14.0;
   self.dateLabel.layer.masksToBounds = YES;
   [card addSubview:self.dateLabel];
@@ -266,8 +360,29 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   dateTap.cancelsTouchesInView = NO;
   [self.dateLabel addGestureRecognizer:dateTap];
 
+  self.locationControl = [[UIControl alloc] init];
+  self.locationControl.backgroundColor = [self fieldBackgroundColor];
+  self.locationControl.layer.cornerRadius = 14.0;
+  self.locationControl.layer.masksToBounds = YES;
+  [self.locationControl addTarget:self action:@selector(locationTapped) forControlEvents:UIControlEventTouchUpInside];
+  [card addSubview:self.locationControl];
+
+  self.locationIconView = [[UIImageView alloc] init];
+  self.locationIconView.contentMode = UIViewContentModeScaleAspectFit;
+  if (@available(iOS 13.0, *)) {
+    self.locationIconView.image = [UIImage systemImageNamed:@"mappin.and.ellipse"];
+  }
+  self.locationIconView.tintColor = [self accentColor];
+  [self.locationControl addSubview:self.locationIconView];
+
+  self.locationLabel = [[UILabel alloc] init];
+  self.locationLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+  self.locationLabel.textColor = [UIColor secondaryLabelColor];
+  self.locationLabel.numberOfLines = 1;
+  [self.locationControl addSubview:self.locationLabel];
+
   self.titleField = [[UITextField alloc] init];
-  self.titleField.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
+  self.titleField.backgroundColor = [self fieldBackgroundColor];
   self.titleField.textColor = [UIColor labelColor];
   self.titleField.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
   self.titleField.placeholder = @"输入标题";
@@ -285,7 +400,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   [card addSubview:self.titleField];
 
   self.textView = [[UITextView alloc] init];
-  self.textView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.72];
+  self.textView.backgroundColor = [self fieldBackgroundColor];
   self.textView.textColor = [UIColor labelColor];
   self.textView.font = [UIFont systemFontOfSize:16 weight:UIFontWeightRegular];
   self.textView.textContainerInset = UIEdgeInsetsMake(14, 14, 14, 14);
@@ -301,13 +416,13 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   [card addSubview:self.visibilityTitleLabel];
 
   self.visibilitySegment = [[UIView alloc] init];
-  self.visibilitySegment.backgroundColor = [UIColor systemGray5Color];
+  self.visibilitySegment.backgroundColor = [UIColor tertiarySystemFillColor];
   self.visibilitySegment.layer.cornerRadius = 15.0;
   self.visibilitySegment.layer.masksToBounds = YES;
   [card addSubview:self.visibilitySegment];
 
   self.visibilityIndicator = [[UIView alloc] init];
-  self.visibilityIndicator.backgroundColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+  self.visibilityIndicator.backgroundColor = [self accentColor];
   self.visibilityIndicator.layer.cornerRadius = 13.0;
   self.visibilityIndicator.userInteractionEnabled = NO;
   [self.visibilitySegment addSubview:self.visibilityIndicator];
@@ -381,8 +496,23 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     make.right.equalTo(self.visibilitySegment.mas_left).offset(-8);
     make.centerY.equalTo(self.visibilitySegment);
   }];
-  [self.titleField mas_makeConstraints:^(MASConstraintMaker *make) {
+  [self.locationControl mas_makeConstraints:^(MASConstraintMaker *make) {
     make.top.equalTo(self.dateLabel.mas_bottom).offset(8);
+    make.left.right.equalTo(self.photoCollectionView);
+    make.height.mas_equalTo(42);
+  }];
+  [self.locationIconView mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(self.locationControl).offset(14);
+    make.centerY.equalTo(self.locationControl);
+    make.width.height.mas_equalTo(18);
+  }];
+  [self.locationLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.left.equalTo(self.locationIconView.mas_right).offset(8);
+    make.right.equalTo(self.locationControl).offset(-14);
+    make.centerY.equalTo(self.locationControl);
+  }];
+  [self.titleField mas_makeConstraints:^(MASConstraintMaker *make) {
+    make.top.equalTo(self.locationControl.mas_bottom).offset(8);
     make.left.right.equalTo(self.photoCollectionView);
     make.height.mas_equalTo(52);
   }];
@@ -396,6 +526,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   self.isPublic = YES;
   [self updateVisibilitySegmentAnimated:NO];
   [self updatePhotoSelectionUI];
+  [self updateLocationUI];
 }
 
 - (void)applyPrefillIfNeeded {
@@ -411,6 +542,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   } else {
       self.selectedDate = nil;
   }
+  self.resolvedCityName = nil;
   self.titleField.text = self.editTitleText.length > 0 ? self.editTitleText : @"";
   if (self.editBody.length > 0) {
     self.textView.text = self.editBody;
@@ -419,6 +551,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     self.textView.text = self.bodyPlaceholderText;
     self.textView.textColor = [UIColor placeholderTextColor];
   }
+  [self updateLocationUI];
 }
 
 - (void)updatePhotoSelectionUI {
@@ -512,13 +645,13 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     return;
   }
 
-  NSString *city = @"北京";
+  NSString *city = self.resolvedCityName.length > 0 ? self.resolvedCityName : @"";
   // year 参数承载发布时间（你的 dateStringFromDate 格式为 yyyy.MM.dd）
   NSString *year = dateText;
   NSString *mood = @"开心";
-  NSString *locationName = self.presetLocationName.length > 0 ? self.presetLocationName : @"地图选点";
-  double latitude = self.hasPresetCoordinate ? self.presetCoordinate.latitude : 39.9042;
-  double longitude = self.hasPresetCoordinate ? self.presetCoordinate.longitude : 116.4074;
+  NSString *locationName = [self currentLocationDisplayName];
+  double latitude = self.hasPresetCoordinate ? self.presetCoordinate.latitude : 0.0;
+  double longitude = self.hasPresetCoordinate ? self.presetCoordinate.longitude : 0.0;
   BOOL isPublic = self.isPublic;
 
   // 打印发布参数
@@ -629,6 +762,10 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   self.editBody = @"";
   self.selectedDate = nil;
   self.isPublic = YES;
+  self.hasPresetCoordinate = NO;
+  self.presetCoordinate = kCLLocationCoordinate2DInvalid;
+  self.presetLocationName = nil;
+  self.resolvedCityName = nil;
   [self.selectedImages removeAllObjects];
   [self updateVisibilitySegmentAnimated:NO];
 
@@ -638,6 +775,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   self.textView.textColor = [UIColor placeholderTextColor];
   [self updatePhotoSelectionUI];
   [self updateTitleForSelectedLocation];
+  [self updateLocationUI];
 }
 
 - (void)updateTitleForSelectedLocation {
@@ -650,6 +788,56 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   } else {
     self.navigationItem.prompt = nil;
   }
+}
+
+- (NSString *)cityNameFromPlacemark:(CLPlacemark *)placemark {
+  if (placemark.locality.length > 0) {
+    return placemark.locality;
+  }
+  if (placemark.administrativeArea.length > 0) {
+    return placemark.administrativeArea;
+  }
+  return @"";
+}
+
+- (NSString *)currentLocationDisplayName {
+  if (self.presetLocationName.length > 0) {
+    return self.presetLocationName;
+  }
+  if (self.hasPresetCoordinate) {
+    return [NSString stringWithFormat:@"地图选点 %.4f, %.4f",
+            self.presetCoordinate.latitude,
+            self.presetCoordinate.longitude];
+  }
+  return @"";
+}
+
+- (BOOL)isFallbackCoordinateLocationName:(NSString *)locationName {
+  if (locationName.length == 0) {
+    return NO;
+  }
+  return [locationName hasPrefix:@"地图选点 "] || [locationName hasPrefix:@"当前位置 "];
+}
+
+- (void)updateLocationUI {
+  NSString *displayName = [self currentLocationDisplayName];
+  if (displayName.length > 0) {
+    if (self.hasPresetCoordinate) {
+      self.locationLabel.text = [NSString stringWithFormat:@"%@（%.4f, %.4f）",
+                                 displayName,
+                                 self.presetCoordinate.latitude,
+                                 self.presetCoordinate.longitude];
+    } else {
+      self.locationLabel.text = displayName;
+    }
+    self.locationLabel.textColor = [UIColor labelColor];
+    NSLog(@"📍 发布页地点标签更新：%@", self.locationLabel.text);
+    return;
+  }
+
+  self.locationLabel.text = @"添加定位";
+  self.locationLabel.textColor = [UIColor secondaryLabelColor];
+  NSLog(@"📍 发布页地点标签更新：%@", self.locationLabel.text);
 }
 
 #pragma mark - Keyboard
@@ -749,6 +937,94 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     ss.dateLabel.text = ss.editDateText;
   };
   [self.navigationController pushViewController:cal animated:YES];
+}
+
+- (void)locationTapped {
+  [self.view endEditing:YES];
+  NSLog(@"📍 点击添加地点，跳转地图选点页");
+  YALMapController *mapController = [[YALMapController alloc] init];
+  mapController.selectionMode = YES;
+
+  __weak typeof(self) ws = self;
+  mapController.onLocationSelected = ^(CLLocationCoordinate2D coordinate, NSString *locationName) {
+    __strong typeof(ws) ss = ws;
+    if (!ss) return;
+    NSLog(@"📍 地图选点成功：%@（%.4f, %.4f）", locationName, coordinate.latitude, coordinate.longitude);
+    ss.presetCoordinate = coordinate;
+    ss.hasPresetCoordinate = YES;
+    ss.presetLocationName = locationName;
+    ss.resolvedCityName = nil;
+    [ss updateTitleForSelectedLocation];
+    [ss updateLocationUI];
+    [ss resolveLocationDetailsIfNeeded];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+      UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"添加成功"
+                                                                     message:[NSString stringWithFormat:@"%@（%.4f, %.4f）", locationName, coordinate.latitude, coordinate.longitude]
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+      [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+      [ss presentViewController:alert animated:YES completion:nil];
+    });
+  };
+  [self.navigationController pushViewController:mapController animated:YES];
+}
+
+- (void)resolveLocationDetailsIfNeeded {
+  if (!self.hasPresetCoordinate || !CLLocationCoordinate2DIsValid(self.presetCoordinate)) {
+    return;
+  }
+  BOOL shouldReplaceFallbackName = [self isFallbackCoordinateLocationName:self.presetLocationName];
+  if (self.resolvedCityName.length > 0 && self.presetLocationName.length > 0 && !shouldReplaceFallbackName) {
+    return;
+  }
+
+  NSLog(@"📍 开始反向地理解析：%.4f, %.4f", self.presetCoordinate.latitude, self.presetCoordinate.longitude);
+
+  CLLocation *location = [[CLLocation alloc] initWithLatitude:self.presetCoordinate.latitude
+                                                    longitude:self.presetCoordinate.longitude];
+  __weak typeof(self) ws = self;
+  [self.geocoder reverseGeocodeLocation:location completionHandler:^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      __strong typeof(ws) ss = ws;
+      if (!ss || error) return;
+
+      CLPlacemark *placemark = placemarks.firstObject;
+      if (!placemark) return;
+
+      NSString *cityName = [ss cityNameFromPlacemark:placemark];
+      if (cityName.length > 0) {
+        ss.resolvedCityName = cityName;
+        NSLog(@"🏙️ 解析到城市：%@", cityName);
+      }
+      if (ss.presetLocationName.length == 0 || [ss isFallbackCoordinateLocationName:ss.presetLocationName]) {
+        NSString *locationName = [ss locationNameFromPlacemark:placemark];
+        if (locationName.length > 0) {
+          ss.presetLocationName = locationName;
+          NSLog(@"📍 解析到地点：%@", locationName);
+          [ss updateTitleForSelectedLocation];
+          [ss updateLocationUI];
+        }
+      }
+    });
+  }];
+}
+
+- (NSString *)locationNameFromPlacemark:(CLPlacemark *)placemark {
+  NSMutableArray<NSString *> *parts = [NSMutableArray array];
+  if (placemark.locality.length > 0) {
+    [parts addObject:placemark.locality];
+  } else if (placemark.administrativeArea.length > 0) {
+    [parts addObject:placemark.administrativeArea];
+  }
+  if (placemark.subLocality.length > 0) {
+    [parts addObject:placemark.subLocality];
+  }
+  if (placemark.name.length > 0 && ![parts containsObject:placemark.name]) {
+    [parts addObject:placemark.name];
+  }
+  if (parts.count == 0 && placemark.thoroughfare.length > 0) {
+    [parts addObject:placemark.thoroughfare];
+  }
+  return parts.count > 0 ? [parts componentsJoinedByString:@" "] : @"";
 }
 
 - (void)chooseCoverFromLibrary {
@@ -976,19 +1252,19 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 
   BOOL isAddCell = (indexPath.item == self.selectedImages.count && self.selectedImages.count < kYALReleaseMaxImageCount);
   if (isAddCell) {
-    cell.cardView.backgroundColor = [UIColor colorWithRed:0.98 green:0.93 blue:0.86 alpha:1.0];
+    cell.cardView.backgroundColor = [self addPhotoBackgroundColor];
     cell.cardView.layer.borderWidth = 1.0;
-    cell.cardView.layer.borderColor = [UIColor colorWithRed:0.93 green:0.74 blue:0.5 alpha:1.0].CGColor;
+    cell.cardView.layer.borderColor = [self softBorderColor].CGColor;
     cell.imageView.image = nil;
     if (@available(iOS 13.0, *)) {
       cell.iconView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
     } else {
       cell.iconView.image = nil;
     }
-    cell.iconView.tintColor = [UIColor colorWithRed:0.82 green:0.48 blue:0.16 alpha:1.0];
+    cell.iconView.tintColor = [self accentColor];
     cell.iconView.hidden = NO;
     cell.titleLabel.text = @"添加图片";
-    cell.titleLabel.textColor = [UIColor colorWithRed:0.45 green:0.29 blue:0.12 alpha:1.0];
+    cell.titleLabel.textColor = [self addPhotoTitleColor];
     cell.subtitleLabel.text = @"相册多选 / 拍照追加";
     cell.subtitleLabel.textColor = [UIColor secondaryLabelColor];
     return cell;

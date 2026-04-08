@@ -49,6 +49,9 @@
     _accountField = [[UITextField alloc] init];
     _accountField.placeholder = @"请输入您的联系方式";
     _accountField.backgroundColor = [UIColor colorWithRed:1.0 green:0.97 blue:0.92 alpha:1.0];
+    _accountField.textColor = [UIColor colorWithWhite:0.16 alpha:1.0];
+    _accountField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:_accountField.placeholder
+                                                                           attributes:@{NSForegroundColorAttributeName:[UIColor colorWithWhite:0.45 alpha:1.0]}];
     _accountField.layer.borderWidth = 1.0;
     _accountField.layer.borderColor = [UIColor colorWithRed:1.0 green:0.85 blue:0.6 alpha:1.0].CGColor;
     _accountField.layer.cornerRadius = 25;
@@ -60,6 +63,9 @@
     _passwordField.placeholder = @"请输入密码";
     _passwordField.secureTextEntry = YES;
     _passwordField.backgroundColor = [UIColor colorWithRed:1.0 green:0.97 blue:0.92 alpha:1.0];
+    _passwordField.textColor = [UIColor colorWithWhite:0.16 alpha:1.0];
+    _passwordField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:_passwordField.placeholder
+                                                                            attributes:@{NSForegroundColorAttributeName:[UIColor colorWithWhite:0.45 alpha:1.0]}];
     _passwordField.layer.borderWidth = 1.0;
     _passwordField.layer.borderColor = [UIColor colorWithRed:1.0 green:0.85 blue:0.6 alpha:1.0].CGColor;
     _passwordField.layer.cornerRadius = 25;

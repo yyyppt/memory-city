@@ -27,6 +27,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)applyProfile:(YALMineProfileModel *)profile;
 - (void)applyAuthUser:(YALAuthUserModel *)user;
 - (void)setGuestLoginModeEnabled:(BOOL)enabled;
+- (void)updateCreatorStatsWithPublicCount:(nullable NSNumber *)publicCount
+                              privateCount:(nullable NSNumber *)privateCount;
 
 @end
 

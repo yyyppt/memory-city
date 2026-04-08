@@ -541,13 +541,21 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     NSString *url = [NSString stringWithFormat:@"%@/user/profile", kYALAPIBaseURL];
     NSDictionary *headers = [self getAuthHeadersWithToken];
     NSString *userIdString = [NSString stringWithFormat:@"%@", userId];
-    NSArray<NSDictionary *> *parameterCandidates = @[
-        @{@"user_id": userId},
-        @{@"user_id": userIdString},
-        @{@"userId": userId},
-        @{@"userId": userIdString},
-        @{@"id": userId},
-        @{@"id": userIdString}
+    NSArray<NSDictionary *> *requestCandidates = @[
+        @{@"method": @"GET", @"url": url, @"parameters": @{@"user_id": userId}},
+        @{@"method": @"GET", @"url": url, @"parameters": @{@"user_id": userIdString}},
+        @{@"method": @"GET", @"url": url, @"parameters": @{@"userId": userId}},
+        @{@"method": @"GET", @"url": url, @"parameters": @{@"userId": userIdString}},
+        @{@"method": @"GET", @"url": url, @"parameters": @{@"id": userId}},
+        @{@"method": @"GET", @"url": url, @"parameters": @{@"id": userIdString}},
+        // 某些后端会把 /user/profile 写成 POST + JSON body，这里做兼容兜底
+        @{@"method": @"POST", @"url": url, @"parameters": @{@"user_id": userId}},
+        @{@"method": @"POST", @"url": url, @"parameters": @{@"user_id": userIdString}},
+        @{@"method": @"POST", @"url": url, @"parameters": @{@"userId": userId}},
+        @{@"method": @"POST", @"url": url, @"parameters": @{@"userId": userIdString}},
+        @{@"method": @"POST", @"url": url, @"parameters": @{@"id": userId}},
+        @{@"method": @"POST", @"url": url, @"parameters": @{@"id": userIdString}},
+        @{@"method": @"GET", @"url": [NSString stringWithFormat:@"%@?user_id=%@", url, userIdString], @"parameters": [NSNull null]}
     ];
 
     __block NSInteger candidateIndex = 0;
@@ -558,21 +566,15 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
             return;
         }
 
-        NSDictionary *parameters = nil;
-        NSString *requestURL = url;
-        if (candidateIndex < parameterCandidates.count) {
-            parameters = parameterCandidates[candidateIndex];
-        } else {
-            requestURL = [NSString stringWithFormat:@"%@?user_id=%@", url, userIdString];
-        }
+        NSDictionary *candidate = requestCandidates[candidateIndex];
+        NSString *method = [candidate[@"method"] isKindOfClass:[NSString class]] ? candidate[@"method"] : @"GET";
+        NSString *requestURL = [candidate[@"url"] isKindOfClass:[NSString class]] ? candidate[@"url"] : url;
+        id paramsObj = candidate[@"parameters"];
+        NSDictionary *parameters = [paramsObj isKindOfClass:[NSDictionary class]] ? paramsObj : nil;
 
-        NSLog(@"📡 拉取指定用户主页请求(GET)[%ld]: %@ params=%@", (long)candidateIndex, requestURL, parameters);
+        NSLog(@"📡 拉取指定用户主页请求(%@)[%ld]: %@ params=%@", method, (long)candidateIndex, requestURL, parameters ?: @[]);
 
-        [network GET:requestURL
-           parameters:parameters
-              headers:headers
-             progress:nil
-              success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        void (^handleSuccess)(id) = ^(id responseObject) {
             NSLog(@"✅ 拉取指定用户主页响应[%ld]: %@", (long)candidateIndex, responseObject);
             if (![responseObject isKindOfClass:[NSDictionary class]]) {
                 if (completion) {
@@ -590,9 +592,15 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
 
             BOOL shouldRetry = (code != 200 &&
-                                candidateIndex < parameterCandidates.count &&
+                                candidateIndex + 1 < requestCandidates.count &&
                                 [msg isKindOfClass:[NSString class]] &&
-                                ([msg containsString:@"user_id"] || [msg containsString:@"userId"] || [msg containsString:@"缺少"] || [msg containsString:@"参数"]));
+                                ([msg containsString:@"user_id"] ||
+                                 [msg containsString:@"userId"] ||
+                                 [msg containsString:@"缺少"] ||
+                                 [msg containsString:@"参数"] ||
+                                 [msg containsString:@"用户ID"] ||
+                                 [msg containsString:@"用户Id"] ||
+                                 [msg containsString:@"不能为空"]));
             if (shouldRetry) {
                 candidateIndex += 1;
                 sendRequest();
@@ -612,9 +620,11 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
             if (completion) {
                 completion(data, nil);
             }
-        } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        };
+
+        void (^handleFailure)(NSError *) = ^(NSError *error) {
             NSLog(@"❌ 拉取指定用户主页失败(网络层)[%ld]: %@", (long)candidateIndex, error);
-            if (candidateIndex < parameterCandidates.count) {
+            if (candidateIndex + 1 < requestCandidates.count) {
                 candidateIndex += 1;
                 sendRequest();
                 return;
@@ -622,7 +632,29 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
             if (completion) {
                 completion(nil, error);
             }
-        }];
+        };
+
+        if ([method isEqualToString:@"POST"]) {
+            [network POST:requestURL
+               parameters:parameters
+                  headers:headers
+                 progress:nil
+                  success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+                handleSuccess(responseObject);
+            } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+                handleFailure(error);
+            }];
+        } else {
+            [network GET:requestURL
+               parameters:parameters
+                  headers:headers
+                 progress:nil
+                  success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+                handleSuccess(responseObject);
+            } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+                handleFailure(error);
+            }];
+        }
     };
     sendRequest();
 }

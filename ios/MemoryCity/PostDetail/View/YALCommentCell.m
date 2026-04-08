@@ -24,6 +24,54 @@
 
 @implementation YALCommentCell
 
+- (UIColor *)topLevelBubbleColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithWhite:0.16 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.985 green:0.985 blue:0.985 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.985 green:0.985 blue:0.985 alpha:1.0];
+}
+
+- (UIColor *)replyBubbleColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:0.24 green:0.19 blue:0.12 alpha:1.0];
+            }
+            return [UIColor colorWithRed:1.0 green:0.976 blue:0.925 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:1.0 green:0.976 blue:0.925 alpha:1.0];
+}
+
+- (UIColor *)bubbleBorderColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithWhite:1.0 alpha:0.14];
+            }
+            return [UIColor colorWithWhite:0.0 alpha:0.08];
+        }];
+    }
+    return [UIColor colorWithWhite:0.0 alpha:0.08];
+}
+
+- (UIColor *)replyPrefixColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:0.96 green:0.78 blue:0.40 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0];
+}
+
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
     if (self) {
@@ -48,6 +96,8 @@
         _bubbleView = [[UIView alloc] init];
         _bubbleView.layer.cornerRadius = 14.0;
         _bubbleView.layer.masksToBounds = YES;
+        _bubbleView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+        _bubbleView.layer.borderColor = [self bubbleBorderColor].CGColor;
 
         _contentLabel = [[UILabel alloc] init];
         _contentLabel.font = [UIFont systemFontOfSize:14];
@@ -144,8 +194,9 @@
     self.avatarLeftConstraint.offset = 12.0 + indent;
     self.bubbleLeftConstraint.offset = normalizedLevel > 0 ? 12.0 + MIN((CGFloat)normalizedLevel, 3.0) * 6.0 : 0.0;
     self.bubbleView.backgroundColor = normalizedLevel > 0
-        ? [UIColor colorWithRed:1.0 green:0.976 blue:0.925 alpha:1.0]
-        : [UIColor colorWithRed:0.985 green:0.985 blue:0.985 alpha:1.0];
+        ? [self replyBubbleColor]
+        : [self topLevelBubbleColor];
+    self.bubbleView.layer.borderColor = [self bubbleBorderColor].CGColor;
     self.nameLabel.textColor = [UIColor labelColor];
 
     // 富文本：长文时在末尾加“ 展开/收起”
@@ -175,7 +226,7 @@
         if (colonRange.location != NSNotFound) {
             NSRange prefixRange = NSMakeRange(0, colonRange.location + 1);
             [attr addAttributes:@{
-                NSForegroundColorAttributeName: [UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0],
+                NSForegroundColorAttributeName: [self replyPrefixColor],
                 NSFontAttributeName: [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold]
             } range:prefixRange];
         }

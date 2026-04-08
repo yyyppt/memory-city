@@ -97,20 +97,66 @@
        headers:(nullable NSDictionary<NSString *, NSString *> *)headers
        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
        failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
-    [self.sessionManager DELETE:URLString parameters:parameters headers:headers success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (success) {
-                success(task, responseObject);
-            }
-        });
-    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+    BOOL hasJSONBody = [parameters isKindOfClass:[NSDictionary class]] && [(NSDictionary *)parameters count] > 0;
+    if (!hasJSONBody) {
+        [self.sessionManager DELETE:URLString parameters:nil headers:headers success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (success) {
+                    success(task, responseObject);
+                }
+            });
+        } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (failure) {
+                    failure(task, error);
+                }
+            });
+        }];
+        return;
+    }
+
+    NSError *requestError = nil;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:URLString]];
+    request.HTTPMethod = @"DELETE";
+    request.timeoutInterval = self.sessionManager.requestSerializer.timeoutInterval;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [headers enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSString * _Nonnull obj, __unused BOOL * _Nonnull stop) {
+        [request setValue:obj forHTTPHeaderField:key];
+    }];
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:parameters options:0 error:&requestError];
+    if (jsonData) {
+        request.HTTPBody = jsonData;
+    }
+    if (requestError) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (failure) {
-                failure(task, error);
+                failure(nil, requestError);
+            }
+        });
+        return;
+    }
+
+    __block NSURLSessionDataTask *task = nil;
+    task = [self.sessionManager dataTaskWithRequest:request
+                                     uploadProgress:nil
+                                   downloadProgress:nil
+                                  completionHandler:^(NSURLResponse * _Nonnull response, id  _Nullable responseObject, NSError * _Nullable error) {
+        if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (failure) {
+                    failure((NSURLSessionDataTask *)nil, error);
+                }
+            });
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                success((NSURLSessionDataTask *)task, responseObject);
             }
         });
     }];
+    [task resume];
 }
 
 @end
-

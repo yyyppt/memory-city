@@ -492,6 +492,35 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     sendRequest();
 }
 
+- (void)deleteCommentWithId:(NSNumber *)commentId
+                 completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSNumber *userId = YALResolvedUserId();
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/comment/delete", kYALAPIBaseURL];
+    NSDictionary *parameters = @{
+        @"comment_id": commentId ?: @(0),
+        @"user_id": userId
+    };
+    [network DELETE:url
+         parameters:parameters
+            headers:headers
+            success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSInteger code = YALResponseCode(responseObject);
+        NSString *msg = YALResponseMessage(responseObject);
+        if (code == 200) {
+            if (completion) completion(YES, msg.length > 0 ? msg : @"删除成功", nil);
+            return;
+        }
+        NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                             code:code
+                                         userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"评论删除失败"}];
+        if (completion) completion(NO, msg, error);
+    } failure:^(__unused NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
+        if (completion) completion(NO, error.localizedDescription ?: @"评论删除失败", error);
+    }];
+}
+
 - (void)toggleCollectContentWithId:(NSNumber *)contentId
                         completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];

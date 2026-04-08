@@ -19,9 +19,25 @@
 #import "YALMyContentListController.h"
 #import "YALLikesController.h"
 #import "YALFavoritesController.h"
+#import "YALContentManager.h"
 #import <UserNotifications/UserNotifications.h>
 
 static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
+
+static BOOL YALMineBoolFromPublicValue(id value) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [(NSNumber *)value boolValue];
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *lower = [[(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] lowercaseString];
+        if (lower.length == 0) return NO;
+        if ([lower isEqualToString:@"1"] || [lower isEqualToString:@"true"] || [lower isEqualToString:@"yes"] || [lower isEqualToString:@"public"]) {
+            return YES;
+        }
+        return NO;
+    }
+    return NO;
+}
 
 
 
@@ -34,6 +50,8 @@ static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
 @property (nonatomic, strong) YALMineView *mineView;
 @property (nonatomic, strong) NSArray<YALMineProfileModel *> *profiles;
 @property (nonatomic, assign) NSInteger currentProfileIndex;
+@property (nonatomic, assign) BOOL isLoadingCreatorStats;
+@property (nonatomic, assign) NSInteger creatorStatsRequestToken;
 
 @end
 
@@ -100,9 +118,7 @@ static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
 - (void)setupData {
     self.profiles = [YALMineProfileModel defaultProfiles];
     self.currentProfileIndex = 0;
-    if (self.profiles.count > 0) {
-        [self.mineView applyProfile:self.profiles.firstObject];
-    }
+    [self.mineView updateCreatorStatsWithPublicCount:nil privateCount:nil];
     [self refreshLoginState];
 }
 
@@ -375,9 +391,94 @@ static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
 
 - (void)updateUIWithUser:(YALAuthUserModel *)user {
     [self.mineView applyAuthUser:user];
+    [self refreshCreatorStats];
 }
 - (void)showNotLoggedInState {
+    self.creatorStatsRequestToken += 1;
+    self.isLoadingCreatorStats = NO;
     [self.mineView setGuestLoginModeEnabled:YES];
+}
+
+- (void)refreshCreatorStats {
+    YALAuthManager *auth = [YALAuthManager sharedManager];
+    if (![auth hasLoggedInSession] || auth.currentUser.userId <= 0) {
+        [self.mineView updateCreatorStatsWithPublicCount:nil privateCount:nil];
+        return;
+    }
+    if (self.isLoadingCreatorStats) {
+        return;
+    }
+
+    [self.mineView updateCreatorStatsWithPublicCount:nil privateCount:nil];
+    self.isLoadingCreatorStats = YES;
+    NSInteger requestToken = ++self.creatorStatsRequestToken;
+    NSInteger const pageSize = 50;
+    NSInteger const maxPages = 20;
+    __block NSInteger page = 1;
+    __block NSInteger publicCount = 0;
+    __block NSInteger privateCount = 0;
+    __block BOOL didFetchAnyPage = NO;
+
+    __weak typeof(self) weakSelf = self;
+    __block void (^fetchNextPage)(void) = ^{
+        [[YALContentManager sharedManager] getMyContentListWithPage:page
+                                                           pageSize:pageSize
+                                                         completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+            (void)message;
+            (void)error;
+
+            if (requestToken != strongSelf.creatorStatsRequestToken) {
+                strongSelf.isLoadingCreatorStats = NO;
+                return;
+            }
+
+            if (!success || ![contentList isKindOfClass:[NSArray class]]) {
+                strongSelf.isLoadingCreatorStats = NO;
+                if (!didFetchAnyPage) {
+                    [strongSelf.mineView updateCreatorStatsWithPublicCount:nil privateCount:nil];
+                }
+                return;
+            }
+
+            didFetchAnyPage = YES;
+            for (id item in contentList) {
+                if (![item isKindOfClass:[NSDictionary class]]) {
+                    continue;
+                }
+                NSDictionary *dict = (NSDictionary *)item;
+                id publicValue = dict[@"is_public"];
+                if (!publicValue) {
+                    publicValue = dict[@"isPublic"];
+                }
+                if (!publicValue) {
+                    publicValue = dict[@"visibility"];
+                }
+                BOOL isPublic = YALMineBoolFromPublicValue(publicValue);
+                if (isPublic) {
+                    publicCount += 1;
+                } else {
+                    privateCount += 1;
+                }
+            }
+
+            BOOL isLastPageBySize = contentList.count < pageSize;
+            BOOL hitMaxPages = page >= maxPages;
+            if (isLastPageBySize || hitMaxPages) {
+                strongSelf.isLoadingCreatorStats = NO;
+                [strongSelf.mineView updateCreatorStatsWithPublicCount:@(publicCount) privateCount:@(privateCount)];
+                return;
+            }
+
+            page += 1;
+            fetchNextPage();
+        }];
+    };
+
+    fetchNextPage();
 }
 
 @end

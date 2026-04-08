@@ -10,6 +10,7 @@
 #import "YALCommentCell.h"
 #import "YALContentManager.h"
 #import "YALAuthManager.h"
+#import <objc/runtime.h>
 #import <Masonry/Masonry.h>
 #import <SDWebImage/SDWebImage.h>
 
@@ -23,6 +24,8 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
     if (!data) return nil;
     return [UIImage imageWithData:data];
 }
+
+static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
 
 @interface YALAuthorProfileController : UIViewController
 
@@ -49,7 +52,11 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 @property (nonatomic, strong) UIView *worksCard;
 @property (nonatomic, strong) UILabel *worksTitleLabel;
 @property (nonatomic, strong) UILabel *worksHintLabel;
+@property (nonatomic, strong) UIView *worksGridContainer;
+@property (nonatomic, strong) UIStackView *worksRowsStack;
+@property (nonatomic, strong) NSArray<YALPostModel *> *publicWorks;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+@property (nonatomic, assign) BOOL isFetchingPublicStatsFallback;
 
 @end
 
@@ -187,6 +194,16 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
     self.worksHintLabel.text = @"作者主页资料已接入。等你补上作者公开内容接口后，这里就能直接展示 Ta 的发布列表。";
     [self.worksCard addSubview:self.worksHintLabel];
 
+    self.worksGridContainer = [[UIView alloc] init];
+    self.worksGridContainer.hidden = YES;
+    [self.worksCard addSubview:self.worksGridContainer];
+
+    self.worksRowsStack = [[UIStackView alloc] init];
+    self.worksRowsStack.axis = UILayoutConstraintAxisVertical;
+    self.worksRowsStack.spacing = 10.0;
+    self.worksRowsStack.distribution = UIStackViewDistributionFill;
+    [self.worksGridContainer addSubview:self.worksRowsStack];
+
     self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.loadingIndicator.hidesWhenStopped = YES;
     [self.view addSubview:self.loadingIndicator];
@@ -242,6 +259,15 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
         make.left.equalTo(self.worksCard.mas_left).offset(18.0);
         make.right.equalTo(self.worksCard.mas_right).offset(-18.0);
         make.bottom.equalTo(self.worksCard.mas_bottom).offset(-18.0);
+    }];
+    [self.worksGridContainer mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.worksTitleLabel.mas_bottom).offset(12.0);
+        make.left.equalTo(self.worksCard.mas_left).offset(18.0);
+        make.right.equalTo(self.worksCard.mas_right).offset(-18.0);
+        make.bottom.equalTo(self.worksCard.mas_bottom).offset(-18.0);
+    }];
+    [self.worksRowsStack mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.worksGridContainer);
     }];
 }
 
@@ -375,6 +401,360 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
     return fallback;
 }
 
+- (void)fetchPublicStatsFromContentListWithCompletion:(void (^)(BOOL success, NSInteger publishedCount, NSInteger likeTotal))completion {
+    if (self.userId.integerValue <= 0) {
+        if (completion) {
+            completion(NO, 0, 0);
+        }
+        return;
+    }
+
+    __block NSInteger page = 1;
+    NSInteger const pageSize = 50;
+    NSInteger const maxPages = 20;
+    __block NSInteger publishedCount = 0;
+    __block NSInteger likeTotal = 0;
+    __block BOOL didFetchAnyPage = NO;
+
+    __weak typeof(self) weakSelf = self;
+    __block void (^fetchNextPage)(void) = ^{
+        if (page > maxPages) {
+            if (completion) {
+                completion(didFetchAnyPage, publishedCount, likeTotal);
+            }
+            return;
+        }
+
+        [[YALContentManager sharedManager] getAllContentListWithPage:page
+                                                            pageSize:pageSize
+                                                          completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+            (void)message;
+            (void)error;
+
+            if (!success || ![contentList isKindOfClass:[NSArray class]]) {
+                if (completion) {
+                    completion(didFetchAnyPage, publishedCount, likeTotal);
+                }
+                return;
+            }
+
+            didFetchAnyPage = YES;
+            for (id item in contentList) {
+                if (![item isKindOfClass:[YALPostModel class]]) {
+                    continue;
+                }
+                YALPostModel *model = (YALPostModel *)item;
+                if (!model.isPublic) {
+                    continue;
+                }
+                if (model.authorUserId.integerValue != strongSelf.userId.integerValue) {
+                    continue;
+                }
+                publishedCount += 1;
+                likeTotal += MAX(model.likeCount, 0);
+            }
+
+            if (contentList.count < pageSize) {
+                if (completion) {
+                    completion(YES, publishedCount, likeTotal);
+                }
+                return;
+            }
+
+            page += 1;
+            fetchNextPage();
+        }];
+    };
+
+    fetchNextPage();
+}
+
+- (void)fetchPublicStatsFallbackIfNeededForMissingPublished:(BOOL)needPublished
+                                                missingLikes:(BOOL)needLikes {
+    if ((!needPublished && !needLikes) || self.isFetchingPublicStatsFallback) {
+        return;
+    }
+    self.isFetchingPublicStatsFallback = YES;
+
+    __weak typeof(self) weakSelf = self;
+    [self fetchPublicStatsFromContentListWithCompletion:^(BOOL success, NSInteger publishedCount, NSInteger likeTotal) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            strongSelf.isFetchingPublicStatsFallback = NO;
+            if (!success) {
+                return;
+            }
+            if (needPublished) {
+                strongSelf.publishedValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(publishedCount, 0)];
+            }
+            if (needLikes) {
+                strongSelf.likesValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(likeTotal, 0)];
+            }
+        });
+    }];
+}
+
+- (nullable NSDate *)dateFromRawString:(NSString *)raw {
+    if (![raw isKindOfClass:[NSString class]]) {
+        return nil;
+    }
+    NSString *trimmed = [raw stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimmed.length == 0) {
+        return nil;
+    }
+    if (@available(iOS 10.0, *)) {
+        NSISO8601DateFormatter *isoFormatter = [[NSISO8601DateFormatter alloc] init];
+        isoFormatter.formatOptions = NSISO8601DateFormatWithInternetDateTime | NSISO8601DateFormatWithFractionalSeconds;
+        NSDate *isoDate = [isoFormatter dateFromString:trimmed];
+        if (!isoDate) {
+            isoFormatter.formatOptions = NSISO8601DateFormatWithInternetDateTime;
+            isoDate = [isoFormatter dateFromString:trimmed];
+        }
+        if (isoDate) {
+            return isoDate;
+        }
+    }
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+    NSDate *date = [formatter dateFromString:trimmed];
+    if (date) {
+        return date;
+    }
+    formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ssZ";
+    date = [formatter dateFromString:trimmed];
+    if (date) {
+        return date;
+    }
+    formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+    date = [formatter dateFromString:trimmed];
+    if (date) {
+        return date;
+    }
+    formatter.dateFormat = @"yyyy-MM-dd";
+    return [formatter dateFromString:trimmed];
+}
+
+- (NSString *)displayDateTextFromRaw:(NSString *)raw fallback:(NSString *)fallback {
+    NSDate *date = [self dateFromRawString:raw];
+    if (!date) {
+        if (raw.length >= 10) {
+            return [raw substringToIndex:10];
+        }
+        return fallback;
+    }
+    NSDateFormatter *outputFormatter = [[NSDateFormatter alloc] init];
+    outputFormatter.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
+    outputFormatter.dateFormat = @"yyyy-MM-dd";
+    return [outputFormatter stringFromDate:date];
+}
+
+- (UIView *)workCardViewForModel:(YALPostModel *)model {
+    UIView *card = [[UIView alloc] init];
+    card.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    card.layer.cornerRadius = 12.0;
+    card.layer.masksToBounds = YES;
+
+    UIImageView *imageView = [[UIImageView alloc] init];
+    imageView.contentMode = UIViewContentModeScaleAspectFill;
+    imageView.clipsToBounds = YES;
+    imageView.backgroundColor = [UIColor tertiarySystemFillColor];
+    [card addSubview:imageView];
+
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    titleLabel.textColor = [UIColor labelColor];
+    titleLabel.numberOfLines = 1;
+    titleLabel.text = model.title.length > 0 ? model.title : @"未命名内容";
+    [card addSubview:titleLabel];
+
+    UILabel *timeLabel = [[UILabel alloc] init];
+    timeLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightRegular];
+    timeLabel.textColor = [UIColor secondaryLabelColor];
+    timeLabel.text = [self displayDateTextFromRaw:model.createTime fallback:@"刚刚发布"];
+    [card addSubview:timeLabel];
+
+    UIImage *placeholder = nil;
+    if (@available(iOS 13.0, *)) {
+        placeholder = [UIImage systemImageNamed:@"photo"];
+    } else {
+        placeholder = [[UIImage alloc] init];
+    }
+    NSString *imageURL = model.imageURLString;
+    if (imageURL.length == 0 && model.images.count > 0) {
+        imageURL = model.images.firstObject;
+    }
+    UIImage *embeddedImage = imageURL.length > 0 ? YALPostDetailImageFromDataURLString(imageURL) : nil;
+    if (embeddedImage) {
+        imageView.image = embeddedImage;
+    } else {
+        NSURL *url = [NSURL URLWithString:imageURL ?: @""];
+        if (url && url.scheme.length > 0) {
+            [imageView sd_setImageWithURL:url
+                         placeholderImage:placeholder
+                                  options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+        } else {
+            imageView.image = placeholder;
+        }
+    }
+
+    [imageView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.left.right.equalTo(card);
+        make.height.equalTo(imageView.mas_width).multipliedBy(0.72);
+    }];
+    [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(imageView.mas_bottom).offset(6.0);
+        make.left.equalTo(card.mas_left).offset(8.0);
+        make.right.equalTo(card.mas_right).offset(-8.0);
+    }];
+    [timeLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(titleLabel.mas_bottom).offset(3.0);
+        make.left.equalTo(titleLabel);
+        make.right.equalTo(titleLabel);
+        make.bottom.equalTo(card.mas_bottom).offset(-8.0);
+    }];
+
+    UIButton *tapButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    tapButton.backgroundColor = [UIColor clearColor];
+    [tapButton addTarget:self action:@selector(didTapAuthorWorkCard:) forControlEvents:UIControlEventTouchUpInside];
+    objc_setAssociatedObject(tapButton, kYALAuthorWorkModelKey, model, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [card addSubview:tapButton];
+    [tapButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(card);
+    }];
+
+    return card;
+}
+
+- (void)renderPublicWorksPreview:(NSArray<YALPostModel *> *)works {
+    self.publicWorks = [works copy];
+    for (UIView *arranged in [self.worksRowsStack.arrangedSubviews copy]) {
+        [self.worksRowsStack removeArrangedSubview:arranged];
+        [arranged removeFromSuperview];
+    }
+
+    if (works.count == 0) {
+        self.worksTitleLabel.text = @"公开内容";
+        self.worksGridContainer.hidden = YES;
+        self.worksHintLabel.hidden = NO;
+        self.worksHintLabel.text = @"暂时还没有公开内容。";
+        return;
+    }
+
+    self.worksTitleLabel.text = [NSString stringWithFormat:@"公开内容 %lu", (unsigned long)works.count];
+    self.worksHintLabel.hidden = YES;
+    self.worksHintLabel.text = @"";
+    self.worksGridContainer.hidden = NO;
+
+    NSInteger maxCount = works.count;
+    for (NSInteger i = 0; i < maxCount; i += 2) {
+        UIStackView *rowStack = [[UIStackView alloc] init];
+        rowStack.axis = UILayoutConstraintAxisHorizontal;
+        rowStack.spacing = 10.0;
+        rowStack.distribution = UIStackViewDistributionFillEqually;
+
+        UIView *leftCard = [self workCardViewForModel:works[i]];
+        [rowStack addArrangedSubview:leftCard];
+
+        if (i + 1 < maxCount) {
+            UIView *rightCard = [self workCardViewForModel:works[i + 1]];
+            [rowStack addArrangedSubview:rightCard];
+        } else {
+            UIView *placeholder = [[UIView alloc] init];
+            placeholder.backgroundColor = [UIColor clearColor];
+            [rowStack addArrangedSubview:placeholder];
+        }
+
+        [self.worksRowsStack addArrangedSubview:rowStack];
+    }
+}
+
+- (void)didTapAuthorWorkCard:(UIButton *)sender {
+    YALPostModel *model = objc_getAssociatedObject(sender, kYALAuthorWorkModelKey);
+    if (![model isKindOfClass:[YALPostModel class]]) {
+        return;
+    }
+    YALPostDetailController *detail = [[YALPostDetailController alloc] init];
+    detail.post = model;
+    detail.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:detail animated:YES];
+}
+
+- (void)fetchPublicWorksPreview {
+    if (self.userId.integerValue <= 0) {
+        return;
+    }
+
+    __block NSInteger page = 1;
+    NSInteger const pageSize = 30;
+    NSInteger const maxPages = 12;
+    NSMutableArray<YALPostModel *> *matchedWorks = [NSMutableArray array];
+
+    __weak typeof(self) weakSelf = self;
+    __block void (^fetchNextPage)(void) = ^{
+        if (page > maxPages) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) {
+                    return;
+                }
+                [strongSelf renderPublicWorksPreview:[matchedWorks copy]];
+            });
+            return;
+        }
+
+        [[YALContentManager sharedManager] getAllContentListWithPage:page
+                                                            pageSize:pageSize
+                                                          completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+            (void)message;
+            (void)error;
+            if (!success || ![contentList isKindOfClass:[NSArray class]]) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [strongSelf renderPublicWorksPreview:[matchedWorks copy]];
+                });
+                return;
+            }
+
+            for (id item in contentList) {
+                if (![item isKindOfClass:[YALPostModel class]]) {
+                    continue;
+                }
+                YALPostModel *model = (YALPostModel *)item;
+                if (!model.isPublic) {
+                    continue;
+                }
+                if (model.authorUserId.integerValue != strongSelf.userId.integerValue) {
+                    continue;
+                }
+                [matchedWorks addObject:model];
+            }
+
+            if (contentList.count < pageSize) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [strongSelf renderPublicWorksPreview:[matchedWorks copy]];
+                });
+                return;
+            }
+
+            page += 1;
+            fetchNextPage();
+        }];
+    };
+
+    fetchNextPage();
+}
+
 - (void)fetchProfile {
     if (self.userId.integerValue <= 0) {
         self.joinDateLabel.text = @"缺少作者ID，暂时无法拉取主页";
@@ -392,6 +772,7 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
             [strongSelf.loadingIndicator stopAnimating];
             if (![profile isKindOfClass:[NSDictionary class]]) {
                 strongSelf.joinDateLabel.text = error.localizedDescription.length > 0 ? error.localizedDescription : @"主页信息加载失败";
+                [strongSelf fetchPublicStatsFallbackIfNeededForMissingPublished:YES missingLikes:YES];
                 return;
             }
 
@@ -419,18 +800,34 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
             }
 
             NSString *createTime = [strongSelf firstNonEmptyStringFromDictionary:profile keys:@[@"create_time", @"created_at", @"join_time"]];
-            strongSelf.joinDateLabel.text = createTime.length > 0 ? [NSString stringWithFormat:@"加入于 %@", createTime] : @"主页资料已加载";
+            NSString *joinDateText = [strongSelf displayDateTextFromRaw:createTime fallback:@""];
+            strongSelf.joinDateLabel.text = joinDateText.length > 0 ? [NSString stringWithFormat:@"加入于 %@", joinDateText] : @"主页资料已加载";
 
-            NSInteger publishedCount = [strongSelf integerValueFromObject:profile[@"public_content_count"] fallback:[strongSelf integerValueFromObject:profile[@"content_count"] fallback:0]];
-            NSInteger likeTotal = [strongSelf integerValueFromObject:profile[@"like_total"] fallback:[strongSelf integerValueFromObject:profile[@"likes_total"] fallback:0]];
+            id publishedCountObj = profile[@"public_content_count"];
+            if (![publishedCountObj respondsToSelector:@selector(integerValue)]) {
+                publishedCountObj = profile[@"content_count"];
+            }
+            BOOL hasPublishedCount = [publishedCountObj respondsToSelector:@selector(integerValue)];
+            NSInteger publishedCount = hasPublishedCount ? MAX([publishedCountObj integerValue], 0) : 0;
+
+            id likeTotalObj = profile[@"like_total"];
+            if (![likeTotalObj respondsToSelector:@selector(integerValue)]) {
+                likeTotalObj = profile[@"likes_total"];
+            }
+            BOOL hasLikeTotal = [likeTotalObj respondsToSelector:@selector(integerValue)];
+            NSInteger likeTotal = hasLikeTotal ? MAX([likeTotalObj integerValue], 0) : 0;
             BOOL isSelf = [strongSelf boolValueFromObject:profile[@"is_self"] fallback:([YALAuthManager sharedManager].currentUser.userId > 0 && [YALAuthManager sharedManager].currentUser.userId == strongSelf.userId.integerValue)];
 
-            strongSelf.publishedValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(publishedCount, 0)];
-            strongSelf.likesValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(likeTotal, 0)];
+            strongSelf.publishedValueLabel.text = hasPublishedCount ? [NSString stringWithFormat:@"%ld", (long)publishedCount] : @"--";
+            strongSelf.likesValueLabel.text = hasLikeTotal ? [NSString stringWithFormat:@"%ld", (long)likeTotal] : @"--";
             strongSelf.identityLabel.text = isSelf ? @"我自己" : @"作者";
-            strongSelf.worksHintLabel.text = isSelf
-                ? @"这里预留给你的公开作品区。等你补上作者内容列表接口后，这里就能直接展示自己的公开发布。"
-                : @"这里预留给作者的公开作品区。等你补上作者内容列表接口后，这里就能直接展示 Ta 的公开发布。";
+            strongSelf.worksHintLabel.hidden = NO;
+            strongSelf.worksHintLabel.text = @"正在加载公开内容...";
+            strongSelf.worksGridContainer.hidden = YES;
+
+            [strongSelf fetchPublicStatsFallbackIfNeededForMissingPublished:!hasPublishedCount
+                                                                missingLikes:!hasLikeTotal];
+            [strongSelf fetchPublicWorksPreview];
         });
     }];
 }
@@ -466,6 +863,7 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 @property (nonatomic, strong) UILabel *commentHeader;
 @property (nonatomic, strong) NSMutableSet<NSNumber *> *expandedCommentIds;
 @property (nonatomic, strong) NSMutableSet<NSNumber *> *expandedReplyThreads;
+@property (nonatomic, strong) NSMutableDictionary<NSNumber *, NSNumber *> *visibleReplyCountByRoot;
 @property (nonatomic, strong, nullable) NSDictionary *replyTargetComment;
 @property (nonatomic, strong) MASConstraint *tableHeightConstraint;
 @property (nonatomic, assign) NSInteger likeCount;
@@ -491,6 +889,10 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
 static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
 static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionCache";
+static NSInteger const kYALReplyExpandStep = 3;
+static const void *kYALToggleRootIdKey = &kYALToggleRootIdKey;
+static const void *kYALToggleTotalCountKey = &kYALToggleTotalCountKey;
+static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
 
 - (NSArray<NSString *> *)normalizedImageSourceStringsFromArray:(NSArray *)images {
     NSMutableArray<NSString *> *result = [NSMutableArray array];
@@ -853,6 +1255,22 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         if ([parentId respondsToSelector:@selector(integerValue)]) {
             commentDict[@"parent_id"] = @([parentId integerValue]);
         }
+        NSNumber *userId = [self firstPositiveNumberFromDictionary:item keys:@[@"user_id", @"uid", @"userid", @"author_id"]];
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo2 keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo3 keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (!userId) {
+            userId = [self firstPositiveNumberFromDictionary:userInfo4 keys:@[@"user_id", @"uid", @"id"]];
+        }
+        if (userId.integerValue > 0) {
+            commentDict[@"user_id"] = userId;
+        }
         if (replyTargetName.length > 0) {
             commentDict[@"reply_to_name"] = replyTargetName;
         }
@@ -967,33 +1385,53 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
         }];
 
         NSNumber *rootId = [rootComment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([rootComment[@"comment_id"] integerValue]) : nil;
+        if (rootId.integerValue <= 0) {
+            rootId = nil;
+        }
         NSArray<NSDictionary *> *replies = rootId ? repliesByRootId[rootId] : nil;
         if (replies.count == 0) {
             continue;
         }
 
-        BOOL expandedThread = rootId ? [self.expandedReplyThreads containsObject:rootId] : NO;
-        NSInteger defaultVisibleCount = replies.count;
-        NSInteger visibleCount = expandedThread ? replies.count : MIN(defaultVisibleCount, replies.count);
+        NSInteger visibleCount = rootId ? 0 : replies.count;
+        if (rootId) {
+            NSNumber *savedVisible = self.visibleReplyCountByRoot[rootId];
+            if ([savedVisible respondsToSelector:@selector(integerValue)]) {
+                visibleCount = [savedVisible integerValue];
+            }
+            if ([self.expandedReplyThreads containsObject:rootId]) {
+                visibleCount = replies.count;
+            }
+        }
+        visibleCount = MIN(MAX(visibleCount, 0), (NSInteger)replies.count);
         for (NSInteger i = 0; i < visibleCount; i++) {
             NSDictionary *replyComment = replies[i];
             NSInteger replyLevel = [replyComment[@"depth"] respondsToSelector:@selector(integerValue)] ? [replyComment[@"depth"] integerValue] : 1;
+            // 避免首发临时评论与接口回流评论的缩进层级不一致，统一限制缩进层级
+            NSInteger indentLevel = MIN(MAX(replyLevel, 1), 2);
             [rows addObject:@{
                 @"row_type": @"comment",
                 @"comment": replyComment,
                 @"is_reply": @YES,
-                @"reply_level": @(MAX(replyLevel, 1))
+                @"reply_level": @(indentLevel)
             }];
         }
 
-        if (replies.count > defaultVisibleCount) {
-            NSString *title = expandedThread ? @"收起回复" : [NSString stringWithFormat:@"展开 %ld 条回复", (long)(replies.count - defaultVisibleCount)];
-            [rows addObject:@{
-                @"row_type": @"toggle",
-                @"root_comment_id": rootId ?: @(0),
-                @"title": title
-            }];
+        if (!rootId) {
+            continue;
         }
+
+        BOOL fullyExpanded = (visibleCount >= replies.count);
+        NSString *title = fullyExpanded ? @"" : @"展开回复";
+        BOOL showRightCollapse = (visibleCount > 0);
+        [rows addObject:@{
+            @"row_type": @"toggle",
+            @"root_comment_id": rootId ?: @(0),
+            @"title": title ?: @"展开回复",
+            @"visible_reply_count": @(visibleCount),
+            @"total_reply_count": @(replies.count),
+            @"show_right_collapse": @(showRightCollapse)
+        }];
     }
 
     return rows;
@@ -1106,6 +1544,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     if (self.authorBio.length == 0) {
         self.authorBio = [self firstNonEmptyStringFromDictionary:authorInfo keys:@[@"bio", @"user_bio", @"signature", @"intro"]];
     }
+    NSLog(@"📥 详情页解析作者信息: user_id=%@ nickname=%@", self.authorUserId, self.authorNickname ?: @"");
 
     id likeObj = content[@"like_count"];
     if ([likeObj respondsToSelector:@selector(integerValue)]) {
@@ -1277,6 +1716,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 
     self.expandedCommentIds = [NSMutableSet set];
     self.expandedReplyThreads = [NSMutableSet set];
+    self.visibleReplyCountByRoot = [NSMutableDictionary dictionary];
     // 点击空白收起键盘
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self
                                                                            action:@selector(didTapBackground)];
@@ -1315,13 +1755,42 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     [self.scrollView addSubview:self.contentView];
 
     self.contentCard = [[UIView alloc] init];
-    self.contentCard.backgroundColor = [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+    UIColor *contentCardBackgroundColor;
+    UIColor *contentCardShadowColor;
+    UIColor *contentCardBorderColor;
+    if (@available(iOS 13.0, *)) {
+        contentCardBackgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:0.12 green:0.12 blue:0.13 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+        }];
+        contentCardShadowColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithWhite:0.0 alpha:0.45];
+            }
+            return [UIColor colorWithWhite:0.0 alpha:0.10];
+        }];
+        contentCardBorderColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithWhite:1.0 alpha:0.16];
+            }
+            return [UIColor colorWithWhite:0.0 alpha:0.06];
+        }];
+    } else {
+        contentCardBackgroundColor = [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+        contentCardShadowColor = [UIColor colorWithWhite:0 alpha:0.10];
+        contentCardBorderColor = [UIColor colorWithWhite:0 alpha:0.06];
+    }
+    self.contentCard.backgroundColor = contentCardBackgroundColor;
     self.contentCard.layer.cornerRadius = 22.0;
     self.contentCard.layer.masksToBounds = NO;
-    self.contentCard.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.10].CGColor;
+    self.contentCard.layer.shadowColor = contentCardShadowColor.CGColor;
     self.contentCard.layer.shadowOpacity = 1.0;
     self.contentCard.layer.shadowOffset = CGSizeMake(0, 10);
     self.contentCard.layer.shadowRadius = 20.0;
+    self.contentCard.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.contentCard.layer.borderColor = contentCardBorderColor.CGColor;
     [self.contentView addSubview:self.contentCard];
 
     self.imageContainerView = [[UIView alloc] init];
@@ -1683,14 +2152,125 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     // 避免先展示假数据造成数值闪动，初始统一置空，等待接口回填
     self.flatComments = @[];
     self.comments = @[];
+    [self.expandedReplyThreads removeAllObjects];
+    [self.visibleReplyCountByRoot removeAllObjects];
     [self.tableView reloadData];
     [self updateBottomBarForEditing:self.inputExpanded animated:NO];
+}
+
+- (NSNumber *)currentLoginUserId {
+    YALAuthUserModel *currentUser = [YALAuthManager sharedManager].currentUser;
+    if (currentUser.userId > 0) {
+        return @(currentUser.userId);
+    }
+    return nil;
+}
+
+- (BOOL)isCommentOwnedByCurrentUser:(NSDictionary *)comment {
+    NSNumber *commentUserId = [comment[@"user_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"user_id"] integerValue]) : nil;
+    NSNumber *currentUserId = [self currentLoginUserId];
+    if (commentUserId.integerValue > 0 && currentUserId.integerValue > 0) {
+        return [commentUserId isEqualToNumber:currentUserId];
+    }
+    NSString *commentName = [comment[@"name"] isKindOfClass:[NSString class]] ? comment[@"name"] : @"";
+    NSString *myNickname = [YALAuthManager sharedManager].currentUser.nickname ?: @"";
+    return (myNickname.length > 0 && [commentName isEqualToString:myNickname]);
+}
+
+- (void)deleteComment:(NSDictionary *)comment {
+    NSNumber *commentId = [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : nil;
+    if (commentId.integerValue <= 0) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] deleteCommentWithId:commentId completion:^(BOOL success, NSString *message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                NSMutableArray<NSDictionary *> *filtered = [NSMutableArray array];
+                for (NSDictionary *item in strongSelf.flatComments) {
+                    NSNumber *itemCommentId = [item[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([item[@"comment_id"] integerValue]) : nil;
+                    NSNumber *rootCommentId = [item[@"root_comment_id"] respondsToSelector:@selector(integerValue)] ? @([item[@"root_comment_id"] integerValue]) : nil;
+                    NSNumber *parentId = [item[@"parent_id"] respondsToSelector:@selector(integerValue)] ? @([item[@"parent_id"] integerValue]) : nil;
+                    if ([itemCommentId isEqualToNumber:commentId] ||
+                        [rootCommentId isEqualToNumber:commentId] ||
+                        [parentId isEqualToNumber:commentId]) {
+                        continue;
+                    }
+                    [filtered addObject:item];
+                }
+                strongSelf.flatComments = [filtered copy];
+                strongSelf.comments = [strongSelf displayRowsFromFlatComments:strongSelf.flatComments];
+                strongSelf.viewCount = strongSelf.flatComments.count;
+                strongSelf.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.viewCount];
+                [strongSelf.tableView reloadData];
+                [strongSelf refreshTableHeight];
+                return;
+            }
+            NSString *errorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"删除失败，后端可能尚未提供评论删除接口");
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"删除失败"
+                                                                           message:errorText
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleCancel handler:nil]];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        });
+    }];
 }
 
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return self.comments.count;
+}
+
+- (nullable UIContextMenuConfiguration *)tableView:(UITableView *)tableView
+                      contextMenuConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath
+                                                          point:(CGPoint)point API_AVAILABLE(ios(13.0)) {
+    (void)tableView;
+    (void)point;
+    if (indexPath.row >= self.comments.count) {
+        return nil;
+    }
+    NSDictionary *row = self.comments[indexPath.row];
+    NSString *rowType = [row[@"row_type"] isKindOfClass:[NSString class]] ? row[@"row_type"] : @"comment";
+    if (![rowType isEqualToString:@"comment"]) {
+        return nil;
+    }
+    NSDictionary *comment = [row[@"comment"] isKindOfClass:[NSDictionary class]] ? row[@"comment"] : nil;
+    if (![comment isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    if (![self isCommentOwnedByCurrentUser:comment]) {
+        return nil;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    return [UIContextMenuConfiguration configurationWithIdentifier:nil
+                                                   previewProvider:nil
+                                                    actionProvider:^UIMenu * _Nullable(NSArray<UIMenuElement *> * _Nonnull suggestedActions) {
+        (void)suggestedActions;
+        UIAction *deleteAction = [UIAction actionWithTitle:@"删除评论"
+                                                     image:[UIImage systemImageNamed:@"trash"]
+                                                identifier:nil
+                                                   handler:^(__kindof UIAction * _Nonnull action) {
+            (void)action;
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"删除这条评论？"
+                                                                           message:@"删除后将无法恢复。"
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"删除"
+                                                      style:UIAlertActionStyleDestructive
+                                                    handler:^(__unused UIAlertAction * _Nonnull action2) {
+                [strongSelf deleteComment:comment];
+            }]];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+        }];
+        return [UIMenu menuWithTitle:@"" children:@[deleteAction]];
+    }];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1703,21 +2283,56 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
             toggleCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:toggleCellId];
             toggleCell.selectionStyle = UITableViewCellSelectionStyleNone;
             toggleCell.backgroundColor = [UIColor clearColor];
-            UILabel *toggleLabel = [[UILabel alloc] init];
-            toggleLabel.tag = 1001;
-            toggleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-            toggleLabel.textColor = [UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0];
-            toggleLabel.numberOfLines = 1;
-            [toggleCell.contentView addSubview:toggleLabel];
-            [toggleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            UIButton *expandButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            expandButton.tag = 1001;
+            expandButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+            [expandButton setTitleColor:[UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0] forState:UIControlStateNormal];
+            expandButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+            [expandButton addTarget:self action:@selector(didTapReplyExpandButton:) forControlEvents:UIControlEventTouchUpInside];
+            [toggleCell.contentView addSubview:expandButton];
+            [expandButton mas_makeConstraints:^(MASConstraintMaker *make) {
                 make.left.equalTo(toggleCell.contentView.mas_left).offset(56.0);
                 make.centerY.equalTo(toggleCell.contentView.mas_centerY);
-                make.right.lessThanOrEqualTo(toggleCell.contentView.mas_right).offset(-12.0);
+                make.right.lessThanOrEqualTo(toggleCell.contentView.mas_right).offset(-84.0);
+            }];
+
+            UIButton *collapseButton = [UIButton buttonWithType:UIButtonTypeSystem];
+            collapseButton.tag = 1003;
+            collapseButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+            [collapseButton setTitleColor:[UIColor colorWithRed:0.82 green:0.58 blue:0.18 alpha:1.0] forState:UIControlStateNormal];
+            collapseButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentRight;
+            [collapseButton addTarget:self action:@selector(didTapReplyCollapseButton:) forControlEvents:UIControlEventTouchUpInside];
+            [toggleCell.contentView addSubview:collapseButton];
+            [collapseButton mas_makeConstraints:^(MASConstraintMaker *make) {
+                make.right.equalTo(toggleCell.contentView.mas_right).offset(-12.0);
+                make.centerY.equalTo(toggleCell.contentView.mas_centerY);
+                make.width.mas_equalTo(64.0);
             }];
         }
-        UILabel *toggleLabel = [toggleCell.contentView viewWithTag:1001];
-        if ([toggleLabel isKindOfClass:[UILabel class]]) {
-            toggleLabel.text = [row[@"title"] isKindOfClass:[NSString class]] ? row[@"title"] : @"展开回复";
+        UIButton *expandButton = [toggleCell.contentView viewWithTag:1001];
+        if ([expandButton isKindOfClass:[UIButton class]]) {
+            NSString *expandTitle = [row[@"title"] isKindOfClass:[NSString class]] ? row[@"title"] : @"展开回复";
+            [expandButton setTitle:expandTitle forState:UIControlStateNormal];
+            expandButton.hidden = (expandTitle.length == 0);
+        }
+        UIButton *collapseButton = [toggleCell.contentView viewWithTag:1003];
+        if ([collapseButton isKindOfClass:[UIButton class]]) {
+            BOOL showRightCollapse = [row[@"show_right_collapse"] respondsToSelector:@selector(boolValue)] ? [row[@"show_right_collapse"] boolValue] : NO;
+            collapseButton.hidden = !showRightCollapse;
+            [collapseButton setTitle:(showRightCollapse ? @"收起" : @"") forState:UIControlStateNormal];
+        }
+        NSNumber *rootCommentId = [row[@"root_comment_id"] respondsToSelector:@selector(integerValue)] ? @([row[@"root_comment_id"] integerValue]) : nil;
+        NSNumber *totalReplyCount = [row[@"total_reply_count"] respondsToSelector:@selector(integerValue)] ? @([row[@"total_reply_count"] integerValue]) : @(0);
+        NSNumber *visibleReplyCount = [row[@"visible_reply_count"] respondsToSelector:@selector(integerValue)] ? @([row[@"visible_reply_count"] integerValue]) : @(0);
+        if ([expandButton isKindOfClass:[UIButton class]]) {
+            objc_setAssociatedObject(expandButton, kYALToggleRootIdKey, rootCommentId, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(expandButton, kYALToggleTotalCountKey, totalReplyCount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(expandButton, kYALToggleVisibleCountKey, visibleReplyCount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        if ([collapseButton isKindOfClass:[UIButton class]]) {
+            objc_setAssociatedObject(collapseButton, kYALToggleRootIdKey, rootCommentId, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(collapseButton, kYALToggleTotalCountKey, totalReplyCount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            objc_setAssociatedObject(collapseButton, kYALToggleVisibleCountKey, visibleReplyCount, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         }
         toggleCell.separatorInset = UIEdgeInsetsMake(0, 999, 0, 0);
         return toggleCell;
@@ -1815,6 +2430,62 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     return nil;
 }
 
+- (void)applyReplyToggleForRootCommentId:(NSNumber *)rootCommentId
+                         totalReplyCount:(NSInteger)totalReplyCount
+                        visibleReplyCount:(NSInteger)visibleCount
+                            forceCollapse:(BOOL)forceCollapse {
+    if (rootCommentId.integerValue <= 0 || totalReplyCount <= 0) {
+        return;
+    }
+
+    NSInteger currentVisible = visibleCount;
+    NSNumber *savedVisible = self.visibleReplyCountByRoot[rootCommentId];
+    if ([savedVisible respondsToSelector:@selector(integerValue)]) {
+        currentVisible = [savedVisible integerValue];
+    }
+    if ([self.expandedReplyThreads containsObject:rootCommentId]) {
+        currentVisible = totalReplyCount;
+    }
+    currentVisible = MIN(MAX(currentVisible, 0), totalReplyCount);
+
+    if (forceCollapse || currentVisible >= totalReplyCount) {
+        [self.visibleReplyCountByRoot removeObjectForKey:rootCommentId];
+        [self.expandedReplyThreads removeObject:rootCommentId];
+    } else {
+        NSInteger nextCount = MIN(totalReplyCount, currentVisible + kYALReplyExpandStep);
+        self.visibleReplyCountByRoot[rootCommentId] = @(nextCount);
+        if (nextCount >= totalReplyCount) {
+            [self.expandedReplyThreads addObject:rootCommentId];
+        } else {
+            [self.expandedReplyThreads removeObject:rootCommentId];
+        }
+    }
+
+    self.comments = [self displayRowsFromFlatComments:self.flatComments];
+    [self.tableView reloadData];
+    [self refreshTableHeight];
+}
+
+- (void)didTapReplyExpandButton:(UIButton *)sender {
+    NSNumber *rootCommentId = objc_getAssociatedObject(sender, kYALToggleRootIdKey);
+    NSNumber *totalCount = objc_getAssociatedObject(sender, kYALToggleTotalCountKey);
+    NSNumber *visibleCount = objc_getAssociatedObject(sender, kYALToggleVisibleCountKey);
+    [self applyReplyToggleForRootCommentId:rootCommentId
+                           totalReplyCount:[totalCount respondsToSelector:@selector(integerValue)] ? [totalCount integerValue] : 0
+                          visibleReplyCount:[visibleCount respondsToSelector:@selector(integerValue)] ? [visibleCount integerValue] : 0
+                              forceCollapse:NO];
+}
+
+- (void)didTapReplyCollapseButton:(UIButton *)sender {
+    NSNumber *rootCommentId = objc_getAssociatedObject(sender, kYALToggleRootIdKey);
+    NSNumber *totalCount = objc_getAssociatedObject(sender, kYALToggleTotalCountKey);
+    NSNumber *visibleCount = objc_getAssociatedObject(sender, kYALToggleVisibleCountKey);
+    [self applyReplyToggleForRootCommentId:rootCommentId
+                           totalReplyCount:[totalCount respondsToSelector:@selector(integerValue)] ? [totalCount integerValue] : 0
+                          visibleReplyCount:[visibleCount respondsToSelector:@selector(integerValue)] ? [visibleCount integerValue] : 0
+                              forceCollapse:YES];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if (indexPath.row >= self.comments.count) {
@@ -1823,17 +2494,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
     NSDictionary *row = self.comments[indexPath.row];
     NSString *rowType = [row[@"row_type"] isKindOfClass:[NSString class]] ? row[@"row_type"] : @"comment";
     if ([rowType isEqualToString:@"toggle"]) {
-        NSNumber *rootCommentId = [row[@"root_comment_id"] respondsToSelector:@selector(integerValue)] ? @([row[@"root_comment_id"] integerValue]) : nil;
-        if (rootCommentId) {
-            if ([self.expandedReplyThreads containsObject:rootCommentId]) {
-                [self.expandedReplyThreads removeObject:rootCommentId];
-            } else {
-                [self.expandedReplyThreads addObject:rootCommentId];
-            }
-            self.comments = [self displayRowsFromFlatComments:self.flatComments];
-            [self.tableView reloadData];
-            [self refreshTableHeight];
-        }
+        // 展开/收起由 cell 内左右按钮分别处理，避免整行点击歧义
         return;
     }
     NSDictionary *comment = [row[@"comment"] isKindOfClass:[NSDictionary class]] ? row[@"comment"] : nil;
@@ -1847,8 +2508,16 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
 }
 
 - (void)ownerTapped {
+    if (@available(iOS 14.0, *)) {
+        self.navigationItem.backButtonDisplayMode = UINavigationItemBackButtonDisplayModeMinimal;
+    }
+    self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@""
+                                                                               style:UIBarButtonItemStylePlain
+                                                                              target:nil
+                                                                              action:nil];
     NSNumber *targetUserId = self.authorUserId;
     if (targetUserId.integerValue > 0) {
+        NSLog(@"👤 ownerTapped 直进用户页: user_id=%@", targetUserId);
         YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
         controller.userId = targetUserId;
         controller.prefilledNickname = self.authorNickname;
@@ -1878,6 +2547,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                 [strongSelf applyDetailData:content];
             }
             if (strongSelf.authorUserId.integerValue > 0) {
+                NSLog(@"👤 ownerTapped 详情回填后进用户页: user_id=%@", strongSelf.authorUserId);
                 YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
                 controller.userId = strongSelf.authorUserId;
                 controller.prefilledNickname = strongSelf.authorNickname;
@@ -2143,6 +2813,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
             }
             if (rootCommentId.integerValue > 0) {
                 [strongSelf.expandedReplyThreads addObject:rootCommentId];
+                strongSelf.visibleReplyCountByRoot[rootCommentId] = @(NSIntegerMax);
             }
             NSString *name = [comment[@"user_nickname"] isKindOfClass:[NSString class]] ? comment[@"user_nickname"] : nil;
             if (name.length == 0 && [comment[@"user"] isKindOfClass:[NSDictionary class]]) {
@@ -2158,6 +2829,7 @@ static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionC
                 @"comment_id": [comment[@"comment_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"comment_id"] integerValue]) : @(0),
                 @"parent_id": [comment[@"parent_id"] respondsToSelector:@selector(integerValue)] ? @([comment[@"parent_id"] integerValue]) : ([comment[@"ParentID"] respondsToSelector:@selector(integerValue)] ? @([comment[@"ParentID"] integerValue]) : parentId),
                 @"root_comment_id": rootCommentId ?: @(0),
+                @"user_id": [strongSelf currentLoginUserId] ?: @(0),
                 @"name": name.length > 0 ? name : ([YALAuthManager sharedManager].currentUser.nickname ?: @"我"),
                 @"content": text,
                 @"time": [strongSelf displayTimeStringFromRaw:comment[@"created_at"]],

@@ -9,7 +9,7 @@
 #import "YALRegisterController.h"
 #import "YALAuthManager.h"
 
-@interface YALLoginController ()
+@interface YALLoginController () <UIGestureRecognizerDelegate>
 
 @end
 
@@ -23,6 +23,11 @@ static const NSUInteger kYALPasswordMaxLength = 15;
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     _loginView = [[YALLoginView alloc] initWithFrame:self.view.bounds];
     [self.view addSubview:self.loginView];
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
+    tap.cancelsTouchesInView = NO;
+    tap.delegate = self;
+    [self.view addGestureRecognizer:tap];
     
     __weak typeof(self) weakSelf = self;
     _loginView.tapRegisterBlock = ^{
@@ -63,6 +68,23 @@ static const NSUInteger kYALPasswordMaxLength = 15;
             });
         }];
     };
+}
+
+- (void)dismissKeyboard {
+    [self.view endEditing:YES];
+}
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    UIView *v = touch.view;
+    while (v && v != self.view) {
+        if ([v isKindOfClass:[UITextField class]] ||
+            [v isKindOfClass:[UITextView class]] ||
+            [v isKindOfClass:[UIControl class]]) {
+            return NO;
+        }
+        v = v.superview;
+    }
+    return YES;
 }
 
 - (void)enterMainInterface {

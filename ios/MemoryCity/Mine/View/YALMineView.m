@@ -177,6 +177,8 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 
     UIControl *publicStat = [self makeStatViewWithTitle:@"公开中" valueLabel:&_publicValueLabel tag:0];
     UIControl *privateStat = [self makeStatViewWithTitle:@"私密中" valueLabel:&_privateValueLabel tag:1];
+    self.publicValueLabel.text = @"--";
+    self.privateValueLabel.text = @"--";
     
     UIView *firstSeparator = [self makeStatSeparatorView];
     [self.statsCardView addSubview:publicStat];
@@ -438,13 +440,7 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     self.nameLabel.text = profile.name;
     self.bioLabel.text = profile.bio;
     self.accountLabel.text = @"";
-
-    NSInteger publishedCount = MAX(profile.publishedCount.integerValue, 6);
-    NSInteger privateCount = MAX(2, MIN(8, publishedCount / 4));
-    NSInteger publicCount = MAX(publishedCount - privateCount, 0);
-
-    self.publicValueLabel.text = [NSString stringWithFormat:@"%ld", (long)publicCount];
-    self.privateValueLabel.text = [NSString stringWithFormat:@"%ld", (long)privateCount];
+    [self updateCreatorStatsWithPublicCount:nil privateCount:nil];
 }
 
 - (void)applyAuthUser:(YALAuthUserModel *)user {
@@ -532,10 +528,21 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
         self.nameLabel.text = @"未登录";
         self.accountLabel.text = @"账号ID：暂无";
         self.bioLabel.text = @"登录后可同步资料，请求将自动携带双 token";
+        [self updateCreatorStatsWithPublicCount:nil privateCount:nil];
         [self.editProfileButton setTitle:@"立即登录" forState:UIControlStateNormal];
     } else {
         [self.editProfileButton setTitle:@"编辑资料" forState:UIControlStateNormal];
     }
+}
+
+- (void)updateCreatorStatsWithPublicCount:(nullable NSNumber *)publicCount
+                              privateCount:(nullable NSNumber *)privateCount {
+    self.publicValueLabel.text = [publicCount respondsToSelector:@selector(integerValue)]
+        ? [NSString stringWithFormat:@"%ld", (long)MAX(publicCount.integerValue, 0)]
+        : @"--";
+    self.privateValueLabel.text = [privateCount respondsToSelector:@selector(integerValue)]
+        ? [NSString stringWithFormat:@"%ld", (long)MAX(privateCount.integerValue, 0)]
+        : @"--";
 }
 
 #pragma mark - Colors

@@ -52,6 +52,7 @@
     self.contentView.backgroundColor = [UIColor systemBackgroundColor];
     self.contentView.layer.cornerRadius = 12.0;
     self.contentView.layer.masksToBounds = YES;
+    self.contentView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
 
     self.imageRatio = 1.0;
     self.useWaterfall = YES;
@@ -87,19 +88,46 @@
     }];
 
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.imageView.mas_bottom).offset(8.0);  // 增加间距
+        make.top.equalTo(self.imageView.mas_bottom).offset(7.0);
         make.left.equalTo(self.contentView.mas_left).offset(12.0);
         make.right.equalTo(self.contentView.mas_right).offset(-12.0);
         make.height.mas_equalTo(20.0);
     }];
 
     [self.descLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.titleLabel.mas_bottom).offset(6.0);
+        make.top.equalTo(self.titleLabel.mas_bottom).offset(5.0);
         make.left.equalTo(self.titleLabel);
         make.right.equalTo(self.titleLabel);
-        make.height.mas_equalTo(34.0);
-        make.bottom.equalTo(self.contentView.mas_bottom).offset(-12.0);  // 添加底部约束
+        make.height.mas_equalTo(30.0);
+        make.bottom.equalTo(self.contentView.mas_bottom).offset(-10.0);
     }];
+
+    [self applyAppearanceForCurrentTrait];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 13.0, *)) {
+        if (previousTraitCollection &&
+            [self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
+            [self applyAppearanceForCurrentTrait];
+            [self setNeedsLayout];
+        }
+    }
+}
+
+- (void)applyAppearanceForCurrentTrait {
+    BOOL isDark = NO;
+    if (@available(iOS 12.0, *)) {
+        isDark = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
+    }
+    self.contentView.backgroundColor = isDark ? [UIColor secondarySystemBackgroundColor] : [UIColor systemBackgroundColor];
+    self.contentView.layer.borderColor = (isDark
+                                          ? [UIColor colorWithWhite:1.0 alpha:0.18]
+                                          : [UIColor colorWithWhite:0.0 alpha:0.06]).CGColor;
+    self.layer.shadowOpacity = isDark ? 0.24 : 0.08;
+    self.layer.shadowRadius = isDark ? 10.0 : 6.0;
+    self.layer.shadowOffset = isDark ? CGSizeMake(0, 4) : CGSizeMake(0, 2);
 }
 
 - (void)layoutSubviews {

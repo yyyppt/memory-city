@@ -14,8 +14,8 @@
 #import "YALPostManager.h"
 #import <Masonry/Masonry.h>
 
-static CGFloat const kYALPostCellTextAreaHeight = 88.0;
-static CGFloat const kYALWaterfallTextAreaHeight = 88.0; // 与 YALPostCell 内部约束一致
+static CGFloat const kYALPostCellTextAreaHeight = 72.0;
+static CGFloat const kYALWaterfallTextAreaHeight = 72.0; // 与 YALPostCell 内部约束一致
 static CGFloat const kYALSingleColumnItemHeight = 336.0;
 static CGFloat const kYALHorizontalInset = 12.0;
 static CGFloat const kYALItemSpacing = 10.0;

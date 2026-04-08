@@ -5,6 +5,11 @@
 
 - (void)styleTextField:(UITextField *)tf {
     tf.backgroundColor = [UIColor colorWithRed:1.0 green:0.97 blue:0.92 alpha:1.0];
+    tf.textColor = [UIColor colorWithWhite:0.16 alpha:1.0];
+    if (tf.placeholder.length > 0) {
+        tf.attributedPlaceholder = [[NSAttributedString alloc] initWithString:tf.placeholder
+                                                                    attributes:@{NSForegroundColorAttributeName:[UIColor colorWithWhite:0.45 alpha:1.0]}];
+    }
     tf.layer.borderWidth = 1.0;
     tf.layer.borderColor = [UIColor colorWithRed:1.0 green:0.85 blue:0.6 alpha:1.0].CGColor;
     tf.layer.cornerRadius = 25;

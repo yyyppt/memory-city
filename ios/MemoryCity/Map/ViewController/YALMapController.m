@@ -32,6 +32,14 @@
 
 @implementation YALMapController
 
+- (UIColor *)accentColor {
+    return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+}
+
+- (UIColor *)accentBorderColor {
+    return [[self accentColor] colorWithAlphaComponent:0.28];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
 
@@ -169,9 +177,10 @@
         self.navigationController.navigationBar.compactAppearance = appearance;
 
         self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+        self.navigationController.navigationBar.tintColor = [self accentColor];
     } else {
         self.navigationController.navigationBar.barTintColor = [UIColor systemBackgroundColor];
-        self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
+        self.navigationController.navigationBar.tintColor = [self accentColor];
         [self.navigationController.navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
         self.navigationController.navigationBar.shadowImage = [UIImage new];
     }
@@ -184,7 +193,7 @@
     self.searchContainerView.layer.cornerRadius = 16.0;
     self.searchContainerView.layer.masksToBounds = YES;
     self.searchContainerView.layer.borderWidth = 1.0;
-    self.searchContainerView.layer.borderColor = [UIColor separatorColor].CGColor;
+    self.searchContainerView.layer.borderColor = [self accentBorderColor].CGColor;
 
     self.searchTextField = [[UITextField alloc] init];
     self.searchTextField.placeholder = @"搜索地点、地址或地标";
@@ -194,12 +203,14 @@
     self.searchTextField.clearButtonMode = UITextFieldViewModeWhileEditing;
     self.searchTextField.delegate = self;
     self.searchTextField.leftViewMode = UITextFieldViewModeAlways;
+    self.searchTextField.tintColor = [self accentColor];
     UIView *leftPadding = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 8, 20)];
     self.searchTextField.leftView = leftPadding;
 
     self.searchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.searchButton setTitle:@"搜索" forState:UIControlStateNormal];
     self.searchButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [self.searchButton setTitleColor:[self accentColor] forState:UIControlStateNormal];
     [self.searchButton addTarget:self action:@selector(handleSearchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
 
     [self.searchContainerView addSubview:self.searchTextField];
@@ -231,10 +242,10 @@
     self.locateButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.locateButton.layer.cornerRadius = 26.0;
     self.locateButton.layer.masksToBounds = YES;
-    self.locateButton.tintColor = [UIColor systemBlueColor];
+    self.locateButton.tintColor = [self accentColor];
     self.locateButton.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.98];
     self.locateButton.layer.borderWidth = 1.0;
-    self.locateButton.layer.borderColor = [UIColor separatorColor].CGColor;
+    self.locateButton.layer.borderColor = [self accentBorderColor].CGColor;
 
     if (@available(iOS 13.0, *)) {
         [self.locateButton setImage:[UIImage systemImageNamed:@"location.fill"] forState:UIControlStateNormal];
@@ -505,7 +516,7 @@
         view = [[MKMarkerAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:identifier];
 
         view.canShowCallout = YES;
-        view.markerTintColor = [UIColor systemOrangeColor];
+        view.markerTintColor = [self accentColor];
         view.clusteringIdentifier = @"memory";
 
     }
@@ -533,6 +544,7 @@
     view.leftCalloutAccessoryView = deleteBtn;
 
     UIButton *detailBtn = [UIButton buttonWithType:UIButtonTypeDetailDisclosure];
+    detailBtn.tintColor = [self accentColor];
     view.rightCalloutAccessoryView = detailBtn;
 
     if ([annotation isKindOfClass:[YALMemoryPoint class]]) {

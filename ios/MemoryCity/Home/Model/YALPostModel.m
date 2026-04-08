@@ -90,6 +90,7 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
         self.content = [dict[@"content"] isKindOfClass:[NSString class]] ? dict[@"content"] : @"";
         self.desc = self.content; // 保持向后兼容
         self.city = [dict[@"city"] isKindOfClass:[NSString class]] ? dict[@"city"] : @"";
+        NSLog(@"地点地点：%@", self.city);
         self.year = [dict[@"year"] isKindOfClass:[NSString class]] ? dict[@"year"] : @"";
         self.mood = [dict[@"mood"] isKindOfClass:[NSString class]] ? dict[@"mood"] : @"";
         self.createTime = [dict[@"create_time"] isKindOfClass:[NSString class]] ? dict[@"create_time"] : @"";

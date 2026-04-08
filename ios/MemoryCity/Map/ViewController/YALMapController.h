@@ -6,10 +6,16 @@
 //
 
 #import <UIKit/UIKit.h>
+#import <CoreLocation/CoreLocation.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
+typedef void (^YALMapLocationSelectionHandler)(CLLocationCoordinate2D coordinate, NSString *locationName);
+
 @interface YALMapController : UIViewController
+
+@property (nonatomic, assign) BOOL selectionMode;
+@property (nonatomic, copy, nullable) YALMapLocationSelectionHandler onLocationSelected;
 
 @end
 

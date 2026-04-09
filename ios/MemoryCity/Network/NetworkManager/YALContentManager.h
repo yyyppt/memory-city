@@ -68,17 +68,14 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)deleteCommentWithId:(NSNumber *)commentId
                  completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion;
 
-/// 收藏/取消收藏内容
+// 收藏/取消收藏内容
 - (void)toggleCollectContentWithId:(NSNumber *)contentId
                         completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion;
 
-/// 获取我的收藏列表
+// 获取我的收藏列表
 - (void)getMyCollectListWithCompletion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
 
-/// 获取我的内容列表
-/// @param page 页码（从1开始）
-/// @param pageSize 每页数量
-/// @param completion 完成回调（返回模型数组）
+
 - (void)getMyContentListWithPage:(NSInteger)page
                         pageSize:(NSInteger)pageSize
                       completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
@@ -87,13 +84,13 @@ NS_ASSUME_NONNULL_BEGIN
                          pageSize:(NSInteger)pageSize
                        completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion;
 
-/// 搜索内容
+// 搜索内容
 - (void)searchContentWithKeyword:(NSString *)keyword
                             page:(NSInteger)page
                         pageSize:(NSInteger)pageSize
                       completion:(void (^)(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion;
 
-/// AI 文本分析
+// AI 文本分析
 - (void)analyzeText:(NSString *)text
          completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion;
 

@@ -844,6 +844,7 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
 @property (nonatomic, strong) NSMutableArray<UIImageView *> *imageGalleryViews;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *descLabel;
+@property (nonatomic, strong) UILabel *locationLabel;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSArray<NSDictionary *> *flatComments;
 @property (nonatomic, strong) NSArray<NSDictionary *> *comments;
@@ -1495,6 +1496,14 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
         return;
     }
 
+    NSLog(@"📄 详情接口回填原始数据: title=%@ location_name=%@ locationName=%@ latitude=%@ longitude=%@ raw=%@",
+          content[@"title"],
+          content[@"location_name"],
+          content[@"locationName"],
+          content[@"latitude"],
+          content[@"longitude"],
+          content);
+
     NSString *titleText = [content[@"title"] isKindOfClass:[NSString class]] ? content[@"title"] : self.post.title;
     NSString *descText = [content[@"content"] isKindOfClass:[NSString class]] ? content[@"content"] : self.post.desc;
     if (titleText.length == 0) {
@@ -1502,6 +1511,17 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     }
     self.titleLabel.text = titleText;
     self.descLabel.text = descText.length > 0 ? descText : @"正在加载内容详情";
+    NSString *locationText = [content[@"location_name"] isKindOfClass:[NSString class]] ? content[@"location_name"] : self.post.locationName;
+    if (locationText.length == 0 && [content[@"locationName"] isKindOfClass:[NSString class]]) {
+        locationText = content[@"locationName"];
+    }
+    if (locationText.length == 0 && [content[@"city"] isKindOfClass:[NSString class]]) {
+        locationText = content[@"city"];
+    }
+    locationText = [locationText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    self.locationLabel.text = locationText;
+    self.locationLabel.hidden = (locationText.length == 0);
+    NSLog(@"📄 详情地址渲染: resolvedLocation=%@ hidden=%@", self.locationLabel.text ?: @"", self.locationLabel.hidden ? @"YES" : @"NO");
 
     NSDictionary *authorInfo = [content[@"user"] isKindOfClass:[NSDictionary class]] ? content[@"user"] : nil;
     if (!authorInfo) {
@@ -1815,6 +1835,14 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     self.titleLabel.textColor = [UIColor labelColor];
     self.titleLabel.numberOfLines = 0;
 
+    self.locationLabel = [[UILabel alloc] init];
+    self.locationLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    self.locationLabel.textColor = [UIColor labelColor];
+    self.locationLabel.numberOfLines = 1;
+    self.locationLabel.textAlignment = NSTextAlignmentRight;
+    self.locationLabel.hidden = YES;
+    self.locationLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+
     self.descLabel = [[UILabel alloc] init];
     self.descLabel.font = [UIFont systemFontOfSize:14];
     self.descLabel.textColor = [UIColor secondaryLabelColor];
@@ -1838,6 +1866,7 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     [self.imageContainerView addSubview:self.imageGalleryScrollView];
     [self.imageContainerView addSubview:self.imagePageControl];
     [self.contentCard addSubview:self.titleLabel];
+    [self.contentCard addSubview:self.locationLabel];
     [self.contentCard addSubview:self.descLabel];
     [self.contentCard addSubview:self.commentHeader];
     [self.contentCard addSubview:self.tableView];
@@ -2003,11 +2032,18 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
 
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.imageContainerView.mas_bottom).offset(12.0);
-        make.left.right.equalTo(self.imageContainerView);
+        make.left.equalTo(self.imageContainerView.mas_left);
+        make.right.lessThanOrEqualTo(self.locationLabel.mas_left).offset(-8.0);
+    }];
+
+    [self.locationLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.firstBaseline.equalTo(self.titleLabel.mas_firstBaseline);
+        make.right.equalTo(self.imageContainerView.mas_right);
+        make.width.lessThanOrEqualTo(self.imageContainerView.mas_width).multipliedBy(0.42);
     }];
 
     [self.descLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.titleLabel.mas_bottom).offset(6.0);
+        make.top.equalTo(self.titleLabel.mas_bottom).offset(10.0);
         make.left.right.equalTo(self.imageContainerView);
     }];
 
@@ -2075,6 +2111,13 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     }];
 
     if (self.post) {
+        NSLog(@"📄 进入详情页初始模型: contentId=%@ title=%@ locationName=%@ latitude=%.6f longitude=%.6f post=%@",
+              self.post.contentId,
+              self.post.title ?: @"",
+              self.post.locationName ?: @"",
+              self.post.latitude,
+              self.post.longitude,
+              self.post);
         self.authorUserId = self.post.authorUserId;
         self.authorNickname = self.post.authorNickname;
         self.authorAvatar = self.post.authorAvatar;
@@ -2087,6 +2130,12 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
 
         self.titleLabel.text = titleText;
         self.descLabel.text = descText.length > 0 ? descText : @"正在加载内容详情";
+        NSString *locationText = [self.post.locationName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (locationText.length == 0) {
+            locationText = [self.post.city stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        }
+        self.locationLabel.text = locationText;
+        self.locationLabel.hidden = (locationText.length == 0);
 
         [self updateImageGalleryWithSources:self.post.images placeholder:self.post.image];
 

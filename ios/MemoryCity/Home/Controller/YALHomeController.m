@@ -167,9 +167,9 @@ static CGFloat const kYALItemSpacing = 10.0;
     self.titleSearchContainer = titleContainer;
     self.titleSearchBar = searchBar;
 
-    // 右上角消息按钮（信封）
+    // 右上角互动消息按钮
     if (@available(iOS 13.0, *)) {
-        UIImage *messageIcon = [UIImage systemImageNamed:@"envelope"];
+        UIImage *messageIcon = [UIImage systemImageNamed:@"bell.badge"];
         UIBarButtonItem *messageItem =
         [[UIBarButtonItem alloc] initWithImage:messageIcon style:UIBarButtonItemStylePlain target:self action:@selector(messageTapped)];
         messageItem.tintColor = highlightColor;

@@ -1,15 +1,15 @@
 //
-//  MemoryController.h
+//  YALMemoryCurveController.h
 //  MemoryCity
 //
 //  Created by mac on 2026/3/15.
 //
 
-#import "ViewController.h"
+#import "YALBaseViewController.h"
 
 @class MemoryCurveView;
 
-@interface MemoryController : ViewController
+@interface YALMemoryCurveController : YALBaseViewController
 
 @property (nonatomic, strong) MemoryCurveView *memoryView;
 

@@ -9,6 +9,7 @@
 
 @class YALSearchContentModel;
 @class YALAIAnalyzeResultModel;
+@class YALSearchUserModel;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -89,6 +90,12 @@ NS_ASSUME_NONNULL_BEGIN
                             page:(NSInteger)page
                         pageSize:(NSInteger)pageSize
                       completion:(void (^)(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion;
+
+// 搜索用户
+- (void)searchUsersWithKeyword:(NSString *)keyword
+                          page:(NSInteger)page
+                      pageSize:(NSInteger)pageSize
+                    completion:(void (^)(BOOL success, NSArray<YALSearchUserModel *> * _Nullable userList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion;
 
 // AI 文本分析
 - (void)analyzeText:(NSString *)text

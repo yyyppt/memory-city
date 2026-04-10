@@ -1,17 +1,17 @@
 //
-//  ViewController.m
+//  YALBaseViewController.m
 //  MemoryCity
 //
 //  Created by yyyyy on 2026/3/9.
 //
 
-#import "ViewController.h"
+#import "YALBaseViewController.h"
 
-@interface ViewController ()
+@interface YALBaseViewController ()
 
 @end
 
-@implementation ViewController
+@implementation YALBaseViewController
 
 - (void)viewDidLoad {
   [super viewDidLoad];

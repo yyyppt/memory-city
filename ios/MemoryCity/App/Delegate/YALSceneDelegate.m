@@ -1,29 +1,29 @@
 //
-//  SceneDelegate.m
+//  YALSceneDelegate.m
 //  MemoryCity
 //
 //  Created by yyyyy on 2026/3/9.
 //
 
 //
-//  SceneDelegate.m
+//  YALSceneDelegate.m
 //  MemoryCity
 //
 //  Created by yyyyy on 2026/3/9.
 //
 
-#import "SceneDelegate.h"
+#import "YALSceneDelegate.h"
 #import "YALLoginController.h"
 #import "YALTabBarController.h"
 #import "YALAuthManager.h"
 
 static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
 
-@interface SceneDelegate ()
+@interface YALSceneDelegate ()
 
 @end
 
-@implementation SceneDelegate
+@implementation YALSceneDelegate
 
 
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {

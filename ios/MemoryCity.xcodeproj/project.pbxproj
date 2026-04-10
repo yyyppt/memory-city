@@ -44,22 +44,9 @@
 		F6DCC8160847E1107FE6322D /* Pods_MemoryCityTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_MemoryCityTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		4BDE114B2F5EE6F000360967 /* Exceptions for "MemoryCity" folder in "MemoryCity" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 4BDE111D2F5EE6ED00360967 /* MemoryCity */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4BDE11202F5EE6ED00360967 /* MemoryCity */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				4BDE114B2F5EE6F000360967 /* Exceptions for "MemoryCity" folder in "MemoryCity" target */,
-			);
 			path = MemoryCity;
 			sourceTree = "<group>";
 		};
@@ -424,7 +411,7 @@
 				DEVELOPMENT_TEAM = QW9B85L7DU;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = MemoryCity/Info.plist;
+				INFOPLIST_FILE = MemoryCity/YALInfo.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;
@@ -456,7 +443,7 @@
 				DEVELOPMENT_TEAM = QW9B85L7DU;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = MemoryCity/Info.plist;
+				INFOPLIST_FILE = MemoryCity/YALInfo.plist;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
 				INFOPLIST_KEY_UIMainStoryboardFile = Main;

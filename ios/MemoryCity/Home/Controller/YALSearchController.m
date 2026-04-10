@@ -7,29 +7,63 @@
 
 #import "YALSearchController.h"
 #import "../Model/YALSearchContentModel.h"
+#import "../Model/YALSearchUserModel.h"
 #import "../Model/YALAIAnalyzeResultModel.h"
-#import "../../Network/NetworkManager/YALContentManager.h"
+#import "../Model/YALPostModel.h"
+#import "../../PostDetail/Controller/YALPostDetailController.h"
+#import "../../Network/Manager/YALContentManager.h"
 #import <Masonry/Masonry.h>
+#import <SDWebImage/SDWebImage.h>
+
+typedef NS_ENUM(NSInteger, YALSearchTabType) {
+    YALSearchTabTypeContent = 0,
+    YALSearchTabTypeUser = 1
+};
+
+@interface YALSearchResultCardCell : UITableViewCell
+
+- (void)configureWithTitle:(NSString *)title
+                  username:(NSString *)username
+                  subtitle:(NSString *)subtitle
+                      meta:(NSString *)meta
+                  coverURL:(NSString *)coverURL
+                 avatarURL:(NSString *)avatarURL
+                    isUser:(BOOL)isUser;
+
+@end
+
+@interface YALSearchAIResultCell : UITableViewCell
+
+- (void)configureWithKeyword:(NSString *)keyword
+                      result:(nullable YALAIAnalyzeResultModel *)result
+                     loading:(BOOL)loading
+                   errorText:(nullable NSString *)errorText;
+
+@end
 
 @interface YALSearchController ()
 
-@property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UISearchBar *searchBar;
-@property (nonatomic, strong) NSArray<YALSearchContentModel *> *results;
-
-@property (nonatomic, strong) UIView *aiHeaderView;
-@property (nonatomic, strong) UIView *aiCardView;
-@property (nonatomic, strong) UILabel *aiTitleLabel;
-@property (nonatomic, strong) UILabel *aiDescLabel;
+@property (nonatomic, strong) UISegmentedControl *segmentedControl;
+@property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UILabel *emptyLabel;
+@property (nonatomic, strong) UIView *topGlowView;
 
-@property (nonatomic, strong) NSTimer *streamTimer;
-@property (nonatomic, copy) NSString *fullAIText;
-@property (nonatomic, copy) NSString *displayedAIText;
-@property (nonatomic, assign) NSInteger streamIndex;
-@property (nonatomic, assign) BOOL isResultPage;
-@property (nonatomic, assign) BOOL isSearching;
+@property (nonatomic, strong) NSArray<YALSearchContentModel *> *contentResults;
+@property (nonatomic, strong) NSArray<YALSearchUserModel *> *userResults;
 @property (nonatomic, strong, nullable) YALAIAnalyzeResultModel *aiResult;
+@property (nonatomic, copy) NSString *aiErrorText;
+@property (nonatomic, copy) NSString *contentErrorText;
+@property (nonatomic, copy) NSString *userErrorText;
+
+@property (nonatomic, assign) YALSearchTabType currentTab;
+@property (nonatomic, assign) BOOL isResultPage;
+@property (nonatomic, assign) BOOL isContentLoading;
+@property (nonatomic, assign) BOOL isUserLoading;
+@property (nonatomic, assign) BOOL isAILoading;
+@property (nonatomic, assign) NSUInteger contentRequestToken;
+@property (nonatomic, assign) NSUInteger userRequestToken;
+@property (nonatomic, assign) NSUInteger aiRequestToken;
 
 @end
 
@@ -38,30 +72,28 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.results = @[];
+    self.view.backgroundColor = [UIColor colorWithRed:0.98 green:0.97 blue:0.95 alpha:1.0];
+    self.currentTab = YALSearchTabTypeContent;
+    self.contentResults = @[];
+    self.userResults = @[];
+    self.aiErrorText = @"";
+    self.contentErrorText = @"";
+    self.userErrorText = @"";
     self.isResultPage = (self.keyword.length > 0);
 
     [self setupNavigationBar];
+    [self setupSegmentedControl];
     [self setupTableView];
-    [self setupAIHeaderView];
-    [self setupEmptyState];
+    [self updateEmptyState];
 
     if (self.isResultPage) {
         [self performSearchWithKeyword:self.keyword];
     } else {
-        [self updateAIHeaderWithText:@""];
-        self.emptyLabel.hidden = NO;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
                        dispatch_get_main_queue(), ^{
             [self.searchBar becomeFirstResponder];
         });
     }
-}
-
-- (void)dealloc {
-    [self.streamTimer invalidate];
-    self.streamTimer = nil;
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -74,17 +106,17 @@
     self.tabBarController.tabBar.hidden = NO;
 }
 
+#pragma mark - Setup
 
 - (void)setupNavigationBar {
-    UIColor *highlightColor = [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    UIColor *highlightColor = [self accentColor];
     self.navigationController.navigationBar.tintColor = highlightColor;
 
     CGFloat titleWidth = self.view.bounds.size.width - 120.0;
     UIView *titleContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, titleWidth, 40.0)];
 
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 4, titleWidth, 32.0)];
-
-    self.searchBar.placeholder = @"搜索记忆内容...";
+    self.searchBar.placeholder = @"搜索内容或用户...";
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
     self.searchBar.delegate = self;
     self.searchBar.text = self.keyword ?: @"";
@@ -94,20 +126,9 @@
         searchField.layer.cornerRadius = 16.0;
         searchField.layer.masksToBounds = YES;
         searchField.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.05];
-        searchField.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightLight];
+        searchField.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular];
         searchField.borderStyle = UITextBorderStyleNone;
         searchField.tintColor = highlightColor;
-        searchField.keyboardType = UIKeyboardTypeDefault;
-
-        UIImageSymbolConfiguration *config =
-        [UIImageSymbolConfiguration configurationWithPointSize:14
-                                                        weight:UIImageSymbolWeightRegular];
-        UIImage *searchIcon = [UIImage systemImageNamed:@"magnifyingglass"
-                                      withConfiguration:config];
-        [self.searchBar setImage:searchIcon
-                forSearchBarIcon:UISearchBarIconSearch
-                           state:UIControlStateNormal];
-        searchField.leftView.tintColor = [UIColor colorWithWhite:0.5 alpha:1.0];
     }
 
     [self.searchBar setPositionAdjustment:UIOffsetMake(10, 0) forSearchBarIcon:UISearchBarIconSearch];
@@ -115,9 +136,8 @@
     self.navigationItem.titleView = titleContainer;
 
     if (@available(iOS 13.0, *)) {
-        UIImage *backIcon = [UIImage systemImageNamed:@"chevron.left"];
         UIBarButtonItem *backItem =
-        [[UIBarButtonItem alloc] initWithImage:backIcon
+        [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"]
                                          style:UIBarButtonItemStylePlain
                                         target:self
                                         action:@selector(backTapped)];
@@ -133,101 +153,92 @@
     self.navigationItem.rightBarButtonItem = searchItem;
 }
 
+- (void)setupSegmentedControl {
+    self.topGlowView = [[UIView alloc] init];
+    self.topGlowView.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.10];
+    self.topGlowView.layer.cornerRadius = 120.0;
+    self.topGlowView.userInteractionEnabled = NO;
+    [self.view addSubview:self.topGlowView];
+
+    self.segmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"内容", @"用户"]];
+    self.segmentedControl.selectedSegmentIndex = 0;
+    self.segmentedControl.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.86];
+    self.segmentedControl.selectedSegmentTintColor = [self accentColor];
+    self.segmentedControl.layer.cornerRadius = 18.0;
+    self.segmentedControl.layer.masksToBounds = YES;
+    [self.segmentedControl setTitleTextAttributes:@{
+        NSForegroundColorAttributeName: [UIColor colorWithRed:0.45 green:0.40 blue:0.36 alpha:1.0],
+        NSFontAttributeName: [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold]
+    } forState:UIControlStateNormal];
+    [self.segmentedControl setTitleTextAttributes:@{
+        NSForegroundColorAttributeName: [UIColor whiteColor],
+        NSFontAttributeName: [UIFont systemFontOfSize:15.0 weight:UIFontWeightBold]
+    } forState:UIControlStateSelected];
+    [self.segmentedControl addTarget:self action:@selector(handleSegmentChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.view addSubview:self.segmentedControl];
+
+    [self.topGlowView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(-56.0);
+        make.centerX.equalTo(self.view);
+        make.width.height.mas_equalTo(240.0);
+    }];
+
+    [self.segmentedControl mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(12.0);
+        make.left.equalTo(self.view).offset(16.0);
+        make.right.equalTo(self.view).offset(-16.0);
+        make.height.mas_equalTo(44.0);
+    }];
+}
+
 - (void)setupTableView {
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    if (@available(iOS 13.0, *)) {
-        self.tableView.backgroundColor = [UIColor systemGroupedBackgroundColor];
-    } else {
-        self.tableView.backgroundColor = [UIColor colorWithWhite:0.97 alpha:1.0];
-    }
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.showsVerticalScrollIndicator = NO;
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 140.0;
+    self.tableView.sectionHeaderHeight = 0.01;
+    self.tableView.sectionFooterHeight = 8.0;
+    self.tableView.contentInset = UIEdgeInsetsMake(6.0, 0, 24.0, 0);
+    [self.tableView registerClass:[YALSearchResultCardCell class] forCellReuseIdentifier:@"YALSearchResultCardCell"];
+    [self.tableView registerClass:[YALSearchAIResultCell class] forCellReuseIdentifier:@"YALSearchAIResultCell"];
     [self.view addSubview:self.tableView];
+
     [self.tableView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.edges.equalTo(self.view);
-    }];
-}
-
-- (void)setupAIHeaderView {
-    CGFloat width = CGRectGetWidth(self.view.bounds);
-    self.aiHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 0.01)];
-    self.aiHeaderView.backgroundColor = [UIColor clearColor];
-
-    self.aiCardView = [[UIView alloc] init];
-    self.aiCardView.backgroundColor = [self cardBackgroundColor];
-    self.aiCardView.layer.cornerRadius = 18.0;
-    self.aiCardView.layer.masksToBounds = YES;
-    self.aiCardView.layer.borderWidth = 1.0;
-    self.aiCardView.layer.borderColor = [self borderColor].CGColor;
-    [self.aiHeaderView addSubview:self.aiCardView];
-
-    UIView *iconBadge = [[UIView alloc] init];
-    iconBadge.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.12];
-    iconBadge.layer.cornerRadius = 17.0;
-    iconBadge.layer.masksToBounds = YES;
-    [self.aiCardView addSubview:iconBadge];
-
-    UIImageView *iconView = [[UIImageView alloc] init];
-    if (@available(iOS 13.0, *)) {
-        iconView.image = [UIImage systemImageNamed:@"sparkles"];
-    }
-    iconView.tintColor = [self accentColor];
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    [iconBadge addSubview:iconView];
-
-    self.aiTitleLabel = [[UILabel alloc] init];
-    self.aiTitleLabel.text = @"AI说明";
-    self.aiTitleLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
-    self.aiTitleLabel.textColor = [UIColor labelColor];
-    [self.aiCardView addSubview:self.aiTitleLabel];
-
-    self.aiDescLabel = [[UILabel alloc] init];
-    self.aiDescLabel.numberOfLines = 0;
-    self.aiDescLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightRegular];
-    self.aiDescLabel.textColor = [UIColor secondaryLabelColor];
-    [self.aiCardView addSubview:self.aiDescLabel];
-
-    [iconBadge mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.aiCardView.mas_left).offset(16.0);
-        make.top.equalTo(self.aiCardView.mas_top).offset(16.0);
-        make.width.height.mas_equalTo(34.0);
-    }];
-    [iconView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.center.equalTo(iconBadge);
-        make.width.height.mas_equalTo(20.0);
-    }];
-    [self.aiTitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(iconBadge.mas_right).offset(10.0);
-        make.centerY.equalTo(iconBadge);
-        make.right.equalTo(self.aiCardView.mas_right).offset(-16.0);
-        make.height.mas_equalTo(20.0);
-    }];
-    [self.aiDescLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(iconBadge.mas_left);
-        make.top.equalTo(iconBadge.mas_bottom).offset(10.0);
-        make.right.equalTo(self.aiCardView.mas_right).offset(-16.0);
+        make.top.equalTo(self.segmentedControl.mas_bottom).offset(8.0);
+        make.left.right.bottom.equalTo(self.view);
     }];
 
-    self.tableView.tableHeaderView = self.aiHeaderView;
-}
-
-- (void)setupEmptyState {
     self.emptyLabel = [[UILabel alloc] init];
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptyLabel.numberOfLines = 2;
+    self.emptyLabel.numberOfLines = 0;
     self.emptyLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightRegular];
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
-    self.emptyLabel.text = @"输入关键词后点击右上角搜索\n再进入结果页查看 AI 说明";
     self.tableView.backgroundView = self.emptyLabel;
 }
 
-#pragma mark - Search Flow
+#pragma mark - Actions
+
+- (void)backTapped {
+    [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)handleSegmentChanged:(UISegmentedControl *)sender {
+    self.currentTab = (sender.selectedSegmentIndex == 0) ? YALSearchTabTypeContent : YALSearchTabTypeUser;
+    [self.tableView reloadData];
+    [self updateEmptyState];
+
+    if (self.keyword.length > 0) {
+        [self requestCurrentTabForKeyword:self.keyword];
+    }
+}
 
 - (void)triggerSearch {
     NSString *keyword = [self.searchBar.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     [self.searchBar resignFirstResponder];
-
     if (keyword.length == 0) {
         return;
     }
@@ -247,168 +258,220 @@
     self.isResultPage = YES;
     self.keyword = keyword;
     self.searchBar.text = keyword;
-    self.isSearching = YES;
+    self.contentResults = @[];
+    self.userResults = @[];
     self.aiResult = nil;
-
-    [self.streamTimer invalidate];
-    self.streamTimer = nil;
-
-    self.results = @[];
-    self.emptyLabel.text = @"搜索中...";
-    self.emptyLabel.hidden = NO;
+    self.aiErrorText = @"";
+    self.contentErrorText = @"";
+    self.userErrorText = @"";
+    self.isContentLoading = NO;
+    self.isUserLoading = NO;
+    self.isAILoading = NO;
+    [self updateEmptyState];
     [self.tableView reloadData];
+    [self requestCurrentTabForKeyword:keyword];
+}
 
-    self.fullAIText = [NSString stringWithFormat:@"正在分析「%@」相关内容，请稍候...", keyword];
-    self.displayedAIText = @"";
-    self.streamIndex = 0;
-    [self updateAIHeaderWithText:self.displayedAIText];
+- (void)requestCurrentTabForKeyword:(NSString *)keyword {
+    if (self.currentTab == YALSearchTabTypeContent) {
+        [self requestContentForKeyword:keyword];
+        [self requestAIForKeyword:keyword];
+    } else {
+        [self requestUsersForKeyword:keyword];
+    }
+}
+
+- (void)requestContentForKeyword:(NSString *)keyword {
+    self.isContentLoading = YES;
+    self.contentResults = @[];
+    self.contentErrorText = @"";
+    self.contentRequestToken += 1;
+    NSUInteger requestToken = self.contentRequestToken;
+    [self updateEmptyState];
+    [self.tableView reloadData];
 
     __weak typeof(self) weakSelf = self;
     [[YALContentManager sharedManager] searchContentWithKeyword:keyword
                                                            page:1
-                                                       pageSize:10
+                                                       pageSize:20
                                                      completion:^(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || ![self.keyword isEqualToString:keyword]) {
+        if (!self || requestToken != self.contentRequestToken || ![self.keyword isEqualToString:keyword]) {
             return;
         }
 
-        self.isSearching = NO;
+        self.isContentLoading = NO;
         if (success) {
-            self.results = contentList ?: @[];
-            self.emptyLabel.text = self.results.count > 0 ? @"" : @"没有找到相关内容";
-            self.emptyLabel.hidden = (self.results.count > 0);
+            self.contentResults = contentList ?: @[];
         } else {
-            self.results = @[];
-            self.emptyLabel.text = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
-            self.emptyLabel.hidden = NO;
+            self.contentResults = @[];
+            self.contentErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
         }
         (void)total;
+        [self updateEmptyState];
         [self.tableView reloadData];
     }];
+}
 
+- (void)requestUsersForKeyword:(NSString *)keyword {
+    self.isUserLoading = YES;
+    self.userResults = @[];
+    self.userErrorText = @"";
+    self.userRequestToken += 1;
+    NSUInteger requestToken = self.userRequestToken;
+    [self updateEmptyState];
+    [self.tableView reloadData];
+
+    __weak typeof(self) weakSelf = self;
+    [[YALContentManager sharedManager] searchUsersWithKeyword:keyword
+                                                         page:1
+                                                     pageSize:20
+                                                   completion:^(BOOL success, NSArray<YALSearchUserModel *> * _Nullable userList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || requestToken != self.userRequestToken || ![self.keyword isEqualToString:keyword]) {
+            return;
+        }
+
+        self.isUserLoading = NO;
+        if (success) {
+            self.userResults = userList ?: @[];
+        } else {
+            self.userResults = @[];
+            self.userErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
+        }
+        (void)total;
+        [self updateEmptyState];
+        [self.tableView reloadData];
+    }];
+}
+
+- (void)requestAIForKeyword:(NSString *)keyword {
+    self.isAILoading = YES;
+    self.aiResult = nil;
+    self.aiErrorText = @"";
+    self.aiRequestToken += 1;
+    NSUInteger requestToken = self.aiRequestToken;
+    [self.tableView reloadData];
+
+    __weak typeof(self) weakSelf = self;
     [[YALContentManager sharedManager] analyzeText:keyword
                                         completion:^(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || ![self.keyword isEqualToString:keyword]) {
+        if (!self || requestToken != self.aiRequestToken || ![self.keyword isEqualToString:keyword]) {
             return;
         }
 
-        if (success && result) {
+        self.isAILoading = NO;
+        if (success) {
             self.aiResult = result;
-            self.fullAIText = [self aiDescriptionTextFromResult:result keyword:keyword];
         } else {
-            self.fullAIText = [NSString stringWithFormat:@"已完成「%@」的搜索，但 AI 分析暂时不可用。%@", keyword, (error.localizedDescription.length > 0 ? error.localizedDescription : (message ?: @""))];
+            self.aiResult = nil;
+            self.aiErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"AI 分析暂时不可用");
         }
-        self.displayedAIText = @"";
-        self.streamIndex = 0;
-        [self.streamTimer invalidate];
-        self.streamTimer = [NSTimer scheduledTimerWithTimeInterval:0.03
-                                                            target:self
-                                                          selector:@selector(handleStreamTimer)
-                                                          userInfo:nil
-                                                           repeats:YES];
+        [self.tableView reloadData];
     }];
 }
 
-- (void)handleStreamTimer {
-    if (self.streamIndex >= self.fullAIText.length) {
-        [self.streamTimer invalidate];
-        self.streamTimer = nil;
-        return;
+- (void)updateEmptyState {
+    NSString *text = @"";
+    if (!self.isResultPage || self.keyword.length == 0) {
+        text = (self.currentTab == YALSearchTabTypeContent) ? @"输入关键词后查看内容和 AI 搜索结果" : @"输入关键词后查看相关账号";
+    } else if (self.currentTab == YALSearchTabTypeContent) {
+        if (self.isContentLoading) {
+            text = @"正在搜索内容...";
+        } else if (self.contentErrorText.length > 0) {
+            text = self.contentErrorText;
+        } else if (self.contentResults.count == 0) {
+            text = @"没有找到相关内容";
+        }
+    } else {
+        if (self.isUserLoading) {
+            text = @"正在搜索用户...";
+        } else if (self.userErrorText.length > 0) {
+            text = self.userErrorText;
+        } else if (self.userResults.count == 0) {
+            text = @"没有找到相关用户";
+        }
     }
 
-    self.streamIndex += 1;
-    self.displayedAIText = [self.fullAIText substringToIndex:self.streamIndex];
-    [self updateAIHeaderWithText:self.displayedAIText];
+    self.emptyLabel.text = text;
+    self.emptyLabel.hidden = (text.length == 0);
 }
 
+#pragma mark - UITableViewDataSource
 
-- (void)updateAIHeaderWithText:(NSString *)text {
-    self.aiDescLabel.text = text;
-
-    CGFloat width = CGRectGetWidth(self.view.bounds);
-    CGFloat cardWidth = width - 32.0;
-
-    if (text.length == 0) {
-        self.aiCardView.frame = CGRectMake(16.0, 0.0, cardWidth, 0.01);
-        self.aiHeaderView.frame = CGRectMake(0, 0, width, 0.01);
-        self.tableView.tableHeaderView = self.aiHeaderView;
-        return;
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    (void)tableView;
+    if (self.currentTab == YALSearchTabTypeContent) {
+        return self.isResultPage ? 2 : 1;
     }
-
-    // tableHeaderView 需要手动计算高度后更新 frame 触发 UITableView 重排
-    [self.aiCardView layoutIfNeeded];
-    CGSize textSize = [self.aiDescLabel sizeThatFits:CGSizeMake(cardWidth - 32.0, CGFLOAT_MAX)];
-    CGFloat descHeight = MAX(20.0, ceil(textSize.height));
-    // iconBadge 高度 34 + top 16 + gap 10 = 60，再加 descHeight + bottom 16
-    CGFloat cardHeight = 60.0 + descHeight + 16.0;
-    self.aiCardView.frame = CGRectMake(16.0, 12.0, cardWidth, cardHeight);
-    self.aiHeaderView.frame = CGRectMake(0, 0, width, CGRectGetMaxY(self.aiCardView.frame) + 8.0);
-    self.tableView.tableHeaderView = self.aiHeaderView;
+    return 1;
 }
-
-
-- (void)backTapped {
-    [self.navigationController popViewControllerAnimated:YES];
-}
-
-
-- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
-    [searchBar resignFirstResponder];
-    [self triggerSearch];
-}
-
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.results.count;
+    (void)tableView;
+    if (self.currentTab == YALSearchTabTypeContent) {
+        if (!self.isResultPage) {
+            return 0;
+        }
+        return section == 0 ? 1 : self.contentResults.count;
+    }
+    return self.userResults.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *cellId = @"SearchCell";
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellId];
-    if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellId];
-        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-        cell.backgroundColor = [self cardBackgroundColor];
-        cell.textLabel.font = [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold];
-        cell.detailTextLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightRegular];
-        cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
-        cell.detailTextLabel.numberOfLines = 2;
+    (void)tableView;
+    if (self.currentTab == YALSearchTabTypeContent && indexPath.section == 0) {
+        YALSearchAIResultCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"YALSearchAIResultCell" forIndexPath:indexPath];
+        [cell configureWithKeyword:self.keyword ?: @""
+                            result:self.aiResult
+                           loading:self.isAILoading
+                         errorText:self.aiErrorText];
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        return cell;
     }
 
-    YALSearchContentModel *item = self.results[indexPath.row];
-    cell.textLabel.text = item.title.length > 0 ? item.title : @"未命名内容";
+    YALSearchResultCardCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"YALSearchResultCardCell" forIndexPath:indexPath];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
-    NSMutableArray<NSString *> *parts = [NSMutableArray array];
-    if (item.content.length > 0) {
-        [parts addObject:item.content];
+    if (self.currentTab == YALSearchTabTypeContent) {
+        YALSearchContentModel *item = self.contentResults[indexPath.row];
+        NSString *title = item.title.length > 0 ? item.title : (item.content.length > 0 ? item.content : @"未命名内容");
+        NSString *username = [self displayUserLineWithNickname:item.authorNickname username:item.authorUsername];
+        NSString *subtitle = item.content.length > 0 ? item.content : (item.authorBio.length > 0 ? item.authorBio : @"");
+        [cell configureWithTitle:title
+                        username:username
+                        subtitle:subtitle
+                            meta:[self contentMetaText:item]
+                        coverURL:item.images.firstObject ?: @""
+                       avatarURL:item.authorAvatar
+                          isUser:NO];
+    } else {
+        YALSearchUserModel *item = self.userResults[indexPath.row];
+        NSString *title = item.title.length > 0 ? item.title : (item.nickname.length > 0 ? item.nickname : @"未命名用户");
+        NSString *username = [self displayUserLineWithNickname:item.nickname username:item.username];
+        NSString *subtitle = item.bio.length > 0 ? item.bio : @"这个账号暂时还没有更多介绍";
+        NSString *meta = item.mood.length > 0 ? [NSString stringWithFormat:@"情绪标签：%@", item.mood] : @"账号信息";
+        [cell configureWithTitle:title
+                        username:username
+                        subtitle:subtitle
+                            meta:meta
+                        coverURL:item.coverImage
+                       avatarURL:item.avatar
+                          isUser:YES];
     }
-    NSMutableArray<NSString *> *meta = [NSMutableArray array];
-    if (item.city.length > 0) {
-        [meta addObject:item.city];
-    }
-    if (item.year.length > 0) {
-        [meta addObject:item.year];
-    }
-    if (item.mood.length > 0) {
-        [meta addObject:item.mood];
-    }
-    if (meta.count > 0) {
-        [parts addObject:[meta componentsJoinedByString:@" · "]];
-    }
-    cell.detailTextLabel.text = [parts componentsJoinedByString:@"\n"];
+
     return cell;
 }
 
-
-- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    (void)tableView;
-    (void)indexPath;
-    return 82.0;
-}
+#pragma mark - UITableViewDelegate
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    (void)tableView;
+    return section == 0 ? 0.01 : 6.0;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
     (void)tableView;
     (void)section;
     return 8.0;
@@ -422,40 +485,442 @@
     return view;
 }
 
+- (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
+    (void)tableView;
+    (void)section;
+    UIView *view = [[UIView alloc] init];
+    view.backgroundColor = [UIColor clearColor];
+    return view;
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.currentTab != YALSearchTabTypeContent || indexPath.section != 1) {
+        return;
+    }
+
+    YALSearchContentModel *item = self.contentResults[indexPath.row];
+    if (item.contentId == nil) {
+        return;
+    }
+
+    YALPostModel *post = [[YALPostModel alloc] init];
+    post.contentId = item.contentId;
+    post.title = item.title ?: @"";
+    post.desc = item.content ?: @"";
+    post.content = item.content ?: @"";
+    post.city = item.city ?: @"";
+    post.year = item.year ?: @"";
+    post.mood = item.mood ?: @"";
+    post.images = item.images ?: @[];
+    post.imageURLString = item.images.firstObject ?: @"";
+    post.likeCount = item.likeCount;
+    post.commentCount = item.commentCount;
+    post.createTime = item.createdAt ?: @"";
+    post.authorUserId = item.userId;
+    post.authorNickname = item.authorNickname;
+    post.authorAvatar = item.authorAvatar;
+    post.authorBio = item.authorBio;
+
+    YALPostDetailController *detailVC = [[YALPostDetailController alloc] init];
+    detailVC.post = post;
+    detailVC.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:detailVC animated:YES];
 }
 
-- (NSString *)aiDescriptionTextFromResult:(YALAIAnalyzeResultModel *)result keyword:(NSString *)keyword {
-    NSMutableArray<NSString *> *segments = [NSMutableArray array];
-    if (result.summary.length > 0) {
-        [segments addObject:[NSString stringWithFormat:@"摘要：%@", result.summary]];
-    } else {
-        [segments addObject:[NSString stringWithFormat:@"已完成「%@」的语义分析。", keyword]];
-    }
-    if (result.tags.count > 0) {
-        [segments addObject:[NSString stringWithFormat:@"标签：%@", [result.tags componentsJoinedByString:@"、"]]];
-    }
-    if (result.mood.length > 0) {
-        [segments addObject:[NSString stringWithFormat:@"情绪：%@", result.mood]];
-    }
-    return [segments componentsJoinedByString:@"\n"];
+#pragma mark - UISearchBarDelegate
+
+- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
+    [searchBar resignFirstResponder];
+    [self triggerSearch];
 }
 
+#pragma mark - Helpers
+
+- (NSString *)contentMetaText:(YALSearchContentModel *)item {
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    if (item.city.length > 0) {
+        [parts addObject:item.city];
+    }
+    if (item.year.length > 0) {
+        [parts addObject:item.year];
+    }
+    if (item.mood.length > 0) {
+        [parts addObject:[NSString stringWithFormat:@"情绪 %@", item.mood]];
+    }
+    if (item.likeCount > 0) {
+        [parts addObject:[NSString stringWithFormat:@"%ld赞", (long)item.likeCount]];
+    }
+    if (item.commentCount > 0) {
+        [parts addObject:[NSString stringWithFormat:@"%ld评", (long)item.commentCount]];
+    }
+    return [parts componentsJoinedByString:@" · "];
+}
+
+- (NSString *)displayUserLineWithNickname:(NSString *)nickname username:(NSString *)username {
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+    if (nickname.length > 0) {
+        [parts addObject:nickname];
+    }
+    if (username.length > 0) {
+        [parts addObject:[NSString stringWithFormat:@"@%@", username]];
+    }
+    return [parts componentsJoinedByString:@"  "];
+}
 
 - (UIColor *)accentColor {
-    return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    return [UIColor colorWithRed:0.98 green:0.49 blue:0.18 alpha:1.0];
 }
 
-- (UIColor *)cardBackgroundColor {
-    if (@available(iOS 13.0, *)) {
-        return [UIColor secondarySystemBackgroundColor];
+@end
+
+#pragma mark - Result Card Cell
+
+@interface YALSearchResultCardCell ()
+
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UIImageView *coverImageView;
+@property (nonatomic, strong) UIView *coverShadeView;
+@property (nonatomic, strong) UIImageView *avatarView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *usernameLabel;
+@property (nonatomic, strong) UILabel *subtitleLabel;
+@property (nonatomic, strong) UILabel *metaLabel;
+@property (nonatomic, strong) UILabel *typeBadgeLabel;
+@property (nonatomic, strong) UIView *metaDotView;
+
+@end
+
+@implementation YALSearchResultCardCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.backgroundColor = [UIColor clearColor];
+        self.contentView.backgroundColor = [UIColor clearColor];
+
+        self.cardView = [[UIView alloc] init];
+        self.cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.92];
+        self.cardView.layer.cornerRadius = 24.0;
+        self.cardView.layer.masksToBounds = NO;
+        self.cardView.layer.borderWidth = 1.0;
+        self.cardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.78].CGColor;
+        self.cardView.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.26 blue:0.18 alpha:1.0].CGColor;
+        self.cardView.layer.shadowOpacity = 0.08;
+        self.cardView.layer.shadowRadius = 20.0;
+        self.cardView.layer.shadowOffset = CGSizeMake(0, 10.0);
+        [self.contentView addSubview:self.cardView];
+
+        self.coverImageView = [[UIImageView alloc] init];
+        self.coverImageView.backgroundColor = [UIColor colorWithRed:0.95 green:0.92 blue:0.89 alpha:1.0];
+        self.coverImageView.layer.cornerRadius = 20.0;
+        self.coverImageView.layer.masksToBounds = YES;
+        self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
+        [self.cardView addSubview:self.coverImageView];
+
+        self.coverShadeView = [[UIView alloc] init];
+        self.coverShadeView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.08];
+        self.coverShadeView.userInteractionEnabled = NO;
+        [self.coverImageView addSubview:self.coverShadeView];
+
+        self.avatarView = [[UIImageView alloc] init];
+        self.avatarView.backgroundColor = [UIColor whiteColor];
+        self.avatarView.layer.cornerRadius = 18.0;
+        self.avatarView.layer.masksToBounds = YES;
+        self.avatarView.layer.borderWidth = 2.0;
+        self.avatarView.layer.borderColor = [UIColor whiteColor].CGColor;
+        self.avatarView.contentMode = UIViewContentModeScaleAspectFill;
+        [self.cardView addSubview:self.avatarView];
+
+        self.typeBadgeLabel = [[UILabel alloc] init];
+        self.typeBadgeLabel.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightSemibold];
+        self.typeBadgeLabel.textAlignment = NSTextAlignmentCenter;
+        self.typeBadgeLabel.layer.cornerRadius = 12.0;
+        self.typeBadgeLabel.layer.masksToBounds = YES;
+        [self.cardView addSubview:self.typeBadgeLabel];
+
+        self.titleLabel = [[UILabel alloc] init];
+        self.titleLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightBold];
+        self.titleLabel.numberOfLines = 2;
+        self.titleLabel.textColor = [UIColor labelColor];
+        [self.cardView addSubview:self.titleLabel];
+
+        self.usernameLabel = [[UILabel alloc] init];
+        self.usernameLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
+        self.usernameLabel.textColor = [UIColor colorWithRed:0.46 green:0.40 blue:0.36 alpha:1.0];
+        self.usernameLabel.numberOfLines = 1;
+        [self.cardView addSubview:self.usernameLabel];
+
+        self.subtitleLabel = [[UILabel alloc] init];
+        self.subtitleLabel.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular];
+        self.subtitleLabel.textColor = [UIColor colorWithRed:0.34 green:0.31 blue:0.28 alpha:1.0];
+        self.subtitleLabel.numberOfLines = 2;
+        [self.cardView addSubview:self.subtitleLabel];
+
+        self.metaLabel = [[UILabel alloc] init];
+        self.metaLabel.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightSemibold];
+        self.metaLabel.textColor = [UIColor colorWithRed:0.86 green:0.45 blue:0.19 alpha:1.0];
+        self.metaLabel.numberOfLines = 2;
+        [self.cardView addSubview:self.metaLabel];
+
+        self.metaDotView = [[UIView alloc] init];
+        self.metaDotView.backgroundColor = [UIColor colorWithRed:0.97 green:0.56 blue:0.26 alpha:1.0];
+        self.metaDotView.layer.cornerRadius = 3.0;
+        self.metaDotView.layer.masksToBounds = YES;
+        [self.cardView addSubview:self.metaDotView];
+
+        [self.cardView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self.contentView).insets(UIEdgeInsetsMake(6.0, 16.0, 8.0, 16.0));
+        }];
+        [self.coverImageView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.top.equalTo(self.cardView).offset(14.0);
+            make.width.mas_equalTo(96.0);
+            make.height.mas_equalTo(108.0);
+            make.bottom.lessThanOrEqualTo(self.cardView).offset(-16.0);
+        }];
+        [self.coverShadeView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self.coverImageView);
+        }];
+        [self.avatarView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.width.height.mas_equalTo(36.0);
+            make.left.equalTo(self.coverImageView).offset(8.0);
+            make.bottom.equalTo(self.coverImageView).offset(-8.0);
+        }];
+        [self.typeBadgeLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.cardView).offset(14.0);
+            make.right.equalTo(self.cardView).offset(-14.0);
+            make.height.mas_equalTo(24.0);
+            make.width.mas_greaterThanOrEqualTo(50.0);
+        }];
+        [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.cardView).offset(16.0);
+            make.left.equalTo(self.coverImageView.mas_right).offset(14.0);
+            make.right.lessThanOrEqualTo(self.typeBadgeLabel.mas_left).offset(-8.0);
+        }];
+        [self.usernameLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.titleLabel.mas_bottom).offset(6.0);
+            make.left.equalTo(self.titleLabel);
+            make.right.equalTo(self.cardView).offset(-14.0);
+        }];
+        [self.subtitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.usernameLabel.mas_bottom).offset(8.0);
+            make.left.equalTo(self.titleLabel);
+            make.right.equalTo(self.cardView).offset(-14.0);
+        }];
+        [self.metaDotView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.titleLabel);
+            make.top.equalTo(self.subtitleLabel.mas_bottom).offset(12.0);
+            make.width.height.mas_equalTo(6.0);
+        }];
+        [self.metaLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.metaDotView.mas_right).offset(8.0);
+            make.centerY.equalTo(self.metaDotView);
+            make.right.equalTo(self.cardView).offset(-14.0);
+            make.bottom.lessThanOrEqualTo(self.cardView).offset(-16.0);
+        }];
     }
-    return [UIColor whiteColor];
+    return self;
 }
 
-- (UIColor *)borderColor {
-    return [UIColor colorWithWhite:0.0 alpha:0.05];
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self.coverImageView sd_cancelCurrentImageLoad];
+    [self.avatarView sd_cancelCurrentImageLoad];
+}
+
+- (void)configureWithTitle:(NSString *)title
+                  username:(NSString *)username
+                  subtitle:(NSString *)subtitle
+                      meta:(NSString *)meta
+                  coverURL:(NSString *)coverURL
+                 avatarURL:(NSString *)avatarURL
+                    isUser:(BOOL)isUser {
+    self.titleLabel.text = title.length > 0 ? title : @"未命名";
+    self.usernameLabel.text = username.length > 0 ? username : @"@memory-city";
+    self.subtitleLabel.text = subtitle.length > 0 ? subtitle : @"";
+    self.metaLabel.text = meta.length > 0 ? meta : @"";
+
+    self.typeBadgeLabel.text = isUser ? @"用户" : @"内容";
+    self.typeBadgeLabel.textColor = isUser ? [UIColor colorWithRed:0.18 green:0.48 blue:0.92 alpha:1.0] : [UIColor colorWithRed:0.93 green:0.44 blue:0.16 alpha:1.0];
+    self.typeBadgeLabel.backgroundColor = isUser ? [[UIColor colorWithRed:0.18 green:0.48 blue:0.92 alpha:1.0] colorWithAlphaComponent:0.10] : [[UIColor colorWithRed:0.93 green:0.44 blue:0.16 alpha:1.0] colorWithAlphaComponent:0.10];
+
+    UIImage *coverPlaceholder = [self placeholderImageNamed:isUser ? @"person.crop.square" : @"photo.on.rectangle"];
+    UIImage *avatarPlaceholder = [self placeholderImageNamed:@"person.crop.circle.fill"];
+    [self loadImageOn:self.coverImageView withURLString:coverURL placeholder:coverPlaceholder];
+    [self loadImageOn:self.avatarView withURLString:avatarURL placeholder:avatarPlaceholder];
+}
+
+- (void)loadImageOn:(UIImageView *)imageView withURLString:(NSString *)urlString placeholder:(UIImage *)placeholder {
+    imageView.image = placeholder;
+    NSURL *url = [NSURL URLWithString:urlString ?: @""];
+    if (url && url.scheme.length > 0) {
+        [imageView sd_setImageWithURL:url
+                     placeholderImage:placeholder
+                              options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];
+    }
+}
+
+- (UIImage *)placeholderImageNamed:(NSString *)name {
+    if (@available(iOS 13.0, *)) {
+        UIImage *image = [UIImage systemImageNamed:name];
+        return [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    }
+    return [[UIImage alloc] init];
+}
+
+@end
+
+#pragma mark - AI Cell
+
+@interface YALSearchAIResultCell ()
+
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UILabel *badgeLabel;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *summaryLabel;
+@property (nonatomic, strong) UILabel *moodLabel;
+@property (nonatomic, strong) UILabel *tagsLabel;
+@property (nonatomic, strong) UIView *topAccentBar;
+@property (nonatomic, strong) UIView *glowBubble;
+
+@end
+
+@implementation YALSearchAIResultCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.backgroundColor = [UIColor clearColor];
+        self.contentView.backgroundColor = [UIColor clearColor];
+
+        self.cardView = [[UIView alloc] init];
+        self.cardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.98 blue:0.95 alpha:1.0];
+        self.cardView.layer.cornerRadius = 28.0;
+        self.cardView.layer.masksToBounds = NO;
+        self.cardView.layer.borderWidth = 1.0;
+        self.cardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.78].CGColor;
+        self.cardView.layer.shadowColor = [UIColor colorWithRed:0.60 green:0.35 blue:0.16 alpha:1.0].CGColor;
+        self.cardView.layer.shadowOpacity = 0.10;
+        self.cardView.layer.shadowRadius = 24.0;
+        self.cardView.layer.shadowOffset = CGSizeMake(0, 12.0);
+        [self.contentView addSubview:self.cardView];
+
+        self.glowBubble = [[UIView alloc] init];
+        self.glowBubble.backgroundColor = [[UIColor colorWithRed:1.0 green:0.70 blue:0.42 alpha:1.0] colorWithAlphaComponent:0.18];
+        self.glowBubble.layer.cornerRadius = 56.0;
+        [self.cardView addSubview:self.glowBubble];
+
+        self.topAccentBar = [[UIView alloc] init];
+        self.topAccentBar.backgroundColor = [UIColor colorWithRed:0.97 green:0.56 blue:0.24 alpha:1.0];
+        self.topAccentBar.layer.cornerRadius = 2.0;
+        [self.cardView addSubview:self.topAccentBar];
+
+        self.badgeLabel = [[UILabel alloc] init];
+        self.badgeLabel.text = @"AI 搜索";
+        self.badgeLabel.font = [UIFont systemFontOfSize:11.0 weight:UIFontWeightSemibold];
+        self.badgeLabel.textColor = [UIColor colorWithRed:0.92 green:0.41 blue:0.11 alpha:1.0];
+        self.badgeLabel.backgroundColor = [[UIColor colorWithRed:0.92 green:0.41 blue:0.11 alpha:1.0] colorWithAlphaComponent:0.10];
+        self.badgeLabel.textAlignment = NSTextAlignmentCenter;
+        self.badgeLabel.layer.cornerRadius = 10.0;
+        self.badgeLabel.layer.masksToBounds = YES;
+        [self.cardView addSubview:self.badgeLabel];
+
+        self.titleLabel = [[UILabel alloc] init];
+        self.titleLabel.font = [UIFont systemFontOfSize:20.0 weight:UIFontWeightBold];
+        self.titleLabel.numberOfLines = 2;
+        self.titleLabel.textColor = [UIColor labelColor];
+        [self.cardView addSubview:self.titleLabel];
+
+        self.summaryLabel = [[UILabel alloc] init];
+        self.summaryLabel.font = [UIFont systemFontOfSize:14.5 weight:UIFontWeightRegular];
+        self.summaryLabel.textColor = [UIColor colorWithRed:0.32 green:0.28 blue:0.25 alpha:1.0];
+        self.summaryLabel.numberOfLines = 0;
+        [self.cardView addSubview:self.summaryLabel];
+
+        self.moodLabel = [[UILabel alloc] init];
+        self.moodLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
+        self.moodLabel.textColor = [UIColor colorWithRed:0.77 green:0.32 blue:0.21 alpha:1.0];
+        self.moodLabel.backgroundColor = [[UIColor colorWithRed:0.77 green:0.32 blue:0.21 alpha:1.0] colorWithAlphaComponent:0.10];
+        self.moodLabel.layer.cornerRadius = 12.0;
+        self.moodLabel.layer.masksToBounds = YES;
+        self.moodLabel.textAlignment = NSTextAlignmentCenter;
+        [self.cardView addSubview:self.moodLabel];
+
+        self.tagsLabel = [[UILabel alloc] init];
+        self.tagsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
+        self.tagsLabel.textColor = [UIColor secondaryLabelColor];
+        self.tagsLabel.numberOfLines = 0;
+        [self.cardView addSubview:self.tagsLabel];
+
+        [self.cardView mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.edges.equalTo(self.contentView).insets(UIEdgeInsetsMake(10.0, 16.0, 6.0, 16.0));
+        }];
+        [self.glowBubble mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.cardView).offset(-18.0);
+            make.right.equalTo(self.cardView).offset(24.0);
+            make.width.height.mas_equalTo(112.0);
+        }];
+        [self.topAccentBar mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.cardView).offset(18.0);
+            make.left.equalTo(self.cardView).offset(18.0);
+            make.width.mas_equalTo(42.0);
+            make.height.mas_equalTo(4.0);
+        }];
+        [self.badgeLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.left.equalTo(self.cardView).offset(18.0);
+            make.top.equalTo(self.topAccentBar.mas_bottom).offset(14.0);
+            make.height.mas_equalTo(20.0);
+            make.width.mas_equalTo(58.0);
+        }];
+        [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.badgeLabel.mas_bottom).offset(12.0);
+            make.left.equalTo(self.badgeLabel);
+            make.right.equalTo(self.cardView).offset(-18.0);
+        }];
+        [self.summaryLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.titleLabel.mas_bottom).offset(10.0);
+            make.left.equalTo(self.badgeLabel);
+            make.right.equalTo(self.cardView).offset(-18.0);
+        }];
+        [self.moodLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.summaryLabel.mas_bottom).offset(12.0);
+            make.left.equalTo(self.badgeLabel);
+            make.height.mas_equalTo(24.0);
+            make.width.mas_greaterThanOrEqualTo(92.0);
+        }];
+        [self.tagsLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+            make.top.equalTo(self.moodLabel.mas_bottom).offset(12.0);
+            make.left.equalTo(self.badgeLabel);
+            make.right.equalTo(self.cardView).offset(-18.0);
+            make.bottom.equalTo(self.cardView).offset(-18.0);
+        }];
+    }
+    return self;
+}
+
+- (void)configureWithKeyword:(NSString *)keyword
+                      result:(YALAIAnalyzeResultModel *)result
+                     loading:(BOOL)loading
+                   errorText:(NSString *)errorText {
+    self.titleLabel.text = [NSString stringWithFormat:@"关于“%@”的 AI 搜索结论", keyword.length > 0 ? keyword : @"当前搜索"];
+
+    if (loading) {
+        self.summaryLabel.text = @"AI 正在整理与你搜索最相关的内容、语义和情绪倾向，请稍候片刻。";
+        self.moodLabel.text = @"情绪分析中";
+        self.tagsLabel.text = @"关键词提炼中...";
+        return;
+    }
+
+    if (result != nil) {
+        self.summaryLabel.text = result.summary.length > 0 ? result.summary : @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
+        self.moodLabel.text = result.mood.length > 0 ? [NSString stringWithFormat:@"情绪：%@", result.mood] : @"情绪：平稳";
+        self.tagsLabel.text = result.tags.count > 0 ? [NSString stringWithFormat:@"关键词：%@", [result.tags componentsJoinedByString:@" · "]] : @"关键词：暂无";
+        return;
+    }
+
+    self.summaryLabel.text = errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。";
+    self.moodLabel.text = @"情绪：暂不可用";
+    self.tagsLabel.text = @"关键词：暂不可用";
 }
 
 @end

@@ -7,8 +7,8 @@
 - `MemoryCity/Mine/Model/YALMyContentModel.m` - 内容模型实现文件
 
 ### 2. 网络层 (Network)
-- `MemoryCity/Network/NetworkManager/YALContentManager.h` - 已添加获取我的内容列表方法声明
-- `MemoryCity/Network/NetworkManager/YALContentManager.m` - 已添加获取我的内容列表方法实现
+- `MemoryCity/Network/Manager/YALContentManager.h` - 已添加获取我的内容列表方法声明
+- `MemoryCity/Network/Manager/YALContentManager.m` - 已添加获取我的内容列表方法实现
 
 ### 3. 视图控制器层 (ViewController)
 - `MemoryCity/Mine/Controller/YALMyContentListController.h` - 我的内容列表控制器头文件

@@ -7,8 +7,8 @@
 
 #import "YALReleaseController.h"
 #import "YALCalendarController.h"
-#import "../Map/ViewController/YALMapController.h"
-#import "../Network/NetworkManager/YALContentManager.h"
+#import "../Map/Controller/YALMapController.h"
+#import "../Network/Manager/YALContentManager.h"
 #import <Masonry/Masonry.h>
 #import <AVFoundation/AVFoundation.h>
 #import <PhotosUI/PhotosUI.h>

@@ -104,6 +104,12 @@
     UITabBarItem *releaseItem =
     [[UITabBarItem alloc] initWithTitle:nil image:[[UIImage alloc] init] tag:2];
     releaseItem.enabled = NO;
+    releaseItem.title = @"";
+    releaseItem.titlePositionAdjustment = UIOffsetMake(0.0, 1000.0);
+    [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
+                               forState:UIControlStateNormal];
+    [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
+                               forState:UIControlStateSelected];
     releaseNav.tabBarItem = releaseItem;
 
     mapNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Map"
@@ -117,6 +123,12 @@
     homeNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home" image:nil tag:0];
     memoriesNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Memories" image:nil tag:1];
     UITabBarItem *releaseItem = [[UITabBarItem alloc] initWithTitle:nil image:nil tag:2];
+    releaseItem.title = @"";
+    releaseItem.titlePositionAdjustment = UIOffsetMake(0.0, 1000.0);
+    [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
+                               forState:UIControlStateNormal];
+    [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
+                               forState:UIControlStateSelected];
     releaseNav.tabBarItem = releaseItem;
     mapNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Map" image:nil tag:3];
     mineNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Mine" image:nil tag:4];

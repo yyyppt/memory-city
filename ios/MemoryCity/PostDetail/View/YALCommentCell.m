@@ -307,12 +307,7 @@
     if (operationText.length > 0) {
         NSRange range = [full rangeOfString:operationText options:NSBackwardsSearch];
         if (range.location != NSNotFound) {
-            UIColor *accent = nil;
-            if (@available(iOS 13.0, *)) {
-                accent = [UIColor systemBlueColor];
-            } else {
-                accent = [UIColor colorWithRed:0.2 green:0.4 blue:1 alpha:1];
-            }
+            UIColor *accent = [UIColor colorWithRed:0.90 green:0.52 blue:0.16 alpha:1.0];
             [attr addAttributes:@{
                 NSForegroundColorAttributeName: accent,
                 NSFontAttributeName: [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold]

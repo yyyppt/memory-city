@@ -26,6 +26,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 @property (nonatomic, assign) NSInteger totalCollectCount;
 @property (nonatomic, assign) NSInteger unreadInteractionCount;
 @property (nonatomic, assign) NSInteger messageLoadToken;
+@property (nonatomic, strong, nullable) NSNumber *serverCollectTotal;
 
 @end
 
@@ -107,6 +108,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
     self.totalCommentCount = 0;
     self.totalCollectCount = 0;
     self.unreadInteractionCount = 0;
+    self.serverCollectTotal = nil;
     self.messages = @[];
     [self.loadingIndicator stopAnimating];
     if (@available(iOS 10.0, *)) {
@@ -142,6 +144,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
       strongSelf.totalCommentCount = 0;
       strongSelf.totalCollectCount = 0;
       strongSelf.unreadInteractionCount = 0;
+      strongSelf.serverCollectTotal = nil;
       [strongSelf refreshHeaderView];
       NSString *errorText = message.length > 0 ? message : (error.localizedDescription.length > 0 ? error.localizedDescription : @"互动消息加载失败");
       strongSelf.emptyLabel.text = errorText;
@@ -163,6 +166,8 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
         [posts addObject:model];
       }
     }
+
+    strongSelf.serverCollectTotal = [YALContentManager sharedManager].lastMyContentCollectCount;
 
     [strongSelf enrichPostsWithDetailIfNeeded:posts loadToken:loadToken completion:^(NSArray<YALPostModel *> * _Nonnull enrichedPosts) {
       [strongSelf buildMessagesFromPosts:enrichedPosts];
@@ -364,6 +369,10 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
       @"weight": @(deltaCount * 1000 + totalCount)
     };
     [items addObject:message];
+  }
+
+  if ([self.serverCollectTotal respondsToSelector:@selector(integerValue)]) {
+    self.totalCollectCount = MAX(self.serverCollectTotal.integerValue, 0);
   }
 
   NSArray<NSDictionary *> *sortedItems =

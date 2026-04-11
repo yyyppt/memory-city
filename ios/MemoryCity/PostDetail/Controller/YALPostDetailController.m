@@ -10,6 +10,7 @@
 #import "YALCommentCell.h"
 #import "YALContentManager.h"
 #import "YALAuthManager.h"
+#import "YALPostCacheStore.h"
 #import <objc/runtime.h>
 #import <Masonry/Masonry.h>
 #import <SDWebImage/SDWebImage.h>
@@ -1658,6 +1659,16 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     }
 
     __weak typeof(self) weakSelf = self;
+    [[YALPostCacheStore sharedStore] fetchContentDetailWithId:self.post.contentId completion:^(NSDictionary * _Nullable content) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        if ([content isKindOfClass:[NSDictionary class]]) {
+            [strongSelf applyDetailData:content];
+        }
+    }];
+
     [[YALContentManager sharedManager] getContentDetailWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) { return; }

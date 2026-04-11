@@ -13,5 +13,6 @@
 
 + (instancetype)shareManager;
 - (void)getPosts:(void(^)(NSArray<YALPostModel *> *posts, NSError *error))completion;
+- (void)getPostsWithCache:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion;
 
 @end

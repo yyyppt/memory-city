@@ -12,6 +12,7 @@
 #import "YALSearchContentModel.h"
 #import "YALSearchUserModel.h"
 #import "YALAIAnalyzeResultModel.h"
+#import "YALPostCacheStore.h"
 
 static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
 //static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
@@ -258,7 +259,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             NSInteger code = [response[@"code"] integerValue];
             NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
-
             NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
             NSLog(@"📁 响应数据: %@", data);
 
@@ -316,6 +316,13 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
 
             if (code == 200) {
+                if (data && contentId.integerValue > 0) {
+                    [[YALPostCacheStore sharedStore] cacheContentDetail:data contentId:contentId completion:^(NSError * _Nullable error) {
+                        if (error) {
+                            NSLog(@"⚠️ 详情缓存写入失败: %@", error);
+                        }
+                    }];
+                }
                 if (completion) {
                     completion(YES, data, nil);
                 }
@@ -815,12 +822,24 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             NSInteger code = [response[@"code"] integerValue];
             NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
+            NSDictionary *contentListContainer = [data[@"content_list"] isKindOfClass:[NSDictionary class]] ? data[@"content_list"] : data;
+            id collectCountObj = [data[@"collectCount"] respondsToSelector:@selector(integerValue)] ? data[@"collectCount"] : nil;
+            if (![collectCountObj respondsToSelector:@selector(integerValue)]) {
+                collectCountObj = [contentListContainer[@"collectCount"] respondsToSelector:@selector(integerValue)] ? contentListContainer[@"collectCount"] : nil;
+            }
+            if (![collectCountObj respondsToSelector:@selector(integerValue)]) {
+                collectCountObj = [data[@"collect_count"] respondsToSelector:@selector(integerValue)] ? data[@"collect_count"] : nil;
+            }
+            if (![collectCountObj respondsToSelector:@selector(integerValue)]) {
+                collectCountObj = [contentListContainer[@"collect_count"] respondsToSelector:@selector(integerValue)] ? contentListContainer[@"collect_count"] : nil;
+            }
+            self.lastMyContentCollectCount = [collectCountObj respondsToSelector:@selector(integerValue)] ? @([collectCountObj integerValue]) : nil;
 
             NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
 
             if (code == 200) {
                 // 解析数据列表
-                NSArray *listData = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
+                NSArray *listData = [contentListContainer[@"list"] isKindOfClass:[NSArray class]] ? contentListContainer[@"list"] : @[];
                 NSMutableArray *contentList = [NSMutableArray array];
 
                 for (NSDictionary *itemDict in listData) {
@@ -838,6 +857,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                 }
             } else {
                 NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
+                self.lastMyContentCollectCount = nil;
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"YALContentManager"
                                                          code:code
@@ -847,6 +867,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
         } else {
             NSLog(@"❌ 无效的响应格式: %@", responseObject);
+            self.lastMyContentCollectCount = nil;
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALContentManager"
                                                      code:-1
@@ -856,6 +877,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
         NSLog(@"❌ 获取我的内容列表失败: %@", error);
+        self.lastMyContentCollectCount = nil;
         if (completion) {
             completion(NO, nil, @"网络请求失败", error);
         }

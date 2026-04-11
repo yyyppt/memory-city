@@ -12,8 +12,8 @@
 #import "YALMapController.h"
 #import "YALMessageController.h"
 #import "YALReleaseController.h"
-#import "YALLoginController.h"
 #import "YALAuthManager.h"
+#import "SceneDelegate.h"
 #import "YALEditProfileViewController.h"
 #import "YALChangePasswordViewController.h"
 #import "YALMyContentListController.h"
@@ -235,55 +235,15 @@ static BOOL YALMineBoolFromPublicValue(id value) {
 }
 
 - (void)performLogout {
-    UIWindow *window = [self activeWindow];
+    UIWindow *window = [SceneDelegate activeWindow];
     if (!window) {
         [self showPlaceholderAlertOnController:self title:@"退出失败" message:@"未找到可用窗口，请稍后重试。"];
         return;
     }
-    if (@available(iOS 13.0, *)) {
-        window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
-    }
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:kYALAppAppearanceStyleKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
     [[YALAuthManager sharedManager] clearAuthSession];
-    YALLoginController *loginVC = [[YALLoginController alloc] init];
-    UINavigationController *loginNav = [[UINavigationController alloc] initWithRootViewController:loginVC];
-    [UIView transitionWithView:window
-                      duration:0.25
-                       options:UIViewAnimationOptionTransitionCrossDissolve
-                    animations:^{
-        BOOL oldState = [UIView areAnimationsEnabled];
-        [UIView setAnimationsEnabled:NO];
-        window.rootViewController = loginNav;
-        [UIView setAnimationsEnabled:oldState];
-    } completion:nil];
-    [window makeKeyAndVisible];
-}
-
-- (UIWindow *)activeWindow {
-    UIWindow *window = self.view.window;
-    if (window) {
-        return window;
-    }
-    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-        if (![scene isKindOfClass:[UIWindowScene class]]) {
-            continue;
-        }
-        UIWindowScene *windowScene = (UIWindowScene *)scene;
-        if (windowScene.activationState != UISceneActivationStateForegroundActive &&
-            windowScene.activationState != UISceneActivationStateForegroundInactive) {
-            continue;
-        }
-        for (UIWindow *candidate in windowScene.windows) {
-            if (candidate.isKeyWindow) {
-                return candidate;
-            }
-        }
-        if (windowScene.windows.count > 0) {
-            return windowScene.windows.firstObject;
-        }
-    }
-    return nil;
+    [SceneDelegate switchToLoginInterfaceAnimated:YES resetAppearance:YES];
 }
 
 #pragma mark - YALMineViewDelegate

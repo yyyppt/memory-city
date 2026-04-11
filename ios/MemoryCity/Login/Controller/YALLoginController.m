@@ -9,6 +9,7 @@
 #import "YALRegisterController.h"
 #import "YALForgotPasswordController.h"
 #import "YALAuthManager.h"
+#import "SceneDelegate.h"
 
 @interface YALLoginController () <UIGestureRecognizerDelegate>
 
@@ -22,6 +23,10 @@ static const NSUInteger kYALPasswordMaxLength = 15;
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.navigationItem.backBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@""
+                                                                              style:UIBarButtonItemStylePlain
+                                                                             target:nil
+                                                                             action:nil];
     _loginView = [[YALLoginView alloc] initWithFrame:self.view.bounds];
     [self.view addSubview:self.loginView];
 
@@ -98,34 +103,7 @@ static const NSUInteger kYALPasswordMaxLength = 15;
 }
 
 - (void)enterMainInterface {
-    YALTabBarController *tabBarController = [[YALTabBarController alloc] init];
-    UIWindow *window = self.view.window;
-    if (!window) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) { continue; }
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-            if (windowScene.activationState != UISceneActivationStateForegroundActive &&
-                windowScene.activationState != UISceneActivationStateForegroundInactive) {
-                continue;
-            }
-            window = windowScene.windows.firstObject;
-            if (window) { break; }
-        }
-    }
-    if (!window) { return; }
-
-    // 登录成功后切根控制器，避免后续页面出现从登录页返回的 Back 按钮。
-    // 使用淡入过渡，避免界面切换生硬。
-    [UIView transitionWithView:window
-                      duration:0.25
-                       options:UIViewAnimationOptionTransitionCrossDissolve
-                    animations:^{
-        BOOL oldState = [UIView areAnimationsEnabled];
-        [UIView setAnimationsEnabled:NO];
-        window.rootViewController = tabBarController;
-        [UIView setAnimationsEnabled:oldState];
-    } completion:nil];
-    [window makeKeyAndVisible];
+    [SceneDelegate switchToMainInterfaceAnimated:YES];
 }
 
 - (void)showAlert:(NSString *)msg {

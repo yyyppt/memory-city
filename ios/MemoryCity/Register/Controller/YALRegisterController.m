@@ -7,7 +7,7 @@
 #import "YALRegisterController.h"
 #import "YALRegisterView.h"
 #import "YALAuthManager.h"
-#import "YALTabBarController.h"
+#import "SceneDelegate.h"
 
 @interface YALRegisterController () <UIGestureRecognizerDelegate>
 
@@ -87,32 +87,7 @@
 }
 
 - (void)enterMainInterface {
-    YALTabBarController *tabBarController = [[YALTabBarController alloc] init];
-    UIWindow *window = self.view.window;
-    if (!window) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) { continue; }
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-            if (windowScene.activationState != UISceneActivationStateForegroundActive &&
-                windowScene.activationState != UISceneActivationStateForegroundInactive) {
-                continue;
-            }
-            window = windowScene.windows.firstObject;
-            if (window) { break; }
-        }
-    }
-    if (!window) { return; }
-
-    [UIView transitionWithView:window
-                      duration:0.25
-                       options:UIViewAnimationOptionTransitionCrossDissolve
-                    animations:^{
-        BOOL oldState = [UIView areAnimationsEnabled];
-        [UIView setAnimationsEnabled:NO];
-        window.rootViewController = tabBarController;
-        [UIView setAnimationsEnabled:oldState];
-    } completion:nil];
-    [window makeKeyAndVisible];
+    [SceneDelegate switchToMainInterfaceAnimated:YES];
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {

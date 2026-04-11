@@ -17,6 +17,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 + (instancetype)sharedManager;
 
+@property (nonatomic, strong, nullable) NSNumber *lastMyContentCollectCount;
+
 /// 发布内容
 /// @param title 标题
 /// @param content 文字内容

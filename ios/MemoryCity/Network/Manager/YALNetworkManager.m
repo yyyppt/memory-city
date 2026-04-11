@@ -7,6 +7,15 @@
 
 #import "YALNetworkManager.h"
 
+#import "YALAuthManager.h"
+
+@interface YALNetworkManager ()
+
+@property (nonatomic, assign) BOOL isRefreshingToken;
+@property (nonatomic, strong) NSMutableArray *pendingRefreshBlocks;
+
+@end
+
 @implementation YALNetworkManager
 
 + (instancetype _Nullable )shareManager {
@@ -24,51 +33,46 @@
         self.sessionManager.requestSerializer = [AFJSONRequestSerializer serializer];
         self.sessionManager.requestSerializer.timeoutInterval = 30.0;
         self.sessionManager.responseSerializer = [AFJSONResponseSerializer serializer];
-        //self.sessionManager.requestSerializer = [AFHTTPRequestSerializer serializer];
         self.sessionManager.responseSerializer.acceptableContentTypes = [NSSet setWithObjects:@"application/json", @"text/plain", @"text/html", nil];
-        // 开启Cookie支持
         self.sessionManager.requestSerializer.HTTPShouldHandleCookies = YES;
         [NSHTTPCookieStorage sharedHTTPCookieStorage].cookieAcceptPolicy = NSHTTPCookieAcceptPolicyAlways;
+        self.pendingRefreshBlocks = [NSMutableArray array];
     }
     return self;
 }
 
-- (void)GET:(NSString *_Nonnull)URLString parameters:(nullable id)parameters headers:(nullable NSDictionary<NSString *,NSString *> *)headers progress:(nullable void (^)(NSProgress * _Nonnull))downloadProgress success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
-    [self.sessionManager GET:URLString parameters:parameters headers:headers progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (success) {
-                success(task, responseObject);
-            }
-        });
-    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (failure) {
-                failure(task, error);
-            }
-        });
-    }];
+- (void)GET:(NSString *_Nonnull)URLString
+ parameters:(nullable id)parameters
+    headers:(nullable NSDictionary<NSString *,NSString *> *)headers
+   progress:(nullable void (^)(NSProgress * _Nonnull))downloadProgress
+    success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
+    failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
+    [self performRequestWithMethod:@"GET"
+                         URLString:URLString
+                        parameters:parameters
+                           headers:headers
+                    uploadProgress:nil
+                  downloadProgress:downloadProgress
+                retryOnAuthFailure:YES
+                           success:success
+                           failure:failure];
 }
 
 - (void)POST:(NSString *_Nonnull)URLString
-    parameters:(nullable id)parameters
-       headers:(nullable NSDictionary<NSString *, NSString *> *)headers
-       progress:(nullable void (^)(NSProgress * _Nonnull))uploadProgress
-        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
-        failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
-    // 注意：当前 sessionManager 统一使用 AFJSONRequestSerializer / AFJSONResponseSerializer
-    [self.sessionManager POST:URLString parameters:parameters headers:headers progress:nil success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (success) {
-                success(task, responseObject);
-            }
-        });
-    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (failure) {
-                failure(task, error);
-            }
-        });
-    }];
+  parameters:(nullable id)parameters
+     headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+    progress:(nullable void (^)(NSProgress * _Nonnull))uploadProgress
+     success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
+     failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
+    [self performRequestWithMethod:@"POST"
+                         URLString:URLString
+                        parameters:parameters
+                           headers:headers
+                    uploadProgress:uploadProgress
+                  downloadProgress:nil
+                retryOnAuthFailure:YES
+                           success:success
+                           failure:failure];
 }
 
 - (void)PUT:(NSString *_Nonnull)URLString
@@ -76,20 +80,15 @@
     headers:(nullable NSDictionary<NSString *, NSString *> *)headers
     success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
     failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
-    // 使用 AFJSONRequestSerializer / AFJSONResponseSerializer
-    [self.sessionManager PUT:URLString parameters:parameters headers:headers success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (success) {
-                success(task, responseObject);
-            }
-        });
-    } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (failure) {
-                failure(task, error);
-            }
-        });
-    }];
+    [self performRequestWithMethod:@"PUT"
+                         URLString:URLString
+                        parameters:parameters
+                           headers:headers
+                    uploadProgress:nil
+                  downloadProgress:nil
+                retryOnAuthFailure:YES
+                           success:success
+                           failure:failure];
 }
 
 - (void)DELETE:(NSString *_Nonnull)URLString
@@ -97,66 +96,266 @@
        headers:(nullable NSDictionary<NSString *, NSString *> *)headers
        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
        failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
-    BOOL hasJSONBody = [parameters isKindOfClass:[NSDictionary class]] && [(NSDictionary *)parameters count] > 0;
-    if (!hasJSONBody) {
-        [self.sessionManager DELETE:URLString parameters:nil headers:headers success:^(NSURLSessionDataTask * _Nonnull task, id  _Nullable responseObject) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (success) {
-                    success(task, responseObject);
-                }
-            });
-        } failure:^(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (failure) {
-                    failure(task, error);
-                }
-            });
-        }];
+    [self performRequestWithMethod:@"DELETE"
+                         URLString:URLString
+                        parameters:parameters
+                           headers:headers
+                    uploadProgress:nil
+                  downloadProgress:nil
+                retryOnAuthFailure:YES
+                           success:success
+                           failure:failure];
+}
+
+- (void)performRequestWithMethod:(NSString *)method
+                       URLString:(NSString *)URLString
+                      parameters:(nullable id)parameters
+                         headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+                  uploadProgress:(nullable void (^)(NSProgress * _Nonnull))uploadProgress
+                downloadProgress:(nullable void (^)(NSProgress * _Nonnull))downloadProgress
+              retryOnAuthFailure:(BOOL)retryOnAuthFailure
+                         success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
+                         failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure {
+    NSError *requestError = nil;
+    NSMutableURLRequest *request = [self requestWithMethod:method
+                                                 URLString:URLString
+                                                parameters:parameters
+                                                   headers:[self mergedHeadersForURLString:URLString headers:headers]
+                                                     error:&requestError];
+    if (requestError || !request) {
+        [self dispatchFailure:failure task:nil error:(requestError ?: [NSError errorWithDomain:@"YALNetworkManager"
+                                                                                           code:-1
+                                                                                       userInfo:@{NSLocalizedDescriptionKey: @"请求创建失败"}])];
         return;
     }
 
-    NSError *requestError = nil;
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:URLString]];
-    request.HTTPMethod = @"DELETE";
-    request.timeoutInterval = self.sessionManager.requestSerializer.timeoutInterval;
-    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    __weak typeof(self) weakSelf = self;
+    __block NSURLSessionDataTask *task = nil;
+    task = [self.sessionManager dataTaskWithRequest:request
+                                     uploadProgress:uploadProgress
+                                   downloadProgress:downloadProgress
+                                  completionHandler:^(NSURLResponse * _Nonnull response, id  _Nullable responseObject, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+
+        BOOL isUnauthorized = [strongSelf responseIndicatesUnauthorizedWithTask:task
+                                                                 responseObject:responseObject
+                                                                          error:error];
+        BOOL canRetry = retryOnAuthFailure && ![strongSelf shouldSkipAuthRefreshForURLString:URLString];
+        if (isUnauthorized && canRetry) {
+            [strongSelf enqueueTokenRefreshWithCompletion:^(BOOL refreshSuccess) {
+                if (refreshSuccess) {
+                    [strongSelf performRequestWithMethod:method
+                                               URLString:URLString
+                                              parameters:parameters
+                                                 headers:headers
+                                          uploadProgress:uploadProgress
+                                        downloadProgress:downloadProgress
+                                      retryOnAuthFailure:NO
+                                                 success:success
+                                                 failure:failure];
+                    return;
+                }
+
+                NSError *authError = [strongSelf authFailureErrorFromTask:task responseObject:responseObject fallback:error];
+                [strongSelf dispatchFailure:failure task:task error:authError];
+            }];
+            return;
+        }
+
+        if (error) {
+            [strongSelf dispatchFailure:failure task:task error:error];
+            return;
+        }
+
+        [strongSelf dispatchSuccess:success task:task responseObject:responseObject];
+    }];
+    [task resume];
+}
+
+- (NSMutableURLRequest *)requestWithMethod:(NSString *)method
+                                 URLString:(NSString *)URLString
+                                parameters:(nullable id)parameters
+                                   headers:(NSDictionary<NSString *, NSString *> *)headers
+                                     error:(NSError * __autoreleasing *)error {
+    BOOL isDeleteWithJSONBody = [method isEqualToString:@"DELETE"] &&
+                                [parameters isKindOfClass:[NSDictionary class]] &&
+                                [(NSDictionary *)parameters count] > 0;
+    NSMutableURLRequest *request = nil;
+
+    if (isDeleteWithJSONBody) {
+        request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:URLString]];
+        request.HTTPMethod = method;
+        request.timeoutInterval = self.sessionManager.requestSerializer.timeoutInterval;
+        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+        [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:parameters options:0 error:error];
+        if (!jsonData) {
+            return nil;
+        }
+        request.HTTPBody = jsonData;
+    } else {
+        request = [self.sessionManager.requestSerializer requestWithMethod:method URLString:URLString parameters:parameters error:error];
+        if (!request) {
+            return nil;
+        }
+    }
+
     [headers enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSString * _Nonnull obj, __unused BOOL * _Nonnull stop) {
         [request setValue:obj forHTTPHeaderField:key];
     }];
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:parameters options:0 error:&requestError];
-    if (jsonData) {
-        request.HTTPBody = jsonData;
+    return request;
+}
+
+- (NSDictionary<NSString *, NSString *> *)mergedHeadersForURLString:(NSString *)URLString
+                                                            headers:(NSDictionary<NSString *, NSString *> *)headers {
+    NSMutableDictionary<NSString *, NSString *> *merged = [NSMutableDictionary dictionary];
+    if ([headers isKindOfClass:[NSDictionary class]]) {
+        [merged addEntriesFromDictionary:headers];
     }
-    if (requestError) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (failure) {
-                failure(nil, requestError);
-            }
-        });
+
+    if (![self shouldAttachAuthHeadersForURLString:URLString]) {
+        return [merged copy];
+    }
+
+    NSDictionary<NSString *, NSString *> *authHeaders = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+    [authHeaders enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSString * _Nonnull obj, __unused BOOL * _Nonnull stop) {
+        if (merged[key].length == 0) {
+            merged[key] = obj;
+        }
+    }];
+    return [merged copy];
+}
+
+- (BOOL)shouldAttachAuthHeadersForURLString:(NSString *)URLString {
+    NSString *path = URLString.lowercaseString ?: @"";
+    if ([path containsString:@"/user/login"] ||
+        [path containsString:@"/user/register"] ||
+        [path containsString:@"/user/password/forgot/"] ||
+        [path containsString:@"/user/password/forgot"]) {
+        return NO;
+    }
+    return YES;
+}
+
+- (BOOL)shouldSkipAuthRefreshForURLString:(NSString *)URLString {
+    NSString *path = URLString.lowercaseString ?: @"";
+    return [path containsString:@"/user/refresh"];
+}
+
+- (BOOL)responseIndicatesUnauthorizedWithTask:(NSURLSessionDataTask *)task
+                               responseObject:(id)responseObject
+                                        error:(NSError *)error {
+    NSInteger statusCode = [self statusCodeFromTask:task];
+    if (statusCode == 401) {
+        return YES;
+    }
+
+    if ([responseObject isKindOfClass:[NSDictionary class]]) {
+        id codeObj = ((NSDictionary *)responseObject)[@"code"];
+        NSInteger businessCode = [codeObj respondsToSelector:@selector(integerValue)] ? [codeObj integerValue] : NSNotFound;
+        if (businessCode == 401) {
+            return YES;
+        }
+    }
+
+    NSInteger responseCode = [error.userInfo[AFNetworkingOperationFailingURLResponseErrorKey] statusCode];
+    return responseCode == 401;
+}
+
+- (NSInteger)statusCodeFromTask:(NSURLSessionDataTask *)task {
+    NSHTTPURLResponse *response = (NSHTTPURLResponse *)task.response;
+    if (![response isKindOfClass:[NSHTTPURLResponse class]]) {
+        return NSNotFound;
+    }
+    return response.statusCode;
+}
+
+- (NSError *)authFailureErrorFromTask:(NSURLSessionDataTask *)task
+                        responseObject:(id)responseObject
+                              fallback:(NSError *)fallback {
+    NSString *message = @"登录状态已失效，请重新登录";
+    if ([responseObject isKindOfClass:[NSDictionary class]]) {
+        id msgObj = ((NSDictionary *)responseObject)[@"msg"];
+        if ([msgObj isKindOfClass:[NSString class]] && [((NSString *)msgObj) length] > 0) {
+            message = (NSString *)msgObj;
+        }
+    } else if (fallback.localizedDescription.length > 0) {
+        message = fallback.localizedDescription;
+    }
+
+    NSInteger code = [self statusCodeFromTask:task];
+    if (code == NSNotFound) {
+        code = fallback.code != 0 ? fallback.code : 401;
+    }
+    return [NSError errorWithDomain:@"YALNetworkManager"
+                               code:code
+                           userInfo:@{NSLocalizedDescriptionKey: message}];
+}
+
+- (void)enqueueTokenRefreshWithCompletion:(void (^)(BOOL success))completion {
+    if (!completion) {
         return;
     }
 
-    __block NSURLSessionDataTask *task = nil;
-    task = [self.sessionManager dataTaskWithRequest:request
-                                     uploadProgress:nil
-                                   downloadProgress:nil
-                                  completionHandler:^(NSURLResponse * _Nonnull response, id  _Nullable responseObject, NSError * _Nullable error) {
-        if (error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (failure) {
-                    failure((NSURLSessionDataTask *)nil, error);
-                }
-            });
+    BOOL shouldStartRefresh = NO;
+    @synchronized (self) {
+        [self.pendingRefreshBlocks addObject:[completion copy]];
+        if (!self.isRefreshingToken) {
+            self.isRefreshingToken = YES;
+            shouldStartRefresh = YES;
+        }
+    }
+
+    if (!shouldStartRefresh) {
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    [[YALAuthManager sharedManager] refreshAccessTokenWithCompletion:^(BOOL success) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
             return;
         }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (success) {
-                success((NSURLSessionDataTask *)task, responseObject);
-            }
-        });
+
+        if (!success && ![[YALAuthManager sharedManager] hasLoggedInSession]) {
+            [[YALAuthManager sharedManager] clearAuthSession];
+        }
+
+        NSArray *callbacks = nil;
+        @synchronized (strongSelf) {
+            strongSelf.isRefreshingToken = NO;
+            callbacks = [strongSelf.pendingRefreshBlocks copy];
+            [strongSelf.pendingRefreshBlocks removeAllObjects];
+        }
+
+        for (void (^callback)(BOOL) in callbacks) {
+            callback(success);
+        }
     }];
-    [task resume];
+}
+
+- (void)dispatchSuccess:(void (^)(NSURLSessionDataTask * _Nonnull, id _Nullable))success
+                   task:(NSURLSessionDataTask *)task
+         responseObject:(id)responseObject {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (success) {
+            success(task, responseObject);
+        }
+    });
+}
+
+- (void)dispatchFailure:(void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure
+                   task:(NSURLSessionDataTask *)task
+                  error:(NSError *)error {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (failure) {
+            failure(task, error);
+        }
+    });
 }
 
 @end

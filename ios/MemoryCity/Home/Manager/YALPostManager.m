@@ -5,6 +5,47 @@
 //  Created by mac on 2026/3/23.
 //
 #import "YALPostManager.h"
+#import "YALPostCacheStore.h"
+#import "YALContentManager.h"
+
+static NSString * _Nullable YALPostManagerFirstNonEmptyStringFromDictionary(NSDictionary *dict, NSArray<NSString *> *keys) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value isKindOfClass:[NSString class]]) {
+            NSString *text = [(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (text.length > 0) {
+                return text;
+            }
+        }
+    }
+    return nil;
+}
+
+static NSString * _Nullable YALPostManagerFirstNonEmptyStringRecursively(id obj, NSArray<NSString *> *keys) {
+    if ([obj isKindOfClass:[NSDictionary class]]) {
+        NSString *direct = YALPostManagerFirstNonEmptyStringFromDictionary((NSDictionary *)obj, keys);
+        if (direct.length > 0) {
+            return direct;
+        }
+        for (id value in [(NSDictionary *)obj allValues]) {
+            NSString *nested = YALPostManagerFirstNonEmptyStringRecursively(value, keys);
+            if (nested.length > 0) {
+                return nested;
+            }
+        }
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+        for (id value in (NSArray *)obj) {
+            NSString *nested = YALPostManagerFirstNonEmptyStringRecursively(value, keys);
+            if (nested.length > 0) {
+                return nested;
+            }
+        }
+    }
+    return nil;
+}
 
 @implementation YALPostManager
                      
@@ -18,6 +59,32 @@
 }
 
 - (void)getPosts:(void(^)(NSArray<YALPostModel *> *posts, NSError *error))completion {
+    [self getPostsWithCache:^(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error) {
+        if (fromCache) {
+            return;
+        }
+        if (completion) {
+            completion(posts, error);
+        }
+    }];
+}
+
+- (void)getPostsWithCache:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
+    [[YALPostCacheStore sharedStore] fetchHomeFeedPostsWithCompletion:^(NSArray<YALPostModel *> *posts) {
+        BOOL hasDeliveredCache = (posts.count > 0);
+        if (hasDeliveredCache) {
+            NSLog(@"💾 首页命中 Core Data 缓存：%lu 条", (unsigned long)posts.count);
+            if (completion) {
+                completion(posts, YES, nil);
+            }
+        }
+
+        [self requestLatestPostsHasDeliveredCache:hasDeliveredCache completion:completion];
+    }];
+}
+
+- (void)requestLatestPostsHasDeliveredCache:(BOOL)hasDeliveredCache
+                                 completion:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
     YALNetworkManager *manager = [YALNetworkManager shareManager];
     //static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";@"http://8.137.158.7:9000/api/content/list";http://192.168.1.65:9000/api
     NSString *url = @"http://8.137.158.7:9000/api/content/list";
@@ -62,7 +129,7 @@
             NSLog(@"❌ 无效的响应格式");
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALPostManager" code:-1 userInfo:@{NSLocalizedDescriptionKey : @"Invalid response object"}];
-                completion(nil, error);
+                completion(nil, NO, error);
             }
             return;
         }
@@ -77,7 +144,7 @@
                 NSError *error = [NSError errorWithDomain:@"YALPostManager"
                                                      code:code
                                                  userInfo:@{NSLocalizedDescriptionKey: msg}];
-                completion(nil, error);
+                completion(nil, NO, error);
             }
             return;
         }
@@ -96,7 +163,7 @@
             NSLog(@"⚠️ 缺少数据列表");
         if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALPostManager" code:-2 userInfo:@{NSLocalizedDescriptionKey : @"Missing data.list"}];
-                completion(nil, error);
+                completion(nil, NO, error);
             }
             return;
         }
@@ -120,15 +187,91 @@
             NSLog(@"📸 内容ID %@ 的图片URL: %@", model.contentId, model.imageURLString);
         }
 
-        if (completion) {
-            completion(posts, nil);
-        }
+        [self resolveCollectCountsFromDetailForPosts:posts completion:^(NSArray<YALPostModel *> *resolvedPosts) {
+            [[YALPostCacheStore sharedStore] replaceHomeFeedPosts:resolvedPosts completion:^(NSError * _Nullable cacheError) {
+                if (cacheError) {
+                    NSLog(@"⚠️ 首页缓存更新失败: %@", cacheError);
+                }
+            }];
+
+            if (completion) {
+                completion(resolvedPosts, NO, nil);
+            }
+        }];
     } failure:^(NSURLSessionDataTask *task, NSError *error) {
         NSLog(@"❌ 首页获取内容列表失败: %@", error);
-        if (completion) {
-            completion(nil, error);
+        if (completion && !hasDeliveredCache) {
+            completion(nil, NO, error);
         }
     }];
+}
+
+- (void)resolveCollectCountsFromDetailForPosts:(NSArray<YALPostModel *> *)posts
+                                    completion:(void(^)(NSArray<YALPostModel *> *resolvedPosts))completion {
+    if (posts.count == 0) {
+        if (completion) {
+            completion(posts ?: @[]);
+        }
+        return;
+    }
+
+    dispatch_group_t group = dispatch_group_create();
+
+    for (YALPostModel *post in posts) {
+        if (post.contentId.integerValue <= 0) {
+            continue;
+        }
+
+        dispatch_group_enter(group);
+        [[YALContentManager sharedManager] getContentDetailWithId:post.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
+            (void)error;
+            if (success && [content isKindOfClass:[NSDictionary class]]) {
+                NSInteger detailCollectCount = [self resolvedCollectCountFromContent:content fallback:post.collectCount];
+                post.collectCount = MAX(detailCollectCount, 0);
+                NSString *resolvedCity = [self resolvedCityFromContent:content fallback:post.city];
+                post.city = resolvedCity ?: @"";
+            }
+            dispatch_group_leave(group);
+        }];
+    }
+
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        if (completion) {
+            completion(posts);
+        }
+    });
+}
+
+- (NSInteger)resolvedCollectCountFromContent:(NSDictionary *)content fallback:(NSInteger)fallback {
+    NSArray<NSString *> *keys = @[@"collect_count", @"favorite_count", @"collected_count", @"collectCount", @"favoriteCount"];
+    for (NSString *key in keys) {
+        id value = content[key];
+        if ([value respondsToSelector:@selector(integerValue)]) {
+            return MAX([value integerValue], 0);
+        }
+    }
+
+    NSArray<NSString *> *nestedKeys = @[@"data", @"content", @"item", @"post"];
+    for (NSString *nestedKey in nestedKeys) {
+        id nested = content[nestedKey];
+        if ([nested isKindOfClass:[NSDictionary class]]) {
+            NSInteger nestedValue = [self resolvedCollectCountFromContent:(NSDictionary *)nested fallback:NSNotFound];
+            if (nestedValue != NSNotFound) {
+                return MAX(nestedValue, 0);
+            }
+        }
+    }
+
+    return MAX(fallback, 0);
+}
+
+- (NSString *)resolvedCityFromContent:(NSDictionary *)content fallback:(NSString *)fallback {
+    NSString *resolved = YALPostManagerFirstNonEmptyStringRecursively(content, @[@"city", @"location_name", @"locationName"]);
+    if (resolved.length > 0) {
+        return resolved;
+    }
+    NSString *trimmedFallback = [fallback stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    return trimmedFallback.length > 0 ? trimmedFallback : @"";
 }
 
 @end

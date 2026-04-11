@@ -8,12 +8,14 @@
 #import "YALAuthManager.h"
 
 #import <AFNetworking/AFNetworking.h>
+#import <Security/Security.h>
 
 #import "YALNetworkManager.h"
 #import "../../Login/Model/YALAuthUserModel.h"
 
 static NSString * const accessTokenKey = @"YALAccessToken";
 static NSString * const refreshTokenKey = @"YALRefreshToken";
+static NSString * const keychainService = @"com.memorycity.auth";
 
 static NSString * const userProfileUserIdKey = @"YALAuthUserProfileUserId";
 static NSString * const userProfileUserIdStringKey = @"YALAuthUserProfileUserIdString";
@@ -46,6 +48,68 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     return nil;
 }
 
+static NSMutableDictionary *YALKeychainQuery(NSString *account) {
+    return [@{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: keychainService,
+        (__bridge id)kSecAttrAccount: account
+    } mutableCopy];
+}
+
+static NSString *YALKeychainReadString(NSString *account) {
+    if (account.length == 0) {
+        return nil;
+    }
+    NSMutableDictionary *query = YALKeychainQuery(account);
+    query[(__bridge id)kSecReturnData] = @YES;
+    query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
+
+    CFTypeRef dataRef = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &dataRef);
+    if (status != errSecSuccess || dataRef == NULL) {
+        if (dataRef != NULL) {
+            CFRelease(dataRef);
+        }
+        return nil;
+    }
+
+    NSData *data = CFBridgingRelease(dataRef);
+    if (![data isKindOfClass:[NSData class]] || data.length == 0) {
+        return nil;
+    }
+    NSString *value = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    return value.length > 0 ? value : nil;
+}
+
+static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
+    if (account.length == 0) {
+        return NO;
+    }
+    NSMutableDictionary *query = YALKeychainQuery(account);
+    if (value.length == 0) {
+        SecItemDelete((__bridge CFDictionaryRef)query);
+        return YES;
+    }
+
+    NSData *data = [value dataUsingEncoding:NSUTF8StringEncoding];
+    NSDictionary *attributes = @{
+        (__bridge id)kSecValueData: data,
+        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    };
+
+    OSStatus updateStatus = SecItemUpdate((__bridge CFDictionaryRef)query, (__bridge CFDictionaryRef)attributes);
+    if (updateStatus == errSecSuccess) {
+        return YES;
+    }
+    if (updateStatus != errSecItemNotFound) {
+        return NO;
+    }
+
+    [query addEntriesFromDictionary:attributes];
+    OSStatus addStatus = SecItemAdd((__bridge CFDictionaryRef)query, NULL);
+    return addStatus == errSecSuccess;
+}
+
 @implementation YALAuthManager
 
 + (instancetype)sharedManager {
@@ -60,21 +124,45 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // 开发模式下：每次启动应用都清除之前的登录状态
-        // 这样在重新运行项目时不会保持登录状态
-        #if DEBUG
-        [self clearAuthSession];
-        #endif
-        
-        // 然后尝试加载缓存用户（在生产环境中保持正常）
+        [self migrateLegacyTokensIfNeeded];
         [self loadCachedUserIfHasAccessToken];
     }
     return self;
 }
 
+- (NSString *)accessToken {
+    return YALKeychainReadString(accessTokenKey);
+}
+
+- (NSString *)refreshToken {
+    return YALKeychainReadString(refreshTokenKey);
+}
+
 - (BOOL)hasLoggedInSession {
-    NSString *accessToken = [[NSUserDefaults standardUserDefaults] objectForKey:accessTokenKey];
-    return [accessToken isKindOfClass:[NSString class]] && accessToken.length > 0;
+    return self.accessToken.length > 0;
+}
+
+- (void)migrateLegacyTokensIfNeeded {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *legacyAccessToken = [defaults objectForKey:accessTokenKey];
+    NSString *legacyRefreshToken = [defaults objectForKey:refreshTokenKey];
+    BOOL shouldMigrateAccess = ([legacyAccessToken isKindOfClass:[NSString class]] &&
+                                legacyAccessToken.length > 0 &&
+                                self.accessToken.length == 0);
+    BOOL shouldMigrateRefresh = ([legacyRefreshToken isKindOfClass:[NSString class]] &&
+                                 legacyRefreshToken.length > 0 &&
+                                 self.refreshToken.length == 0);
+
+    if (shouldMigrateAccess || shouldMigrateRefresh) {
+        [self storeAccessToken:(shouldMigrateAccess ? legacyAccessToken : self.accessToken)
+                  refreshToken:(shouldMigrateRefresh ? legacyRefreshToken : self.refreshToken)];
+    }
+
+    if ([defaults objectForKey:accessTokenKey] != nil || [defaults objectForKey:refreshTokenKey] != nil) {
+        [defaults removeObjectForKey:accessTokenKey];
+        [defaults removeObjectForKey:refreshTokenKey];
+        [defaults synchronize];
+    }
 }
 
 - (void)clearPersistedUserProfileOnly {
@@ -83,8 +171,6 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     [defaults removeObjectForKey:userProfileUserIdStringKey];
     [defaults removeObjectForKey:userProfileNicknameKey];
     [defaults removeObjectForKey:userProfileAvatarKey];
-    // 注意：这里不清理 bio。登录接口可能不返回 bio，清掉会导致“重新登录后简介丢失”。
-    // bio 会在后续 setCurrentUser 时根据新返回字段/缓存自行更新/兜底。
 }
 
 - (void)loadCachedUserIfHasAccessToken {
@@ -92,7 +178,7 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
         _currentUser = nil;
         return;
     }
-    NSString *accessToken = [[NSUserDefaults standardUserDefaults] objectForKey:accessTokenKey];
+    NSString *accessToken = self.accessToken;
     NSInteger uid = [[NSUserDefaults standardUserDefaults] integerForKey:userProfileUserIdKey];
     NSString *uidString = [[NSUserDefaults standardUserDefaults] objectForKey:userProfileUserIdStringKey];
     if (![uidString isKindOfClass:[NSString class]]) {
@@ -213,18 +299,18 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
 }
 
 - (void)clearAuthSession {
+    [self storeAccessToken:nil refreshToken:nil];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults removeObjectForKey:accessTokenKey];
-    [defaults removeObjectForKey:refreshTokenKey];
     [self clearPersistedUserProfileOnly];
+    [defaults removeObjectForKey:userProfileBioKey];
     [defaults synchronize];
-    _currentUser = nil;
+    self.currentUser = nil;
 }
 
 
 - (NSDictionary *)getAuthHeadersWithToken {
-    NSString *accessToken = [[NSUserDefaults standardUserDefaults] objectForKey:accessTokenKey];
-    NSString *refreshToken = [[NSUserDefaults standardUserDefaults] objectForKey:refreshTokenKey];
+    NSString *accessToken = self.accessToken;
+    NSString *refreshToken = self.refreshToken;
     NSMutableDictionary *headers = [NSMutableDictionary dictionary];
     if ([accessToken isKindOfClass:[NSString class]] && accessToken.length > 0) {
         headers[@"Authorization"] = [NSString stringWithFormat:@"Bearer %@", accessToken];
@@ -244,8 +330,13 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     return [self getAuthHeadersWithToken];
 }
 
+- (void)storeAccessToken:(NSString *)accessToken refreshToken:(NSString *)refreshToken {
+    YALKeychainWriteString(accessTokenKey, accessToken);
+    YALKeychainWriteString(refreshTokenKey, refreshToken);
+}
+
 - (void)refreshAccessTokenWithCompletion:(void (^)(BOOL success))completion {
-    NSString *refreshToken = [[NSUserDefaults standardUserDefaults] objectForKey:refreshTokenKey];
+    NSString *refreshToken = self.refreshToken;
     if (refreshToken.length == 0) {
         if (completion) completion(NO);
         return;
@@ -267,19 +358,34 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
         if ([responseObject isKindOfClass:[NSDictionary class]]) {
             NSDictionary *dic = (NSDictionary *)responseObject;
             NSDictionary *data = dic[@"data"];
-            NSString *newToken = data[@"token"];
+            NSInteger code = [dic[@"code"] respondsToSelector:@selector(integerValue)] ? [dic[@"code"] integerValue] : 200;
+            id tokenObj = YALJSONObjectForKeys(data, @[ @"token", @"access_token", @"accessToken" ]);
+            NSString *newToken = [tokenObj isKindOfClass:[NSString class]] ? tokenObj : nil;
+            id refreshObj = YALJSONObjectForKeys(data, @[ @"refresh_token", @"refreshToken", @"refreshtoken" ]);
+            NSString *newRefreshToken = [refreshObj isKindOfClass:[NSString class]] ? refreshObj : refreshToken;
 
-            if ([newToken isKindOfClass:[NSString class]] && newToken.length > 0) {
-                [[NSUserDefaults standardUserDefaults] setObject:newToken forKey:accessTokenKey];
-                [[NSUserDefaults standardUserDefaults] synchronize];
+            if (newToken.length > 0) {
+                [self storeAccessToken:newToken refreshToken:newRefreshToken];
+                if (self.currentUser) {
+                    self.currentUser.token = newToken;
+                }
                 if (completion) completion(YES);
                 return;
+            }
+
+            if (code == 401 || code == 403) {
+                [self clearAuthSession];
             }
         }
 
         if (completion) completion(NO);
 
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        NSHTTPURLResponse *response = (NSHTTPURLResponse *)task.response;
+        NSInteger statusCode = [response isKindOfClass:[NSHTTPURLResponse class]] ? response.statusCode : 0;
+        if (statusCode == 401 || statusCode == 403) {
+            [self clearAuthSession];
+        }
         if (completion) completion(NO);
     }];
 }
@@ -303,13 +409,7 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
         refreshToken = token;
     }
 
-    if (token && token.length > 0) {
-        [[NSUserDefaults standardUserDefaults] setObject:token forKey:accessTokenKey];
-    }
-    if (refreshToken && refreshToken.length > 0) {
-        [[NSUserDefaults standardUserDefaults] setObject:refreshToken forKey:refreshTokenKey];
-    }
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    [self storeAccessToken:token refreshToken:refreshToken];
 }
 
 - (BOOL)handleAuthResponse:(id)responseObject

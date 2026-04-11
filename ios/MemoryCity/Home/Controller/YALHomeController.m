@@ -214,12 +214,12 @@ static CGFloat const kYALItemSpacing = 12.0;
 
 - (void)loadPosts {
     __weak typeof(self) ws = self;
-    [[YALPostManager shareManager] getPosts:^(NSArray<YALPostModel *> *posts, NSError *error) {
+    [[YALPostManager shareManager] getPostsWithCache:^(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error) {
         if (!ws) return;
 
         if (posts && posts.count > 0) {
             ws.data = [posts mutableCopy];
-        } else {
+        } else if (!fromCache) {
             // 拉取失败时保底显示一条占位数据，避免页面完全空白
             YALPostModel *placeholder = [[YALPostModel alloc] init];
             placeholder.image = [UIImage systemImageNamed:@"photo"] ?: [[UIImage alloc] init];

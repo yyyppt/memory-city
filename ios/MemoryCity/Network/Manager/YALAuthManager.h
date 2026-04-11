@@ -19,6 +19,12 @@ NS_ASSUME_NONNULL_BEGIN
 // 已在登录接口解析并落库双 token 后的用户信息；冷启动时会根据 access token 尝试从缓存恢复。
 @property (nonatomic, strong, nullable) YALAuthUserModel *currentUser;
 
+/// 当前 access token。统一从安全存储读取。
+@property (nonatomic, copy, readonly, nullable) NSString *accessToken;
+
+/// 当前 refresh token。统一从安全存储读取。
+@property (nonatomic, copy, readonly, nullable) NSString *refreshToken;
+
 /// access token 存在（与 `saveTokensFromLoginData:` 写入的 key 一致）即视为已登录会话。
 - (BOOL)hasLoggedInSession;
 
@@ -30,6 +36,13 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// 获取登录请求所需的认证headers
 - (NSDictionary * _Nullable)authHeadersForLoginRequiredRequest;
+
+/// 统一写入 access / refresh token；refresh 可为空。
+- (void)storeAccessToken:(NSString * _Nullable)accessToken
+            refreshToken:(NSString * _Nullable)refreshToken;
+
+/// 自动刷新 access token。
+- (void)refreshAccessTokenWithCompletion:(void (^ _Nonnull)(BOOL success))completion;
 
 - (void)loginWithUsername:(NSString * _Nonnull)userName password:(NSString * _Nonnull)password completion:(void(^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;
 - (void)registerWithUsername:(NSString * _Nonnull)username password:(NSString * _Nonnull)password nickname:(NSString * _Nonnull)nickname completion:(void (^ _Nonnull)(YALAuthUserModel * _Nullable user, NSError * _Nullable error))completion;

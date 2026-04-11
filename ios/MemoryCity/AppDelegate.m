@@ -1,21 +1,23 @@
 //
-//  YALAppDelegate.m
+//  AppDelegate.m
 //  MemoryCity
 //
 //  Created by yyyyy on 2026/3/9.
 //
 
-#import "YALAppDelegate.h"
+#import "AppDelegate.h"
+#import "YALCoreDataStack.h"
 
-@interface YALAppDelegate ()
+@interface AppDelegate ()
 
 @end
 
-@implementation YALAppDelegate
+@implementation AppDelegate
 
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
   // Override point for customization after application launch.
+  [YALCoreDataStack sharedStack];
   return YES;
 }
 

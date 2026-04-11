@@ -11,6 +11,7 @@
 #import "YALPostModel.h"
 #import "YALPostDetailController.h"
 #import "YALAuthManager.h"
+#import "YALPostCacheStore.h"
 
 static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
 
@@ -97,6 +98,22 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
     [self.loadingIndicator startAnimating];
 
     __weak typeof(self) weakSelf = self;
+    NSNumber *userId = @([YALAuthManager sharedManager].currentUser.userId);
+    [[YALPostCacheStore sharedStore] fetchFavoritePostsForUserId:userId completion:^(NSArray<YALPostModel *> *posts) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            return;
+        }
+        if (posts.count == 0) {
+            return;
+        }
+
+        [strongSelf.favoritesData removeAllObjects];
+        [strongSelf.favoritesData addObjectsFromArray:posts];
+        [strongSelf.tableView reloadData];
+        [strongSelf updateEmptyState];
+    }];
+
     [[YALContentManager sharedManager] getMyCollectListWithCompletion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
@@ -138,6 +155,8 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
             [strongSelf persistCollectedStatus:YES contentId:model.contentId];
             [strongSelf.favoritesData addObject:model];
         }
+
+        [strongSelf persistFavoritesCache];
 
         [strongSelf.tableView reloadData];
         [strongSelf updateEmptyState];
@@ -188,6 +207,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
             }];
 
             if (index != NSNotFound) {
+                [strongSelf persistFavoritesCache];
                 NSIndexPath *indexPath = [NSIndexPath indexPathForRow:(NSInteger)index inSection:0];
                 if ([strongSelf.tableView.indexPathsForVisibleRows containsObject:indexPath]) {
                     [strongSelf.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
@@ -463,6 +483,13 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
                 [strongSelf.tableView reloadData];
             }
             [strongSelf persistCollectedStatus:NO contentId:favorite.contentId];
+            [[YALPostCacheStore sharedStore] removeFavoritePostWithContentId:favorite.contentId
+                                                                      userId:@([YALAuthManager sharedManager].currentUser.userId)
+                                                                  completion:^(NSError * _Nullable error) {
+                if (error) {
+                    NSLog(@"⚠️ 收藏缓存删除失败: %@", error);
+                }
+            }];
             [strongSelf updateEmptyState];
             [strongSelf showMessage:@"已取消收藏" type:0];
             if (completion) {
@@ -480,6 +507,16 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
 }
 
 #pragma mark - Cache
+
+- (void)persistFavoritesCache {
+    [[YALPostCacheStore sharedStore] replaceFavoritePosts:self.favoritesData
+                                                   userId:@([YALAuthManager sharedManager].currentUser.userId)
+                                               completion:^(NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"⚠️ 收藏缓存持久化失败: %@", error);
+        }
+    }];
+}
 
 - (BOOL)cachedBoolStatusForPrefix:(NSString *)prefix contentId:(NSNumber *)contentId hasValue:(BOOL *)hasValue {
     if (prefix.length == 0 || contentId.integerValue <= 0) {

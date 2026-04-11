@@ -15,17 +15,19 @@
 @property (nonatomic, strong) UIImageView *imageView;
 @property (nonatomic, strong) CAGradientLayer *imageVignetteLayer;
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *cityLabel;
 @property (nonatomic, strong) UILabel *descLabel;
 @property (nonatomic, strong) UIView *metaRowView;
 @property (nonatomic, strong) UIImageView *heartImageView;
 @property (nonatomic, strong) UILabel *likeCountLabel;
 @property (nonatomic, strong) UIView *metaDividerView;
-@property (nonatomic, strong) UIImageView *commentImageView;
-@property (nonatomic, strong) UILabel *commentCountLabel;
+@property (nonatomic, strong) UIImageView *collectImageView;
+@property (nonatomic, strong) UILabel *collectCountLabel;
 @property (nonatomic, assign) CGFloat imageRatio;
 @property (nonatomic, assign) BOOL useWaterfall;
 @property (nonatomic, assign) CGFloat fixedImageHeight;
 @property (nonatomic, strong) MASConstraint *imageHeightConstraint;
+@property (nonatomic, strong) MASConstraint *metaTopConstraint;
 
 @end
 
@@ -86,6 +88,18 @@
     _titleLabel.textColor = [UIColor labelColor];
     _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
+    _cityLabel = [[UILabel alloc] init];
+    _cityLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightMedium];
+    _cityLabel.numberOfLines = 1;
+    _cityLabel.textAlignment = NSTextAlignmentRight;
+    _cityLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    _cityLabel.textColor = [UIColor labelColor];
+    _cityLabel.hidden = YES;
+    [_cityLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [_cityLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [_titleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [_titleLabel setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+
     _descLabel = [[UILabel alloc] init];
     _descLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightMedium];
     _descLabel.textColor = [UIColor secondaryLabelColor];
@@ -106,27 +120,28 @@
     _metaDividerView.layer.cornerRadius = 1.5;
     _metaDividerView.layer.masksToBounds = YES;
 
-    _commentImageView = [[UIImageView alloc] init];
-    _commentImageView.contentMode = UIViewContentModeScaleAspectFit;
+    _collectImageView = [[UIImageView alloc] init];
+    _collectImageView.contentMode = UIViewContentModeScaleAspectFit;
 
-    _commentCountLabel = [[UILabel alloc] init];
-    _commentCountLabel.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightSemibold];
-    _commentCountLabel.numberOfLines = 1;
+    _collectCountLabel = [[UILabel alloc] init];
+    _collectCountLabel.font = [UIFont systemFontOfSize:11.5 weight:UIFontWeightSemibold];
+    _collectCountLabel.numberOfLines = 1;
 
     if (@available(iOS 13.0, *)) {
         _heartImageView.image = [UIImage systemImageNamed:@"heart.fill"];
-        _commentImageView.image = [UIImage systemImageNamed:@"bubble.left.fill"];
+        _collectImageView.image = [UIImage systemImageNamed:@"star.fill"];
     }
 
     [self.contentView addSubview:_imageView];
     [self.contentView addSubview:_titleLabel];
+    [self.contentView addSubview:_cityLabel];
     [self.contentView addSubview:_descLabel];
     [self.contentView addSubview:_metaRowView];
     [self.metaRowView addSubview:_heartImageView];
     [self.metaRowView addSubview:_likeCountLabel];
     [self.metaRowView addSubview:_metaDividerView];
-    [self.metaRowView addSubview:_commentImageView];
-    [self.metaRowView addSubview:_commentCountLabel];
+    [self.metaRowView addSubview:_collectImageView];
+    [self.metaRowView addSubview:_collectCountLabel];
 
     [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.contentView.mas_top).offset(9.0);
@@ -138,8 +153,14 @@
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.imageView.mas_bottom).offset(9.0);
         make.left.equalTo(self.contentView.mas_left).offset(14.0);
-        make.right.equalTo(self.contentView.mas_right).offset(-14.0);
+        make.right.lessThanOrEqualTo(self.cityLabel.mas_left).offset(-8.0);
         make.height.mas_equalTo(20.0);
+    }];
+
+    [self.cityLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.right.equalTo(self.contentView.mas_right).offset(-14.0);
+        make.centerY.equalTo(self.titleLabel.mas_centerY);
+        make.width.lessThanOrEqualTo(self.contentView.mas_width).multipliedBy(0.45);
     }];
 
     [self.descLabel mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -150,7 +171,7 @@
     }];
 
     [self.metaRowView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.descLabel.mas_bottom).offset(5.0);
+        self.metaTopConstraint = make.top.equalTo(self.descLabel.mas_bottom).offset(5.0);
         make.left.equalTo(self.titleLabel);
         make.right.equalTo(self.titleLabel);
         make.height.mas_equalTo(22.0);
@@ -168,20 +189,14 @@
         make.centerY.equalTo(self.metaRowView.mas_centerY);
     }];
 
-    [self.metaDividerView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.likeCountLabel.mas_right).offset(8.0);
-        make.centerY.equalTo(self.metaRowView.mas_centerY);
-        make.width.height.mas_equalTo(3.0);
-    }];
-
-    [self.commentImageView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.metaDividerView.mas_right).offset(8.0);
+    [self.collectImageView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.likeCountLabel.mas_right).offset(12.0);
         make.centerY.equalTo(self.metaRowView.mas_centerY);
         make.width.height.mas_equalTo(14.0);
     }];
 
-    [self.commentCountLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.left.equalTo(self.commentImageView.mas_right).offset(4.0);
+    [self.collectCountLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.left.equalTo(self.collectImageView.mas_right).offset(4.0);
         make.centerY.equalTo(self.metaRowView.mas_centerY);
         make.right.lessThanOrEqualTo(self.metaRowView.mas_right);
     }];
@@ -216,10 +231,11 @@
     UIColor *accentColor = [UIColor colorWithRed:0.94 green:0.28 blue:0.20 alpha:1.0];
     UIColor *mutedColor = isDark ? [UIColor secondaryLabelColor] : [UIColor colorWithRed:0.58 green:0.45 blue:0.33 alpha:1.0];
     self.heartImageView.tintColor = accentColor;
-    self.commentImageView.tintColor = mutedColor;
+    self.collectImageView.tintColor = mutedColor;
     self.likeCountLabel.textColor = mutedColor;
-    self.commentCountLabel.textColor = mutedColor;
-    self.metaDividerView.backgroundColor = [mutedColor colorWithAlphaComponent:0.35];
+    self.collectCountLabel.textColor = mutedColor;
+    self.cityLabel.textColor = [UIColor labelColor];
+    self.metaDividerView.hidden = YES;
 }
 
 - (void)layoutSubviews {
@@ -234,10 +250,12 @@
     self.imageView.image = nil;
     [self.imageView sd_cancelCurrentImageLoad];
     self.titleLabel.text = nil;
+    self.cityLabel.text = nil;
+    self.cityLabel.hidden = YES;
     self.descLabel.text = nil;
-    self.descLabel.hidden = NO;
+    self.descLabel.hidden = YES;
     self.likeCountLabel.text = nil;
-    self.commentCountLabel.text = nil;
+    self.collectCountLabel.text = nil;
     self.useWaterfall = YES;
     self.fixedImageHeight = 0.0;
     self.imageRatio = 1.0;
@@ -245,26 +263,26 @@
 
 - (void)configureWithModel:(YALPostModel *)model useWaterfall:(BOOL)useWaterfall fixedImageHeight:(CGFloat)fixedImageHeight {
     NSString *titleText = [model.title stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    NSString *descText = [model.desc stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    if (descText.length == 0) {
-        NSMutableArray<NSString *> *parts = [NSMutableArray array];
-        NSString *cityText = [model.city stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        NSString *moodText = [model.mood stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        NSString *yearText = [model.year stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (cityText.length > 0) { [parts addObject:cityText]; }
-        if (moodText.length > 0) { [parts addObject:moodText]; }
-        if (yearText.length > 0) { [parts addObject:yearText]; }
-        descText = [parts componentsJoinedByString:@" · "];
-    }
     if (titleText.length == 0) {
         titleText = @"未命名内容";
     }
 
     self.titleLabel.text = titleText;
-    self.descLabel.text = descText;
-    self.descLabel.hidden = (descText.length == 0);
+    NSString *cityText = [model.city stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    self.cityLabel.text = cityText;
+    self.cityLabel.hidden = (cityText.length == 0);
+    self.descLabel.text = nil;
+    self.descLabel.hidden = YES;
+    [self.metaTopConstraint uninstall];
+    [self.metaRowView mas_updateConstraints:^(MASConstraintMaker *make) {
+        self.metaTopConstraint = make.top.equalTo(self.titleLabel.mas_bottom).offset(7.0);
+    }];
     self.likeCountLabel.text = [self compactCountText:MAX(model.likeCount, 0)];
-    self.commentCountLabel.text = [self compactCountText:MAX(model.commentCount, 0)];
+    NSInteger displayedCollectCount = MAX(model.collectCount, 0);
+    if (displayedCollectCount == 0 && model.isCollected) {
+        displayedCollectCount = 1;
+    }
+    self.collectCountLabel.text = [self compactCountText:displayedCollectCount];
     if (@available(iOS 13.0, *)) {
         NSString *heartIconName = model.isLiked ? @"heart.fill" : @"heart";
         self.heartImageView.image = [UIImage systemImageNamed:heartIconName];

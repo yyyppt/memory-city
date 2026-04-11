@@ -97,6 +97,16 @@ NS_ASSUME_NONNULL_BEGIN
                       pageSize:(NSInteger)pageSize
                     completion:(void (^)(BOOL success, NSArray<YALSearchUserModel *> * _Nullable userList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion;
 
+// 组合搜索：后端一次返回 content_list 和 user_list，前端按 Tab 分别展示。
+- (void)searchAllWithKeyword:(NSString *)keyword
+                        page:(NSInteger)page
+                    pageSize:(NSInteger)pageSize
+                  completion:(void (^)(BOOL success,
+                                       NSArray<YALSearchContentModel *> * _Nullable contentList,
+                                       NSArray<YALSearchUserModel *> * _Nullable userList,
+                                       NSString * _Nullable message,
+                                       NSError * _Nullable error))completion;
+
 // AI 文本分析
 - (void)analyzeText:(NSString *)text
          completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion;

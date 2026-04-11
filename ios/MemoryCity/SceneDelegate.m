@@ -127,6 +127,11 @@ static NSString * const kYALAppAppearanceStyleKey = @"YALAppAppearanceStyle";
         }
     }
 
+#if DEBUG
+    // 开发调试时每次重新运行都清掉登录态，避免旧 token 干扰联调。
+    [[YALAuthManager sharedManager] clearAuthSession];
+#endif
+
     self.lastKnownLoggedInState = [[YALAuthManager sharedManager] hasLoggedInSession];
     self.window.rootViewController = self.lastKnownLoggedInState ? [[YALTabBarController alloc] init] : [[UINavigationController alloc] initWithRootViewController:[[YALLoginController alloc] init]];
     [self.window makeKeyAndVisible];

@@ -223,7 +223,10 @@
 
     NSDictionary<NSString *, NSString *> *authHeaders = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
     [authHeaders enumerateKeysAndObjectsUsingBlock:^(NSString * _Nonnull key, NSString * _Nonnull obj, __unused BOOL * _Nonnull stop) {
-        if (merged[key].length == 0) {
+        // 重试请求必须使用当前最新 token，不能沿用首次请求里已经过期的 Authorization 头。
+        if ([key isEqualToString:@"Authorization"] || [key isEqualToString:@"Refresh-Authorization"]) {
+            merged[key] = obj;
+        } else if (merged[key].length == 0) {
             merged[key] = obj;
         }
     }];

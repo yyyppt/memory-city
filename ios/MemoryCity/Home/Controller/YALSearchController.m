@@ -231,10 +231,6 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     self.currentTab = (sender.selectedSegmentIndex == 0) ? YALSearchTabTypeContent : YALSearchTabTypeUser;
     [self.tableView reloadData];
     [self updateEmptyState];
-
-    if (self.keyword.length > 0) {
-        [self requestCurrentTabForKeyword:self.keyword];
-    }
 }
 
 - (void)triggerSearch {
@@ -271,77 +267,49 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     self.isAILoading = NO;
     [self updateEmptyState];
     [self.tableView reloadData];
-    [self requestCurrentTabForKeyword:keyword];
+    [self requestCombinedResultsForKeyword:keyword];
+    [self requestAIForKeyword:keyword];
 }
 
-- (void)requestCurrentTabForKeyword:(NSString *)keyword {
-    if (self.currentTab == YALSearchTabTypeContent) {
-        [self requestContentForKeyword:keyword];
-        [self requestAIForKeyword:keyword];
-    } else {
-        [self requestUsersForKeyword:keyword];
-    }
-}
-
-- (void)requestContentForKeyword:(NSString *)keyword {
+- (void)requestCombinedResultsForKeyword:(NSString *)keyword {
     self.isContentLoading = YES;
+    self.isUserLoading = YES;
     self.contentResults = @[];
+    self.userResults = @[];
     self.contentErrorText = @"";
+    self.userErrorText = @"";
     self.contentRequestToken += 1;
+    self.userRequestToken += 1;
     NSUInteger requestToken = self.contentRequestToken;
     [self updateEmptyState];
     [self.tableView reloadData];
 
     __weak typeof(self) weakSelf = self;
-    [[YALContentManager sharedManager] searchContentWithKeyword:keyword
-                                                           page:1
-                                                       pageSize:20
-                                                     completion:^(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error) {
+    [[YALContentManager sharedManager] searchAllWithKeyword:keyword
+                                                       page:1
+                                                   pageSize:20
+                                                 completion:^(BOOL success,
+                                                              NSArray<YALSearchContentModel *> * _Nullable contentList,
+                                                              NSArray<YALSearchUserModel *> * _Nullable userList,
+                                                              NSString * _Nullable message,
+                                                              NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || requestToken != self.contentRequestToken || ![self.keyword isEqualToString:keyword]) {
             return;
         }
 
         self.isContentLoading = NO;
-        if (success) {
-            self.contentResults = contentList ?: @[];
-        } else {
-            self.contentResults = @[];
-            self.contentErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
-        }
-        (void)total;
-        [self updateEmptyState];
-        [self.tableView reloadData];
-    }];
-}
-
-- (void)requestUsersForKeyword:(NSString *)keyword {
-    self.isUserLoading = YES;
-    self.userResults = @[];
-    self.userErrorText = @"";
-    self.userRequestToken += 1;
-    NSUInteger requestToken = self.userRequestToken;
-    [self updateEmptyState];
-    [self.tableView reloadData];
-
-    __weak typeof(self) weakSelf = self;
-    [[YALContentManager sharedManager] searchUsersWithKeyword:keyword
-                                                         page:1
-                                                     pageSize:20
-                                                   completion:^(BOOL success, NSArray<YALSearchUserModel *> * _Nullable userList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self || requestToken != self.userRequestToken || ![self.keyword isEqualToString:keyword]) {
-            return;
-        }
-
         self.isUserLoading = NO;
         if (success) {
+            self.contentResults = contentList ?: @[];
             self.userResults = userList ?: @[];
         } else {
+            NSString *errorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
+            self.contentResults = @[];
             self.userResults = @[];
-            self.userErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
+            self.contentErrorText = errorText;
+            self.userErrorText = errorText;
         }
-        (void)total;
         [self updateEmptyState];
         [self.tableView reloadData];
     }];

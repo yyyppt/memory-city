@@ -463,6 +463,67 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     }];
 }
 
+- (void)searchAllWithKeyword:(NSString *)keyword
+                        page:(NSInteger)page
+                    pageSize:(NSInteger)pageSize
+                  completion:(void (^)(BOOL success,
+                                       NSArray<YALSearchContentModel *> * _Nullable contentList,
+                                       NSArray<YALSearchUserModel *> * _Nullable userList,
+                                       NSString * _Nullable message,
+                                       NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/content/search", kYALAPIBaseURL];
+
+    NSDictionary *parameters = @{
+        @"keyword": keyword ?: @"",
+        @"page": @(MAX(page, 1)),
+        @"size": @(MAX(pageSize, 1))
+    };
+    NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
+
+    [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSInteger code = YALResponseCode(responseObject);
+        NSString *msg = YALResponseMessage(responseObject);
+        NSDictionary *data = YALResponseData(responseObject);
+
+        if (code != 200) {
+            NSError *error = [NSError errorWithDomain:@"YALContentManager"
+                                                 code:code
+                                             userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"搜索失败"}];
+            if (completion) {
+                completion(NO, nil, nil, msg, error);
+            }
+            return;
+        }
+
+        NSArray *rawContentList = YALSearchListFromResponse(responseObject, data, @[@"content_list", @"contentList", @"contents"]);
+        NSMutableArray<YALSearchContentModel *> *contentModels = [NSMutableArray arrayWithCapacity:rawContentList.count];
+        for (id item in rawContentList) {
+            if (![item isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+            [contentModels addObject:[[YALSearchContentModel alloc] initWithDictionary:item]];
+        }
+
+        NSArray *rawUserList = YALSearchListFromResponse(responseObject, data, @[@"user_list", @"userList", @"users"]);
+        NSMutableArray<YALSearchUserModel *> *userModels = [NSMutableArray arrayWithCapacity:rawUserList.count];
+        for (id item in rawUserList) {
+            if (![item isKindOfClass:[NSDictionary class]]) {
+                continue;
+            }
+            [userModels addObject:[[YALSearchUserModel alloc] initWithDictionary:item]];
+        }
+
+        if (completion) {
+            completion(YES, [contentModels copy], [userModels copy], msg, nil);
+        }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) {
+            completion(NO, nil, nil, @"网络请求失败", error);
+        }
+    }];
+}
+
 - (void)analyzeText:(NSString *)text
          completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];

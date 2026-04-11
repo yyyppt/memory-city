@@ -36,6 +36,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
   [super viewDidLoad];
 
   self.view.backgroundColor = [self pageBackgroundColor];
+  self.navigationController.view.backgroundColor = [self pageBackgroundColor];
   self.title = @"互动消息";
   self.navigationController.navigationBar.tintColor = [self accentColor];
   self.messages = @[];

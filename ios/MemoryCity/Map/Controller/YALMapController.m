@@ -10,6 +10,7 @@
 #import "YALPostDetailController.h"
 #import "YALPostModel.h"
 #import "YALContentManager.h"
+#import "YALPostManager.h"
 #import <MapKit/MapKit.h>
 #import <CoreLocation/CoreLocation.h>
 #import "YALReleaseController.h"
@@ -39,6 +40,7 @@
 @property (nonatomic, assign) CLLocationCoordinate2D footprintWalkerCoordinate;
 @property (nonatomic, assign) NSTimeInterval footprintSegmentDuration;
 @property (nonatomic, assign) BOOL didPlayFootprintAnimation;
+@property (nonatomic, strong) NSMutableSet<NSString *> *pendingGeocodeKeys;
 
 @end
 
@@ -58,6 +60,7 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.geocoder = [[CLGeocoder alloc] init];
+    self.pendingGeocodeKeys = [NSMutableSet set];
     [self setupNavigationBar];
 
     self.mapView = [[MKMapView alloc] initWithFrame:CGRectZero];
@@ -310,6 +313,25 @@
         return;
     }
     __weak typeof(self) weakSelf = self;
+
+    if (!self.playsFootprintAnimationOnAppear) {
+        [[YALPostManager shareManager] getPostsWithCache:^(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) { return; }
+                if (posts.count == 0 && error) {
+                    NSLog(@"❌ 地图加载首页内容失败: %@", error);
+                    return;
+                }
+                [strongSelf reloadMapAnnotationsWithPosts:posts ?: @[]];
+                if (!fromCache || !strongSelf.hasLoadedContentPoints) {
+                    strongSelf.hasLoadedContentPoints = YES;
+                }
+            });
+        }];
+        return;
+    }
+
     [[YALContentManager sharedManager] getMyContentListWithPage:1
                                                       pageSize:1000
                                                     completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
@@ -320,14 +342,156 @@
                 NSLog(@"❌ 地图加载我的作品失败: %@ %@", message, error);
                 return;
             }
-            [strongSelf reloadMapAnnotationsWithContentList:contentList ?: @[]];
+            NSMutableArray<YALPostModel *> *posts = [NSMutableArray array];
+            for (id item in (contentList ?: @[])) {
+                if ([item isKindOfClass:[YALPostModel class]]) {
+                    [posts addObject:item];
+                } else if ([item isKindOfClass:[NSDictionary class]]) {
+                    [posts addObject:[[YALPostModel alloc] initWithDictionary:(NSDictionary *)item]];
+                }
+            }
+            [strongSelf reloadMapAnnotationsWithPosts:posts];
             strongSelf.hasLoadedContentPoints = YES;
             [strongSelf startFootprintAnimationIfNeeded];
         });
     }];
 }
 
-- (void)reloadMapAnnotationsWithContentList:(NSArray *)contentList {
+- (CLLocationCoordinate2D)fallbackCoordinateForPost:(YALPostModel *)post index:(NSInteger)index {
+    CLLocationCoordinate2D baseCoordinate = self.mapView.centerCoordinate;
+    if (!CLLocationCoordinate2DIsValid(baseCoordinate) ||
+        (fabs(baseCoordinate.latitude) < DBL_EPSILON && fabs(baseCoordinate.longitude) < DBL_EPSILON)) {
+        baseCoordinate = CLLocationCoordinate2DMake(39.9042, 116.4074);
+    }
+
+    NSString *seedText = post.locationName.length > 0 ? post.locationName : post.city;
+    if (seedText.length == 0) {
+        seedText = post.title.length > 0 ? post.title : [NSString stringWithFormat:@"%ld", (long)index];
+    }
+
+    NSUInteger hash = 2166136261u;
+    for (NSUInteger i = 0; i < seedText.length; i++) {
+        hash ^= [seedText characterAtIndex:i];
+        hash *= 16777619u;
+    }
+    hash ^= (NSUInteger)(index * 97);
+
+    NSInteger ring = (NSInteger)(hash % 3) + 1;
+    CGFloat distance = 0.06 * ring;
+    CGFloat angle = ((hash / 3) % 360) * M_PI / 180.0;
+    CLLocationDegrees latitude = baseCoordinate.latitude + cos(angle) * distance;
+    CLLocationDegrees longitude = baseCoordinate.longitude + sin(angle) * distance;
+    return CLLocationCoordinate2DMake(latitude, longitude);
+}
+
+- (NSString *)locationQueryForPost:(YALPostModel *)post {
+    NSString *locationName = [post.locationName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *city = [post.city stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (locationName.length > 0 && city.length > 0 && [locationName rangeOfString:city].location == NSNotFound) {
+        return [NSString stringWithFormat:@"%@ %@", city, locationName];
+    }
+    if (locationName.length > 0) {
+        return locationName;
+    }
+    if (city.length > 0) {
+        return city;
+    }
+    return @"";
+}
+
+- (NSString *)geocodeKeyForPost:(YALPostModel *)post {
+    NSString *query = [self locationQueryForPost:post];
+    if (query.length == 0) {
+        return nil;
+    }
+    if ([post.contentId respondsToSelector:@selector(integerValue)] && post.contentId.integerValue > 0) {
+        return [NSString stringWithFormat:@"%@_%@", post.contentId, query];
+    }
+    return query;
+}
+
+- (void)resolveCoordinateForPostIfNeeded:(YALPostModel *)post point:(YALMemoryPoint *)point {
+    if (![post isKindOfClass:[YALPostModel class]] || ![point isKindOfClass:[YALMemoryPoint class]]) {
+        return;
+    }
+
+    BOOL hasCoordinate = CLLocationCoordinate2DIsValid(CLLocationCoordinate2DMake(post.latitude, post.longitude)) &&
+                         !(fabs(post.latitude) < DBL_EPSILON && fabs(post.longitude) < DBL_EPSILON);
+    if (hasCoordinate) {
+        return;
+    }
+
+    NSString *query = [self locationQueryForPost:post];
+    NSString *key = [self geocodeKeyForPost:post];
+    if (query.length == 0 || key.length == 0 || [self.pendingGeocodeKeys containsObject:key]) {
+        return;
+    }
+
+    [self.pendingGeocodeKeys addObject:key];
+    CLGeocoder *geocoder = [[CLGeocoder alloc] init];
+    __weak typeof(self) weakSelf = self;
+    [geocoder geocodeAddressString:query completionHandler:^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) { return; }
+            [strongSelf.pendingGeocodeKeys removeObject:key];
+            if (error || placemarks.count == 0) {
+                NSLog(@"⚠️ 地图地理编码失败: %@ error=%@", query, error);
+                return;
+            }
+
+            CLPlacemark *placemark = placemarks.firstObject;
+            CLLocation *location = placemark.location;
+            if (!location) {
+                return;
+            }
+
+            post.latitude = location.coordinate.latitude;
+            post.longitude = location.coordinate.longitude;
+            point.coordinate = location.coordinate;
+
+            if (!strongSelf.playsFootprintAnimationOnAppear) {
+                NSMutableArray<YALMemoryPoint *> *points = [NSMutableArray array];
+                for (id<MKAnnotation> annotation in strongSelf.mapView.annotations) {
+                    if ([annotation isKindOfClass:[YALMemoryPoint class]]) {
+                        [points addObject:(YALMemoryPoint *)annotation];
+                    }
+                }
+                [strongSelf fitMapToAnnotationsIfNeeded:points];
+            }
+        });
+    }];
+}
+
+- (void)fitMapToAnnotationsIfNeeded:(NSArray<YALMemoryPoint *> *)points {
+    if (points.count == 0) {
+        return;
+    }
+    if (points.count == 1) {
+        MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(points.firstObject.coordinate, 1800.0, 1800.0);
+        [self.mapView setRegion:region animated:YES];
+        return;
+    }
+
+    CLLocationDegrees minLat = DBL_MAX;
+    CLLocationDegrees maxLat = -DBL_MAX;
+    CLLocationDegrees minLon = DBL_MAX;
+    CLLocationDegrees maxLon = -DBL_MAX;
+    for (YALMemoryPoint *point in points) {
+        minLat = MIN(minLat, point.coordinate.latitude);
+        maxLat = MAX(maxLat, point.coordinate.latitude);
+        minLon = MIN(minLon, point.coordinate.longitude);
+        maxLon = MAX(maxLon, point.coordinate.longitude);
+    }
+
+    MKCoordinateSpan span = MKCoordinateSpanMake(MAX((maxLat - minLat) * 1.5, 0.25),
+                                                 MAX((maxLon - minLon) * 1.5, 0.25));
+    CLLocationCoordinate2D center = CLLocationCoordinate2DMake((minLat + maxLat) * 0.5,
+                                                               (minLon + maxLon) * 0.5);
+    [self.mapView setRegion:MKCoordinateRegionMake(center, span) animated:YES];
+}
+
+- (void)reloadMapAnnotationsWithPosts:(NSArray<YALPostModel *> *)posts {
     [self stopFootprintAnimationKeepingWalker:NO];
 
     NSMutableArray<id<MKAnnotation>> *removableAnnotations = [NSMutableArray array];
@@ -342,48 +506,49 @@
 
     NSMutableArray<YALMemoryPoint *> *points = [NSMutableArray array];
     NSMutableArray<YALMemoryPoint *> *footprintPoints = [NSMutableArray array];
-    for (id item in contentList) {
-        if (![item isKindOfClass:[NSDictionary class]]) {
+    NSInteger fallbackIndex = 0;
+    for (YALPostModel *post in posts) {
+        if (![post isKindOfClass:[YALPostModel class]]) {
             continue;
         }
-
-        YALPostModel *post = [[YALPostModel alloc] initWithDictionary:(NSDictionary *)item];
-        BOOL hasLocationName = post.locationName.length > 0;
+        BOOL hasLocationName = post.locationName.length > 0 || post.city.length > 0;
         BOOL hasCoordinate = CLLocationCoordinate2DIsValid(CLLocationCoordinate2DMake(post.latitude, post.longitude)) &&
                              !(fabs(post.latitude) < DBL_EPSILON && fabs(post.longitude) < DBL_EPSILON);
         if (!hasLocationName && !hasCoordinate) {
             continue;
         }
 
-        NSString *subtitle = post.locationName.length > 0 ? post.locationName : post.createTime;
+        NSString *resolvedLocation = post.locationName.length > 0 ? post.locationName : post.city;
+        NSString *subtitle = resolvedLocation.length > 0 ? resolvedLocation : post.createTime;
         if (subtitle.length == 0) {
             subtitle = post.isPublic ? @"已发布作品" : @"私密作品";
         }
 
-        YALMemoryPoint *point = [YALMemoryPoint pointWithCoordinate:CLLocationCoordinate2DMake(post.latitude, post.longitude)
+        CLLocationCoordinate2D coordinate = hasCoordinate
+            ? CLLocationCoordinate2DMake(post.latitude, post.longitude)
+            : [self fallbackCoordinateForPost:post index:fallbackIndex];
+
+        YALMemoryPoint *point = [YALMemoryPoint pointWithCoordinate:coordinate
                                                               title:(post.title.length > 0 ? post.title : @"未命名作品")
                                                            subtitle:subtitle
                                                          detailText:(post.content.length > 0 ? post.content : post.desc)
                                                         userCreated:NO];
-        if (!hasCoordinate) {
-            // 只有地址没有经纬度时，放在当前可视区域中心附近，避免丢失此类作品。
-            CLLocationCoordinate2D fallbackCoordinate = self.mapView.centerCoordinate;
-            if (!CLLocationCoordinate2DIsValid(fallbackCoordinate) ||
-                (fabs(fallbackCoordinate.latitude) < DBL_EPSILON && fabs(fallbackCoordinate.longitude) < DBL_EPSILON)) {
-                fallbackCoordinate = CLLocationCoordinate2DMake(39.9042, 116.4074);
-            }
-            point.coordinate = fallbackCoordinate;
-        }
         point.postModel = post;
         [points addObject:point];
         if (hasCoordinate) {
             [footprintPoints addObject:point];
+        } else {
+            [self resolveCoordinateForPostIfNeeded:post point:point];
+            fallbackIndex += 1;
         }
     }
     self.chronologicalFootprintPoints = [self chronologicalFootprintPointsFromPoints:footprintPoints];
 
     if (points.count > 0) {
         [self.mapView addAnnotations:points];
+        if (!self.playsFootprintAnimationOnAppear) {
+            [self fitMapToAnnotationsIfNeeded:points];
+        }
     }
 }
 

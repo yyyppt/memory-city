@@ -28,6 +28,8 @@
 @implementation YALLikesController
 
 static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
+static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
+static NSString * const kYALInteractionCachePrefix = @"YALPostDetailInteractionCache";
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -42,6 +44,8 @@ static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus"
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+
+    [self syncCachedInteractionStateForLikesData];
 
     if (self.hasLoadedOnce) {
         [self refreshData];
@@ -138,6 +142,7 @@ static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus"
             if (hasCachedValue) {
                 model.isLiked = cachedLiked;
             }
+            [self syncCachedInteractionStateForPost:model];
             if (model.isLiked) {
                 [likedPosts addObject:model];
             }
@@ -271,6 +276,64 @@ static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus"
         *hasValue = YES;
     }
     return [defaults boolForKey:key];
+}
+
+- (NSString *)interactionCacheKeyForPrefix:(NSString *)prefix contentId:(NSNumber *)contentId {
+    if (prefix.length == 0 || contentId.integerValue <= 0) {
+        return nil;
+    }
+
+    NSInteger userId = [YALAuthManager sharedManager].currentUser.userId;
+    if (userId > 0) {
+        return [NSString stringWithFormat:@"%@_%ld_%@", prefix, (long)userId, contentId];
+    }
+    return [NSString stringWithFormat:@"%@_%@", prefix, contentId];
+}
+
+- (void)syncCachedInteractionStateForPost:(YALPostModel *)post {
+    if (![post isKindOfClass:[YALPostModel class]]) {
+        return;
+    }
+
+    BOOL hasCollectedValue = NO;
+    BOOL cachedCollected = [self cachedBoolStatusForPrefix:kYALCollectedStatusCachePrefix contentId:post.contentId hasValue:&hasCollectedValue];
+    if (hasCollectedValue) {
+        post.isCollected = cachedCollected;
+    }
+
+    NSString *interactionKey = [self interactionCacheKeyForPrefix:kYALInteractionCachePrefix contentId:post.contentId];
+    NSDictionary *interactionCache = interactionKey.length > 0 ? [[NSUserDefaults standardUserDefaults] objectForKey:interactionKey] : nil;
+    if (![interactionCache isKindOfClass:[NSDictionary class]]) {
+        return;
+    }
+
+    id likeCountObj = interactionCache[@"like_count"];
+    if ([likeCountObj respondsToSelector:@selector(integerValue)]) {
+        post.likeCount = MAX([likeCountObj integerValue], 0);
+    }
+
+    id favoriteCountObj = interactionCache[@"favorite_count"];
+    if ([favoriteCountObj respondsToSelector:@selector(integerValue)]) {
+        post.collectCount = MAX([favoriteCountObj integerValue], 0);
+    }
+
+    id commentCountObj = interactionCache[@"comment_count"];
+    if ([commentCountObj respondsToSelector:@selector(integerValue)]) {
+        post.commentCount = MAX([commentCountObj integerValue], 0);
+    }
+}
+
+- (void)syncCachedInteractionStateForLikesData {
+    if (self.likesData.count == 0) {
+        return;
+    }
+
+    for (YALPostModel *post in self.likesData) {
+        [self syncCachedInteractionStateForPost:post];
+    }
+    if (self.isViewLoaded) {
+        [self.tableView reloadData];
+    }
 }
 
 #pragma mark - 工具方法

@@ -352,7 +352,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         } else if (self.contentErrorText.length > 0) {
             text = self.contentErrorText;
         } else if (self.contentResults.count == 0) {
-            text = @"没有找到相关内容";
+            text = @"什么都没搜到";
         }
     } else {
         if (self.isUserLoading) {
@@ -360,7 +360,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         } else if (self.userErrorText.length > 0) {
             text = self.userErrorText;
         } else if (self.userResults.count == 0) {
-            text = @"没有找到相关用户";
+            text = @"什么都没搜到";
         }
     }
 
@@ -373,6 +373,9 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     (void)tableView;
     if (self.currentTab == YALSearchTabTypeContent) {
+        if ([self shouldShowEmptySearchResult]) {
+            return 0;
+        }
         return self.isResultPage ? 2 : 1;
     }
     return 1;
@@ -384,7 +387,13 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         if (!self.isResultPage) {
             return 0;
         }
+        if ([self shouldShowEmptySearchResult]) {
+            return 0;
+        }
         return section == 0 ? 1 : self.contentResults.count;
+    }
+    if ([self shouldShowEmptySearchResult]) {
+        return 0;
     }
     return self.userResults.count;
 }
@@ -540,6 +549,16 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
 - (UIColor *)accentColor {
     return [UIColor colorWithRed:0.98 green:0.49 blue:0.18 alpha:1.0];
+}
+
+- (BOOL)shouldShowEmptySearchResult {
+    if (!self.isResultPage || self.keyword.length == 0) {
+        return NO;
+    }
+    if (self.currentTab == YALSearchTabTypeContent) {
+        return !self.isContentLoading && self.contentErrorText.length == 0 && self.contentResults.count == 0;
+    }
+    return !self.isUserLoading && self.userErrorText.length == 0 && self.userResults.count == 0;
 }
 
 @end

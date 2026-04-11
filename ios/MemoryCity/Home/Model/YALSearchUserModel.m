@@ -59,6 +59,10 @@ static NSNumber * _Nullable YALSearchUserFirstNumber(NSDictionary *dict, NSArray
     self = [super init];
     if (self) {
         NSDictionary *nestedUser = [dict[@"user"] isKindOfClass:[NSDictionary class]] ? dict[@"user"] : nil;
+        if (!nestedUser && [dict[@"user"] isKindOfClass:[NSArray class]]) {
+            id firstUser = [(NSArray *)dict[@"user"] firstObject];
+            nestedUser = [firstUser isKindOfClass:[NSDictionary class]] ? firstUser : nil;
+        }
         if (!nestedUser) {
             nestedUser = [dict[@"author"] isKindOfClass:[NSDictionary class]] ? dict[@"author"] : nil;
         }

@@ -15,6 +15,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSInteger userId;
 @property (nonatomic, copy, nullable) NSString *bio;
 @property (nonatomic, copy, nullable) NSString *username;
+@property (nonatomic, copy, nullable) NSString *phone;
 @property (nonatomic, copy, nullable) NSString *nickname;
 @property (nonatomic, copy, nullable) NSString *avatar;
 @property (nonatomic, copy, nullable) NSString *token;

@@ -79,6 +79,36 @@ static NSArray *YALSearchListFromResponse(id responseObject, id data, NSArray<NS
     return @[];
 }
 
+static NSArray *YALFlattenSearchWrappedList(NSArray *rawList, NSArray<NSString *> *nestedKeys) {
+    if (![rawList isKindOfClass:[NSArray class]]) {
+        return @[];
+    }
+
+    NSMutableArray *flattened = [NSMutableArray array];
+    for (id item in rawList) {
+        if (![item isKindOfClass:[NSDictionary class]]) {
+            [flattened addObject:item];
+            continue;
+        }
+
+        NSDictionary *dict = (NSDictionary *)item;
+        BOOL didAppendNestedList = NO;
+        for (NSString *key in nestedKeys) {
+            id nestedValue = dict[key];
+            if ([nestedValue isKindOfClass:[NSArray class]]) {
+                [flattened addObjectsFromArray:(NSArray *)nestedValue];
+                didAppendNestedList = YES;
+                break;
+            }
+        }
+
+        if (!didAppendNestedList) {
+            [flattened addObject:item];
+        }
+    }
+    return [flattened copy];
+}
+
 static BOOL YALIsFormatError(id responseObject) {
     NSString *msg = YALResponseMessage(responseObject);
     return (YALResponseCode(responseObject) == 400 &&
@@ -364,10 +394,18 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     };
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
+    NSLog(@"🔎 组合搜索请求: url=%@ params=%@", url, parameters);
+
     [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSLog(@"🔎 组合搜索原始响应: %@", responseObject);
         NSInteger code = YALResponseCode(responseObject);
         NSString *msg = YALResponseMessage(responseObject);
         NSDictionary *data = YALResponseData(responseObject);
+        NSLog(@"🔎 组合搜索解析状态: code=%ld msg=%@ dataClass=%@ data=%@",
+              (long)code,
+              msg ?: @"",
+              NSStringFromClass([data class]),
+              data);
 
         if (code != 200) {
             NSError *error = [NSError errorWithDomain:@"YALContentManager"
@@ -437,6 +475,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         }
 
         NSArray *rawList = YALSearchListFromResponse(responseObject, data, @[@"users", @"user_list", @"userList"]);
+        rawList = YALFlattenSearchWrappedList(rawList, @[@"user", @"users", @"user_list", @"list"]);
         NSMutableArray<YALSearchUserModel *> *models = [NSMutableArray arrayWithCapacity:rawList.count];
         for (id item in rawList) {
             if (![item isKindOfClass:[NSDictionary class]]) {
@@ -497,6 +536,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         }
 
         NSArray *rawContentList = YALSearchListFromResponse(responseObject, data, @[@"content_list", @"contentList", @"contents"]);
+        rawContentList = YALFlattenSearchWrappedList(rawContentList, @[@"content", @"contents", @"content_list", @"list"]);
+        NSLog(@"🔎 组合搜索 content_list: count=%lu first=%@",
+              (unsigned long)rawContentList.count,
+              rawContentList.firstObject);
         NSMutableArray<YALSearchContentModel *> *contentModels = [NSMutableArray arrayWithCapacity:rawContentList.count];
         for (id item in rawContentList) {
             if (![item isKindOfClass:[NSDictionary class]]) {
@@ -506,6 +549,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         }
 
         NSArray *rawUserList = YALSearchListFromResponse(responseObject, data, @[@"user_list", @"userList", @"users"]);
+        rawUserList = YALFlattenSearchWrappedList(rawUserList, @[@"user", @"users", @"user_list", @"list"]);
+        NSLog(@"🔎 组合搜索 user_list: count=%lu first=%@",
+              (unsigned long)rawUserList.count,
+              rawUserList.firstObject);
         NSMutableArray<YALSearchUserModel *> *userModels = [NSMutableArray arrayWithCapacity:rawUserList.count];
         for (id item in rawUserList) {
             if (![item isKindOfClass:[NSDictionary class]]) {
@@ -513,11 +560,17 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
             [userModels addObject:[[YALSearchUserModel alloc] initWithDictionary:item]];
         }
+        NSLog(@"🔎 组合搜索模型结果: contentModels=%lu userModels=%lu firstContentTitle=%@ firstUserNickname=%@",
+              (unsigned long)contentModels.count,
+              (unsigned long)userModels.count,
+              contentModels.firstObject.title,
+              userModels.firstObject.nickname);
 
         if (completion) {
             completion(YES, [contentModels copy], [userModels copy], msg, nil);
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        NSLog(@"🔎 组合搜索网络失败: %@", error);
         if (completion) {
             completion(NO, nil, nil, @"网络请求失败", error);
         }

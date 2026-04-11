@@ -25,6 +25,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 @property (nonatomic, assign) NSInteger totalCommentCount;
 @property (nonatomic, assign) NSInteger totalCollectCount;
 @property (nonatomic, assign) NSInteger unreadInteractionCount;
+@property (nonatomic, assign) NSInteger messageLoadToken;
 
 @end
 
@@ -99,6 +100,8 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 }
 
 - (void)loadMessages {
+  NSInteger loadToken = ++self.messageLoadToken;
+
   if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
     self.totalLikeCount = 0;
     self.totalCommentCount = 0;
@@ -161,8 +164,126 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
       }
     }
 
-    [strongSelf buildMessagesFromPosts:posts];
+    [strongSelf enrichPostsWithDetailIfNeeded:posts loadToken:loadToken completion:^(NSArray<YALPostModel *> * _Nonnull enrichedPosts) {
+      [strongSelf buildMessagesFromPosts:enrichedPosts];
+    }];
   }];
+}
+
+- (void)enrichPostsWithDetailIfNeeded:(NSArray<YALPostModel *> *)posts
+                            loadToken:(NSInteger)loadToken
+                           completion:(void (^)(NSArray<YALPostModel *> *enrichedPosts))completion {
+  if (posts.count == 0) {
+    if (completion) {
+      completion(@[]);
+    }
+    return;
+  }
+
+  NSMutableArray<YALPostModel *> *targets = [NSMutableArray array];
+  for (YALPostModel *post in posts) {
+    if (![post isKindOfClass:[YALPostModel class]] || post.contentId.integerValue <= 0) {
+      continue;
+    }
+    // 消息页重点看互动统计，收藏数异常时补拉详情可与详情页统一。
+    if (post.collectCount <= 0 || post.commentCount <= 0 || post.likeCount <= 0) {
+      [targets addObject:post];
+    }
+  }
+
+  if (targets.count == 0) {
+    if (completion) {
+      completion(posts);
+    }
+    return;
+  }
+
+  dispatch_group_t group = dispatch_group_create();
+  __weak typeof(self) weakSelf = self;
+
+  for (YALPostModel *post in targets) {
+    dispatch_group_enter(group);
+    [[YALContentManager sharedManager] getContentDetailWithId:post.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
+      (void)error;
+      __strong typeof(weakSelf) strongSelf = weakSelf;
+      if (!strongSelf) {
+        dispatch_group_leave(group);
+        return;
+      }
+      if (!success || ![content isKindOfClass:[NSDictionary class]]) {
+        dispatch_group_leave(group);
+        return;
+      }
+
+      [strongSelf applyStatsFromContent:content toPost:post];
+      dispatch_group_leave(group);
+    }];
+  }
+
+  dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+    __strong typeof(weakSelf) strongSelf = weakSelf;
+    if (!strongSelf || loadToken != strongSelf.messageLoadToken) {
+      return;
+    }
+    if (completion) {
+      completion(posts);
+    }
+  });
+}
+
+- (void)applyStatsFromContent:(NSDictionary *)content toPost:(YALPostModel *)post {
+  NSInteger likeCount = [self integerValueRecursivelyFromObject:content keys:@[@"like_count", @"likeCount", @"liked_count", @"likes_count"] fallback:post.likeCount];
+  NSInteger commentCount = [self integerValueRecursivelyFromObject:content keys:@[@"comment_count", @"commentCount", @"comments_count"] fallback:post.commentCount];
+  NSInteger collectCount = [self integerValueRecursivelyFromObject:content keys:@[@"collect_count", @"favorite_count", @"collected_count", @"collectCount", @"favoriteCount"] fallback:post.collectCount];
+
+  post.likeCount = MAX(likeCount, 0);
+  post.commentCount = MAX(commentCount, 0);
+  post.collectCount = MAX(collectCount, 0);
+}
+
+- (NSInteger)integerValueRecursivelyFromObject:(id)object
+                                          keys:(NSArray<NSString *> *)keys
+                                      fallback:(NSInteger)fallback {
+  if ([object isKindOfClass:[NSDictionary class]]) {
+    NSDictionary *dict = (NSDictionary *)object;
+    NSInteger directValue = [self integerValueFromDictionary:dict keys:keys fallback:NSNotFound];
+    if (directValue != NSNotFound) {
+      return directValue;
+    }
+
+    NSArray<NSString *> *nestedKeys = @[@"data", @"content", @"item", @"post"];
+    for (NSString *nestedKey in nestedKeys) {
+      id nested = dict[nestedKey];
+      NSInteger nestedValue = [self integerValueRecursivelyFromObject:nested keys:keys fallback:NSNotFound];
+      if (nestedValue != NSNotFound) {
+        return nestedValue;
+      }
+    }
+  } else if ([object isKindOfClass:[NSArray class]]) {
+    for (id item in (NSArray *)object) {
+      NSInteger nestedValue = [self integerValueRecursivelyFromObject:item keys:keys fallback:NSNotFound];
+      if (nestedValue != NSNotFound) {
+        return nestedValue;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+- (NSInteger)integerValueFromDictionary:(NSDictionary *)dict
+                                   keys:(NSArray<NSString *> *)keys
+                               fallback:(NSInteger)fallback {
+  if (![dict isKindOfClass:[NSDictionary class]]) {
+    return fallback;
+  }
+  for (NSString *key in keys) {
+    id value = dict[key];
+    if ([value respondsToSelector:@selector(integerValue)]) {
+      return [value integerValue];
+    }
+  }
+  return fallback;
 }
 
 - (void)buildMessagesFromPosts:(NSArray<YALPostModel *> *)posts {

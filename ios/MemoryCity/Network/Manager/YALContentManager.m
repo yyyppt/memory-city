@@ -763,6 +763,9 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"page"] = @(page);
     parameters[@"pageSize"] = @(pageSize);
+    // 兼容后端常见分页参数命名（文档里是 size）
+    parameters[@"size"] = @(pageSize);
+    parameters[@"limit"] = @(pageSize);
 
     // 获取认证headers（需要token）
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
@@ -980,7 +983,33 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             if (![item isKindOfClass:[NSDictionary class]]) {
                 continue;
             }
-            YALPostModel *model = [[YALPostModel alloc] initWithDictionary:(NSDictionary *)item];
+
+            NSDictionary *itemDict = (NSDictionary *)item;
+            NSDictionary *contentDict = [itemDict[@"content"] isKindOfClass:[NSDictionary class]] ? itemDict[@"content"] : nil;
+            NSMutableDictionary *mergedDict = [NSMutableDictionary dictionary];
+
+            // 兼容两种返回结构：
+            // 1) 直接返回内容字段
+            // 2) 返回收藏关系，真实内容放在 content 子字典里
+            if ([contentDict isKindOfClass:[NSDictionary class]]) {
+                [mergedDict addEntriesFromDictionary:contentDict];
+                [mergedDict addEntriesFromDictionary:itemDict];
+            } else {
+                [mergedDict addEntriesFromDictionary:itemDict];
+            }
+
+            // 统一内容ID字段，避免出现 contentId/id 导致解析不到 content_id
+            if (![mergedDict[@"content_id"] respondsToSelector:@selector(integerValue)]) {
+                id contentId = mergedDict[@"contentId"];
+                if (![contentId respondsToSelector:@selector(integerValue)]) {
+                    contentId = mergedDict[@"id"];
+                }
+                if ([contentId respondsToSelector:@selector(integerValue)]) {
+                    mergedDict[@"content_id"] = @([contentId integerValue]);
+                }
+            }
+
+            YALPostModel *model = [[YALPostModel alloc] initWithDictionary:[mergedDict copy]];
             [contentList addObject:model];
         }
 

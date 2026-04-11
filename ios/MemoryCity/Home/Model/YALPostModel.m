@@ -117,6 +117,15 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
         if (![collectCountValue respondsToSelector:@selector(integerValue)]) {
             collectCountValue = dict[@"favorite_count"];
         }
+        if (![collectCountValue respondsToSelector:@selector(integerValue)]) {
+            collectCountValue = dict[@"collected_count"];
+        }
+        if (![collectCountValue respondsToSelector:@selector(integerValue)]) {
+            collectCountValue = dict[@"collectCount"];
+        }
+        if (![collectCountValue respondsToSelector:@selector(integerValue)]) {
+            collectCountValue = dict[@"favoriteCount"];
+        }
         if ([collectCountValue respondsToSelector:@selector(integerValue)]) {
             self.collectCount = MAX([collectCountValue integerValue], 0);
         }

@@ -22,6 +22,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, assign) BOOL isLoading;
 @property (nonatomic, assign) BOOL hasLoadedOnce;
+@property (nonatomic, assign) NSInteger statsRefreshToken;
 
 @end
 
@@ -130,18 +131,139 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
             // /interact/collect/my 返回的就是“我的收藏”，这里以后端结果为准，
             // 避免本地旧缓存把已收藏状态覆盖成未收藏。
             model.isCollected = YES;
+            if (model.collectCount <= 0) {
+                // “我的收藏”列表里，最少也应该包含当前用户这 1 次收藏。
+                model.collectCount = 1;
+            }
             [strongSelf persistCollectedStatus:YES contentId:model.contentId];
             [strongSelf.favoritesData addObject:model];
         }
 
         [strongSelf.tableView reloadData];
         [strongSelf updateEmptyState];
+        [strongSelf refreshFavoriteStatsFromDetail];
     }];
 }
 
 - (void)updateEmptyState {
     self.emptyLabel.hidden = (self.favoritesData.count > 0);
     self.tableView.backgroundView.hidden = self.emptyLabel.hidden;
+}
+
+#pragma mark - Detail Stats Sync
+
+- (void)refreshFavoriteStatsFromDetail {
+    if (self.favoritesData.count == 0) {
+        return;
+    }
+
+    NSInteger refreshToken = ++self.statsRefreshToken;
+    __weak typeof(self) weakSelf = self;
+
+    for (YALPostModel *model in self.favoritesData) {
+        if (![model.contentId respondsToSelector:@selector(integerValue)] || model.contentId.integerValue <= 0) {
+            continue;
+        }
+
+        [[YALContentManager sharedManager] getContentDetailWithId:model.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
+            (void)error;
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+            if (refreshToken != strongSelf.statsRefreshToken) {
+                return;
+            }
+            if (!success || ![content isKindOfClass:[NSDictionary class]]) {
+                return;
+            }
+
+            BOOL changed = [strongSelf applyStatsFromContent:content toModel:model];
+            if (!changed) {
+                return;
+            }
+
+            NSUInteger index = [strongSelf.favoritesData indexOfObjectPassingTest:^BOOL(YALPostModel * _Nonnull obj, NSUInteger idx, __unused BOOL * _Nonnull stop) {
+                return [obj.contentId isEqual:model.contentId];
+            }];
+
+            if (index != NSNotFound) {
+                NSIndexPath *indexPath = [NSIndexPath indexPathForRow:(NSInteger)index inSection:0];
+                if ([strongSelf.tableView.indexPathsForVisibleRows containsObject:indexPath]) {
+                    [strongSelf.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+                } else {
+                    [strongSelf.tableView reloadData];
+                }
+            }
+        }];
+    }
+}
+
+- (BOOL)applyStatsFromContent:(NSDictionary *)content toModel:(YALPostModel *)model {
+    NSInteger previousLike = MAX(model.likeCount, 0);
+    NSInteger previousComment = MAX(model.commentCount, 0);
+    NSInteger previousCollect = MAX(model.collectCount, 0);
+
+    NSInteger likeCount = [self integerValueRecursivelyFromObject:content keys:@[@"like_count", @"likeCount", @"liked_count", @"likes_count"] fallback:previousLike];
+    NSInteger commentCount = [self integerValueRecursivelyFromObject:content keys:@[@"comment_count", @"commentCount", @"comments_count"] fallback:previousComment];
+    NSInteger collectCount = [self integerValueRecursivelyFromObject:content keys:@[@"collect_count", @"favorite_count", @"collected_count", @"collectCount", @"favoriteCount"] fallback:previousCollect];
+
+    model.likeCount = MAX(likeCount, 0);
+    model.commentCount = MAX(commentCount, 0);
+    model.collectCount = MAX(collectCount, 0);
+    if (model.isCollected && model.collectCount <= 0) {
+        model.collectCount = 1;
+    }
+
+    return (model.likeCount != previousLike ||
+            model.commentCount != previousComment ||
+            model.collectCount != previousCollect);
+}
+
+- (NSInteger)integerValueFromDictionary:(NSDictionary *)dict
+                                   keys:(NSArray<NSString *> *)keys
+                               fallback:(NSInteger)fallback {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return fallback;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value respondsToSelector:@selector(integerValue)]) {
+            return [value integerValue];
+        }
+    }
+    return fallback;
+}
+
+- (NSInteger)integerValueRecursivelyFromObject:(id)object
+                                          keys:(NSArray<NSString *> *)keys
+                                      fallback:(NSInteger)fallback {
+    if ([object isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *dict = (NSDictionary *)object;
+        NSInteger directValue = [self integerValueFromDictionary:dict keys:keys fallback:NSNotFound];
+        if (directValue != NSNotFound) {
+            return directValue;
+        }
+
+        // 优先向常见嵌套结构继续查找
+        NSArray *nestedKeys = @[@"data", @"content", @"item", @"post"];
+        for (NSString *nestedKey in nestedKeys) {
+            id nested = dict[nestedKey];
+            NSInteger nestedValue = [self integerValueRecursivelyFromObject:nested keys:keys fallback:NSNotFound];
+            if (nestedValue != NSNotFound) {
+                return nestedValue;
+            }
+        }
+    } else if ([object isKindOfClass:[NSArray class]]) {
+        for (id item in (NSArray *)object) {
+            NSInteger nestedValue = [self integerValueRecursivelyFromObject:item keys:keys fallback:NSNotFound];
+            if (nestedValue != NSNotFound) {
+                return nestedValue;
+            }
+        }
+    }
+
+    return fallback;
 }
 
 #pragma mark - UITableViewDataSource

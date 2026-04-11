@@ -683,6 +683,7 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
     }
     YALPostDetailController *detail = [[YALPostDetailController alloc] init];
     detail.post = model;
+    detail.openedFromAuthorProfile = YES;
     detail.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:detail animated:YES];
 }
@@ -2557,6 +2558,10 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
 }
 
 - (void)ownerTapped {
+    if (self.openedFromAuthorProfile && [self popBackToAuthorProfileIfPresent]) {
+        return;
+    }
+
     if (@available(iOS 14.0, *)) {
         self.navigationItem.backButtonDisplayMode = UINavigationItemBackButtonDisplayModeMinimal;
     }
@@ -2612,6 +2617,26 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             }
         });
     }];
+}
+
+- (BOOL)popBackToAuthorProfileIfPresent {
+    NSArray<UIViewController *> *viewControllers = self.navigationController.viewControllers;
+    for (UIViewController *controller in [viewControllers reverseObjectEnumerator]) {
+        if (controller == self) {
+            continue;
+        }
+        if ([controller isKindOfClass:[YALAuthorProfileController class]]) {
+            [self.navigationController popToViewController:controller animated:YES];
+            return YES;
+        }
+    }
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"已经在作者作品里"
+                                                                   message:@"返回上一页可以继续查看这个作者的公开内容。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+    return YES;
 }
 
 - (void)didTapComment {

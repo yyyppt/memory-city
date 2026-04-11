@@ -14,8 +14,8 @@ NS_ASSUME_NONNULL_BEGIN
 @interface YALPostDetailController : UIViewController
 
 @property (nonatomic, strong) YALPostModel *post;
+@property (nonatomic, assign) BOOL openedFromAuthorProfile;
 
 @end
 
 NS_ASSUME_NONNULL_END
-

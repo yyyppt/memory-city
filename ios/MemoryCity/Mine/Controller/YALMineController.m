@@ -336,6 +336,7 @@ static BOOL YALMineBoolFromPublicValue(id value) {
         }
         case 1: {
             YALMapController *controller = [[YALMapController alloc] init];
+            controller.playsFootprintAnimationOnAppear = YES;
             [self pushController:controller];
             break;
         }

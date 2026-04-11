@@ -26,7 +26,7 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.backgroundColor = [UIColor systemGroupedBackgroundColor];
+        self.backgroundColor = [self pageBackgroundColor];
         [self buildUI];
     }
     return self;
@@ -126,6 +126,18 @@
         make.top.equalTo(_header.mas_bottom);
         make.left.right.bottom.equalTo(self);
     }];
+}
+
+- (UIColor *)pageBackgroundColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:0.075 green:0.068 blue:0.06 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.985 green:0.965 blue:0.935 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.985 green:0.965 blue:0.935 alpha:1.0];
 }
 
 - (void)setYear:(NSInteger)year {

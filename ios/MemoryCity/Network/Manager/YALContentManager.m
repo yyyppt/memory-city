@@ -51,6 +51,33 @@ static NSDictionary *YALResponseData(id responseObject) {
     return [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
 }
 
+static NSArray *YALSearchListFromResponse(id responseObject, id data, NSArray<NSString *> *preferredKeys) {
+    if ([responseObject isKindOfClass:[NSArray class]]) {
+        return (NSArray *)responseObject;
+    }
+    if ([responseObject isKindOfClass:[NSDictionary class]]) {
+        id rawData = ((NSDictionary *)responseObject)[@"data"];
+        if ([rawData isKindOfClass:[NSArray class]]) {
+            return (NSArray *)rawData;
+        }
+    }
+    if ([data isKindOfClass:[NSArray class]]) {
+        return (NSArray *)data;
+    }
+    if (![data isKindOfClass:[NSDictionary class]]) {
+        return @[];
+    }
+    NSMutableArray<NSString *> *keys = [NSMutableArray arrayWithArray:preferredKeys ?: @[]];
+    [keys addObjectsFromArray:@[@"list", @"records", @"items", @"results", @"data"]];
+    for (NSString *key in keys) {
+        id value = data[key];
+        if ([value isKindOfClass:[NSArray class]]) {
+            return (NSArray *)value;
+        }
+    }
+    return @[];
+}
+
 static BOOL YALIsFormatError(id responseObject) {
     NSString *msg = YALResponseMessage(responseObject);
     return (YALResponseCode(responseObject) == 400 &&
@@ -345,7 +372,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             return;
         }
 
-        NSArray *rawList = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
+        NSArray *rawList = YALSearchListFromResponse(responseObject, data, @[@"contents", @"content_list"]);
         NSMutableArray<YALSearchContentModel *> *models = [NSMutableArray arrayWithCapacity:rawList.count];
         for (id item in rawList) {
             if (![item isKindOfClass:[NSDictionary class]]) {
@@ -402,7 +429,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             return;
         }
 
-        NSArray *rawList = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
+        NSArray *rawList = YALSearchListFromResponse(responseObject, data, @[@"users", @"user_list", @"userList"]);
         NSMutableArray<YALSearchUserModel *> *models = [NSMutableArray arrayWithCapacity:rawList.count];
         for (id item in rawList) {
             if (![item isKindOfClass:[NSDictionary class]]) {

@@ -1118,4 +1118,222 @@ static id YALJSONObjectForKeys(NSDictionary *dict, NSArray<NSString *> *keys) {
     }];
 }
 
+- (void)requestPasswordResetCodeForPhone:(NSString *)phone
+                              completion:(void (^)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion {
+    NSString *trimPhone = [phone stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimPhone.length == 0) {
+        [self completePasswordResetBool:NO
+                                message:@"请输入手机号"
+                                   code:-60
+                                  error:nil
+                             completion:completion];
+        return;
+    }
+
+    NSString *url = [NSString stringWithFormat:@"%@/user/password/forgot/send-code", kYALAPIBaseURL];
+    NSDictionary *parameters = @{@"phone": trimPhone};
+
+    [[YALNetworkManager shareManager] POST:url
+                                parameters:parameters
+                                   headers:nil
+                                  progress:nil
+                                   success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSDictionary *response = [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
+        NSString *message = [self messageFromAuthResponse:response fallback:@"验证码已发送"];
+        if ([self isSuccessAuthResponse:response]) {
+            if (completion) { completion(YES, message.length > 0 ? message : @"验证码已发送", nil); }
+            return;
+        }
+        NSInteger code = [self codeFromAuthResponse:response fallback:-61];
+        NSString *fallback = message.length > 0 ? message : @"验证码发送失败";
+        NSError *error = [NSError errorWithDomain:@"YALAuthManager"
+                                             code:code
+                                         userInfo:@{NSLocalizedDescriptionKey: fallback}];
+        if (completion) { completion(NO, fallback, error); }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) { completion(NO, error.localizedDescription ?: @"网络错误", error); }
+    }];
+}
+
+- (void)verifyPasswordResetCodeForPhone:(NSString *)phone
+                                   code:(NSString *)code
+                             completion:(void (^)(BOOL success, NSString * _Nullable message, NSString * _Nullable resetToken, NSError * _Nullable error))completion {
+    NSString *trimPhone = [phone stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *trimCode = [code stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimPhone.length == 0 || trimCode.length == 0) {
+        NSError *error = [NSError errorWithDomain:@"YALAuthManager"
+                                             code:-62
+                                         userInfo:@{NSLocalizedDescriptionKey: @"请输入手机号和验证码"}];
+        if (completion) { completion(NO, @"请输入手机号和验证码", nil, error); }
+        return;
+    }
+
+    NSString *url = [NSString stringWithFormat:@"%@/user/password/forgot/verify-code", kYALAPIBaseURL];
+    NSDictionary *parameters = @{@"phone": trimPhone, @"code": trimCode};
+
+    [[YALNetworkManager shareManager] POST:url
+                                parameters:parameters
+                                   headers:nil
+                                  progress:nil
+                                   success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSDictionary *response = [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
+        NSString *message = [self messageFromAuthResponse:response fallback:@"验证成功"];
+        if ([self isSuccessAuthResponse:response]) {
+            NSString *resetToken = [self resetTokenFromAuthResponse:response];
+            if (completion) { completion(YES, message.length > 0 ? message : @"验证成功", resetToken, nil); }
+            return;
+        }
+        NSInteger responseCode = [self codeFromAuthResponse:response fallback:-63];
+        NSString *fallback = message.length > 0 ? message : @"验证码错误或已过期";
+        NSError *error = [NSError errorWithDomain:@"YALAuthManager"
+                                             code:responseCode
+                                         userInfo:@{NSLocalizedDescriptionKey: fallback}];
+        if (completion) { completion(NO, fallback, nil, error); }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) { completion(NO, error.localizedDescription ?: @"网络错误", nil, error); }
+    }];
+}
+
+- (void)resetPasswordForPhone:(NSString *)phone
+             verificationCode:(NSString *)code
+                   resetToken:(NSString *)resetToken
+                  newPassword:(NSString *)newPassword
+                repeatPassword:(NSString *)repeatPassword
+                    completion:(void (^)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion {
+    NSString *trimPhone = [phone stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *trimCode = [code stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *trimToken = [resetToken stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *newP = [newPassword stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *repeatP = [repeatPassword stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    if (trimPhone.length == 0 || newP.length == 0 || repeatP.length == 0) {
+        [self completePasswordResetBool:NO
+                                message:@"手机号和密码不能为空"
+                                   code:-64
+                                  error:nil
+                             completion:completion];
+        return;
+    }
+    if (trimCode.length == 0 && trimToken.length == 0) {
+        [self completePasswordResetBool:NO
+                                message:@"验证码已失效，请重新验证"
+                                   code:-65
+                                  error:nil
+                             completion:completion];
+        return;
+    }
+    if (![newP isEqualToString:repeatP]) {
+        [self completePasswordResetBool:NO
+                                message:@"两次密码不一致"
+                                   code:-66
+                                  error:nil
+                             completion:completion];
+        return;
+    }
+
+    NSMutableDictionary *parameters = [@{
+        @"phone": trimPhone,
+        @"new_password": newP,
+        @"repeat_passwd": repeatP
+    } mutableCopy];
+    if (trimCode.length > 0) {
+        parameters[@"code"] = trimCode;
+    }
+    if (trimToken.length > 0) {
+        parameters[@"reset_token"] = trimToken;
+    }
+
+    NSString *url = [NSString stringWithFormat:@"%@/user/password/forgot/reset", kYALAPIBaseURL];
+    [[YALNetworkManager shareManager] PUT:url
+                               parameters:parameters
+                                  headers:nil
+                                  success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
+        NSDictionary *response = [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
+        NSString *message = [self messageFromAuthResponse:response fallback:@"密码重置成功，请重新登录"];
+        if ([self isSuccessAuthResponse:response]) {
+            if (completion) { completion(YES, message.length > 0 ? message : @"密码重置成功，请重新登录", nil); }
+            return;
+        }
+        NSInteger responseCode = [self codeFromAuthResponse:response fallback:-67];
+        NSString *fallback = message.length > 0 ? message : @"密码重置失败";
+        NSError *error = [NSError errorWithDomain:@"YALAuthManager"
+                                             code:responseCode
+                                         userInfo:@{NSLocalizedDescriptionKey: fallback}];
+        if (completion) { completion(NO, fallback, error); }
+    } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+        if (completion) { completion(NO, error.localizedDescription ?: @"网络错误", error); }
+    }];
+}
+
+- (void)completePasswordResetBool:(BOOL)success
+                          message:(NSString *)message
+                             code:(NSInteger)code
+                            error:(NSError *)error
+                       completion:(void (^)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion {
+    NSError *finalError = error;
+    if (!success && !finalError) {
+        finalError = [NSError errorWithDomain:@"YALAuthManager"
+                                         code:code
+                                     userInfo:@{NSLocalizedDescriptionKey: message ?: @"操作失败"}];
+    }
+    if (completion) {
+        completion(success, message, finalError);
+    }
+}
+
+- (BOOL)isSuccessAuthResponse:(NSDictionary *)response {
+    if (![response isKindOfClass:[NSDictionary class]]) {
+        return NO;
+    }
+    NSInteger code = [self codeFromAuthResponse:response fallback:-1];
+    if (code == 200 || code == 0) {
+        return YES;
+    }
+    id successValue = response[@"success"];
+    if ([successValue respondsToSelector:@selector(boolValue)] && [successValue boolValue]) {
+        return YES;
+    }
+    return NO;
+}
+
+- (NSInteger)codeFromAuthResponse:(NSDictionary *)response fallback:(NSInteger)fallback {
+    if (![response isKindOfClass:[NSDictionary class]]) {
+        return fallback;
+    }
+    id codeValue = response[@"code"] ?: response[@"status"];
+    if ([codeValue respondsToSelector:@selector(integerValue)]) {
+        return [codeValue integerValue];
+    }
+    return fallback;
+}
+
+- (NSString *)messageFromAuthResponse:(NSDictionary *)response fallback:(NSString *)fallback {
+    if (![response isKindOfClass:[NSDictionary class]]) {
+        return fallback;
+    }
+    id message = response[@"msg"] ?: response[@"message"] ?: response[@"error"];
+    if ([message isKindOfClass:[NSString class]] && [(NSString *)message length] > 0) {
+        return (NSString *)message;
+    }
+    return fallback;
+}
+
+- (NSString *)resetTokenFromAuthResponse:(NSDictionary *)response {
+    if (![response isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    id data = response[@"data"];
+    if ([data isKindOfClass:[NSDictionary class]]) {
+        id token = data[@"reset_token"] ?: data[@"resetToken"] ?: data[@"token"];
+        if ([token isKindOfClass:[NSString class]] && [(NSString *)token length] > 0) {
+            return (NSString *)token;
+        }
+    }
+    id token = response[@"reset_token"] ?: response[@"resetToken"] ?: response[@"token"];
+    if ([token isKindOfClass:[NSString class]] && [(NSString *)token length] > 0) {
+        return (NSString *)token;
+    }
+    return nil;
+}
+
 @end

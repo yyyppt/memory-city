@@ -7,6 +7,7 @@
 
 #import "YALLoginController.h"
 #import "YALRegisterController.h"
+#import "YALForgotPasswordController.h"
 #import "YALAuthManager.h"
 
 @interface YALLoginController () <UIGestureRecognizerDelegate>
@@ -37,6 +38,15 @@ static const NSUInteger kYALPasswordMaxLength = 15;
         UINavigationController *nav = strongSelf.navigationController;
         if (nav) {
             [nav pushViewController:reg animated:YES];
+        }
+    };
+    _loginView.tapForgetPasswordBlock = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) { return; }
+        YALForgotPasswordController *forgotVC = [[YALForgotPasswordController alloc] init];
+        UINavigationController *nav = strongSelf.navigationController;
+        if (nav) {
+            [nav pushViewController:forgotVC animated:YES];
         }
     };
     _loginView.tapLoginBlock = ^{

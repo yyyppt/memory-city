@@ -28,6 +28,17 @@
 @property (nonatomic, strong) UIButton *searchButton;
 @property (nonatomic, strong) MASConstraint *searchBottomConstraint;
 @property (nonatomic, assign) BOOL hasLoadedContentPoints;
+@property (nonatomic, strong) NSArray<YALMemoryPoint *> *chronologicalFootprintPoints;
+@property (nonatomic, strong) UIView *footprintWalkerView;
+@property (nonatomic, strong) MKPolyline *footprintRouteOverlay;
+@property (nonatomic, strong) CADisplayLink *footprintDisplayLink;
+@property (nonatomic, assign) NSInteger footprintSegmentIndex;
+@property (nonatomic, assign) CFTimeInterval footprintSegmentStartTime;
+@property (nonatomic, assign) CLLocationCoordinate2D footprintSegmentStartCoordinate;
+@property (nonatomic, assign) CLLocationCoordinate2D footprintSegmentEndCoordinate;
+@property (nonatomic, assign) CLLocationCoordinate2D footprintWalkerCoordinate;
+@property (nonatomic, assign) NSTimeInterval footprintSegmentDuration;
+@property (nonatomic, assign) BOOL didPlayFootprintAnimation;
 
 @end
 
@@ -87,6 +98,10 @@
     [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTapBlank)];
     tap.cancelsTouchesInView = NO;
     [self.view addGestureRecognizer:tap];
+}
+
+- (void)dealloc {
+    [self stopFootprintAnimationKeepingWalker:NO];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -158,7 +173,7 @@
 }
 
 - (void)setupNavigationBar {
-    self.title = self.selectionMode ? @"选择地点" : @"Map";
+    self.title = self.selectionMode ? @"选择地点" : (self.playsFootprintAnimationOnAppear ? @"我的足迹" : @"Map");
     self.navigationItem.largeTitleDisplayMode = UINavigationItemLargeTitleDisplayModeNever;
     self.navigationController.navigationBar.translucent = YES;
 
@@ -307,11 +322,14 @@
             }
             [strongSelf reloadMapAnnotationsWithContentList:contentList ?: @[]];
             strongSelf.hasLoadedContentPoints = YES;
+            [strongSelf startFootprintAnimationIfNeeded];
         });
     }];
 }
 
 - (void)reloadMapAnnotationsWithContentList:(NSArray *)contentList {
+    [self stopFootprintAnimationKeepingWalker:NO];
+
     NSMutableArray<id<MKAnnotation>> *removableAnnotations = [NSMutableArray array];
     for (id<MKAnnotation> annotation in self.mapView.annotations) {
         if (![annotation isKindOfClass:[MKUserLocation class]]) {
@@ -323,6 +341,7 @@
     }
 
     NSMutableArray<YALMemoryPoint *> *points = [NSMutableArray array];
+    NSMutableArray<YALMemoryPoint *> *footprintPoints = [NSMutableArray array];
     for (id item in contentList) {
         if (![item isKindOfClass:[NSDictionary class]]) {
             continue;
@@ -357,11 +376,361 @@
         }
         point.postModel = post;
         [points addObject:point];
+        if (hasCoordinate) {
+            [footprintPoints addObject:point];
+        }
     }
+    self.chronologicalFootprintPoints = [self chronologicalFootprintPointsFromPoints:footprintPoints];
 
     if (points.count > 0) {
         [self.mapView addAnnotations:points];
     }
+}
+
+- (void)startFootprintAnimationIfNeeded {
+    if (self.selectionMode ||
+        !self.playsFootprintAnimationOnAppear ||
+        self.didPlayFootprintAnimation ||
+        self.chronologicalFootprintPoints.count == 0) {
+        return;
+    }
+    self.didPlayFootprintAnimation = YES;
+
+    if (self.chronologicalFootprintPoints.count == 1) {
+        YALMemoryPoint *onlyPoint = self.chronologicalFootprintPoints.firstObject;
+        [self installWalkerAtCoordinate:onlyPoint.coordinate title:onlyPoint.title ?: @"我的足迹"];
+        [self flyCameraToCoordinate:onlyPoint.coordinate heading:0.0 distance:900.0 animated:YES];
+        [self showFootprintToastWithText:@"只有一个足迹点，小人先停在这里等下一段回忆。"];
+        return;
+    }
+
+    [self drawFootprintRouteForPoints:self.chronologicalFootprintPoints];
+    [self installWalkerAtCoordinate:self.chronologicalFootprintPoints.firstObject.coordinate
+                              title:@"足迹回放"];
+    [self fitMapToFootprintPoints:self.chronologicalFootprintPoints];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.75 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+        [self showFootprintToastWithText:@"正在按发布时间回放你的城市足迹"];
+        [self startFootprintSegmentAtIndex:0];
+    });
+}
+
+- (void)installWalkerAtCoordinate:(CLLocationCoordinate2D)coordinate title:(NSString *)title {
+    (void)title;
+    self.footprintWalkerCoordinate = coordinate;
+    if (!self.footprintWalkerView) {
+        self.footprintWalkerView = [self createFootprintWalkerView];
+        [self.mapView addSubview:self.footprintWalkerView];
+    }
+    self.footprintWalkerView.hidden = NO;
+    [self.mapView bringSubviewToFront:self.footprintWalkerView];
+    [self updateFootprintWalkerViewPosition];
+}
+
+- (UIView *)createFootprintWalkerView {
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, 64.0, 78.0)];
+    container.backgroundColor = [UIColor clearColor];
+    container.userInteractionEnabled = NO;
+
+    UIView *shadow = [[UIView alloc] initWithFrame:CGRectMake(13.0, 62.0, 38.0, 10.0)];
+    shadow.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.24];
+    shadow.layer.cornerRadius = 5.0;
+    shadow.transform = CGAffineTransformMakeScale(1.18, 0.72);
+    [container addSubview:shadow];
+
+    UIView *bubble = [[UIView alloc] initWithFrame:CGRectMake(7.0, 0.0, 50.0, 60.0)];
+    bubble.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.98];
+    bubble.layer.cornerRadius = 25.0;
+    bubble.layer.shadowColor = [UIColor blackColor].CGColor;
+    bubble.layer.shadowOpacity = 0.28;
+    bubble.layer.shadowRadius = 12.0;
+    bubble.layer.shadowOffset = CGSizeMake(0.0, 9.0);
+    bubble.tag = 7001;
+    [container addSubview:bubble];
+
+    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(7.0, 7.0, 36.0, 36.0)];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    iconView.tintColor = [UIColor whiteColor];
+    if (@available(iOS 13.0, *)) {
+        iconView.image = [UIImage systemImageNamed:@"figure.walk.circle.fill"];
+    }
+    [bubble addSubview:iconView];
+
+    UILabel *fallbackLabel = [[UILabel alloc] initWithFrame:CGRectMake(0.0, 0.0, 50.0, 50.0)];
+    fallbackLabel.text = @"行";
+    fallbackLabel.textColor = [UIColor whiteColor];
+    fallbackLabel.font = [UIFont systemFontOfSize:23.0 weight:UIFontWeightBlack];
+    fallbackLabel.textAlignment = NSTextAlignmentCenter;
+    fallbackLabel.hidden = iconView.image != nil;
+    [bubble addSubview:fallbackLabel];
+
+    CABasicAnimation *stepAnimation = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
+    stepAnimation.fromValue = @0.0;
+    stepAnimation.toValue = @(-8.0);
+    stepAnimation.duration = 0.34;
+    stepAnimation.autoreverses = YES;
+    stepAnimation.repeatCount = HUGE_VALF;
+    stepAnimation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [bubble.layer addAnimation:stepAnimation forKey:@"footprintStep"];
+
+    CABasicAnimation *shadowAnimation = [CABasicAnimation animationWithKeyPath:@"transform.scale.x"];
+    shadowAnimation.fromValue = @1.18;
+    shadowAnimation.toValue = @0.88;
+    shadowAnimation.duration = 0.34;
+    shadowAnimation.autoreverses = YES;
+    shadowAnimation.repeatCount = HUGE_VALF;
+    shadowAnimation.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [shadow.layer addAnimation:shadowAnimation forKey:@"footprintShadow"];
+
+    return container;
+}
+
+- (void)updateFootprintWalkerViewPosition {
+    if (!self.footprintWalkerView ||
+        !CLLocationCoordinate2DIsValid(self.footprintWalkerCoordinate)) {
+        return;
+    }
+    CGPoint point = [self.mapView convertCoordinate:self.footprintWalkerCoordinate toPointToView:self.mapView];
+    self.footprintWalkerView.center = CGPointMake(point.x, point.y - 36.0);
+}
+
+- (void)drawFootprintRouteForPoints:(NSArray<YALMemoryPoint *> *)points {
+    if (self.footprintRouteOverlay) {
+        [self.mapView removeOverlay:self.footprintRouteOverlay];
+        self.footprintRouteOverlay = nil;
+    }
+    if (points.count < 2) {
+        return;
+    }
+
+    CLLocationCoordinate2D *coordinates = calloc(points.count, sizeof(CLLocationCoordinate2D));
+    if (!coordinates) {
+        return;
+    }
+    for (NSUInteger i = 0; i < points.count; i++) {
+        coordinates[i] = points[i].coordinate;
+    }
+    self.footprintRouteOverlay = [MKPolyline polylineWithCoordinates:coordinates count:points.count];
+    free(coordinates);
+    [self.mapView addOverlay:self.footprintRouteOverlay level:MKOverlayLevelAboveRoads];
+}
+
+- (void)fitMapToFootprintPoints:(NSArray<YALMemoryPoint *> *)points {
+    if (points.count == 0) {
+        return;
+    }
+    MKMapRect routeRect = MKMapRectNull;
+    for (YALMemoryPoint *point in points) {
+        MKMapPoint mapPoint = MKMapPointForCoordinate(point.coordinate);
+        MKMapRect pointRect = MKMapRectMake(mapPoint.x, mapPoint.y, 1.0, 1.0);
+        routeRect = MKMapRectIsNull(routeRect) ? pointRect : MKMapRectUnion(routeRect, pointRect);
+    }
+    if (MKMapRectIsNull(routeRect)) {
+        return;
+    }
+    [self.mapView setVisibleMapRect:routeRect
+                         edgePadding:UIEdgeInsetsMake(120.0, 56.0, 160.0, 56.0)
+                            animated:YES];
+}
+
+- (void)startFootprintSegmentAtIndex:(NSInteger)index {
+    if (index >= (NSInteger)self.chronologicalFootprintPoints.count - 1) {
+        [self stopFootprintAnimationKeepingWalker:YES];
+        [self showFootprintToastWithText:@"足迹回放完成"];
+        return;
+    }
+
+    self.footprintSegmentIndex = index;
+    self.footprintSegmentStartCoordinate = self.chronologicalFootprintPoints[index].coordinate;
+    self.footprintSegmentEndCoordinate = self.chronologicalFootprintPoints[index + 1].coordinate;
+    CLLocation *startLocation = [[CLLocation alloc] initWithLatitude:self.footprintSegmentStartCoordinate.latitude
+                                                           longitude:self.footprintSegmentStartCoordinate.longitude];
+    CLLocation *endLocation = [[CLLocation alloc] initWithLatitude:self.footprintSegmentEndCoordinate.latitude
+                                                         longitude:self.footprintSegmentEndCoordinate.longitude];
+    CLLocationDistance distance = [startLocation distanceFromLocation:endLocation];
+    self.footprintSegmentDuration = MIN(3.2, MAX(1.15, distance / 180.0));
+    self.footprintSegmentStartTime = CACurrentMediaTime();
+
+    [self.footprintDisplayLink invalidate];
+    self.footprintDisplayLink = [CADisplayLink displayLinkWithTarget:self selector:@selector(updateFootprintWalker:)];
+    [self.footprintDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)updateFootprintWalker:(CADisplayLink *)displayLink {
+    CFTimeInterval elapsed = displayLink.timestamp - self.footprintSegmentStartTime;
+    CGFloat rawProgress = self.footprintSegmentDuration <= 0 ? 1.0 : MIN(1.0, elapsed / self.footprintSegmentDuration);
+    CGFloat progress = rawProgress * rawProgress * (3.0 - 2.0 * rawProgress);
+
+    CLLocationCoordinate2D coordinate = [self coordinateBetween:self.footprintSegmentStartCoordinate
+                                                           end:self.footprintSegmentEndCoordinate
+                                                      progress:progress];
+    self.footprintWalkerCoordinate = coordinate;
+    [self updateFootprintWalkerViewPosition];
+
+    CLLocationDirection heading = [self headingFromCoordinate:self.footprintSegmentStartCoordinate
+                                                           to:self.footprintSegmentEndCoordinate];
+    CLLocation *startLocation = [[CLLocation alloc] initWithLatitude:self.footprintSegmentStartCoordinate.latitude
+                                                           longitude:self.footprintSegmentStartCoordinate.longitude];
+    CLLocation *endLocation = [[CLLocation alloc] initWithLatitude:self.footprintSegmentEndCoordinate.latitude
+                                                         longitude:self.footprintSegmentEndCoordinate.longitude];
+    CLLocationDistance distance = [startLocation distanceFromLocation:endLocation];
+    [self flyCameraToCoordinate:coordinate
+                        heading:heading
+                       distance:MIN(2200.0, MAX(650.0, distance * 1.8))
+                       animated:NO];
+    [self updateFootprintWalkerViewPosition];
+
+    if (rawProgress >= 1.0) {
+        [displayLink invalidate];
+        self.footprintDisplayLink = nil;
+        [self startFootprintSegmentAtIndex:self.footprintSegmentIndex + 1];
+    }
+}
+
+- (CLLocationCoordinate2D)coordinateBetween:(CLLocationCoordinate2D)start
+                                        end:(CLLocationCoordinate2D)end
+                                   progress:(CGFloat)progress {
+    return CLLocationCoordinate2DMake(start.latitude + (end.latitude - start.latitude) * progress,
+                                      start.longitude + (end.longitude - start.longitude) * progress);
+}
+
+- (CLLocationDirection)headingFromCoordinate:(CLLocationCoordinate2D)start
+                                          to:(CLLocationCoordinate2D)end {
+    double lat1 = start.latitude * M_PI / 180.0;
+    double lat2 = end.latitude * M_PI / 180.0;
+    double deltaLon = (end.longitude - start.longitude) * M_PI / 180.0;
+    double y = sin(deltaLon) * cos(lat2);
+    double x = cos(lat1) * sin(lat2) - sin(lat1) * cos(lat2) * cos(deltaLon);
+    double heading = atan2(y, x) * 180.0 / M_PI;
+    return fmod(heading + 360.0, 360.0);
+}
+
+- (void)flyCameraToCoordinate:(CLLocationCoordinate2D)coordinate
+                      heading:(CLLocationDirection)heading
+                     distance:(CLLocationDistance)distance
+                     animated:(BOOL)animated {
+    MKMapCamera *camera = [MKMapCamera cameraLookingAtCenterCoordinate:coordinate
+                                                          fromDistance:distance
+                                                                 pitch:62.0
+                                                               heading:heading];
+    [self.mapView setCamera:camera animated:animated];
+}
+
+- (void)stopFootprintAnimationKeepingWalker:(BOOL)keepWalker {
+    [self.footprintDisplayLink invalidate];
+    self.footprintDisplayLink = nil;
+    if (!keepWalker && self.footprintWalkerView) {
+        [self.footprintWalkerView removeFromSuperview];
+        self.footprintWalkerView = nil;
+    }
+    if (!keepWalker && self.footprintRouteOverlay) {
+        [self.mapView removeOverlay:self.footprintRouteOverlay];
+        self.footprintRouteOverlay = nil;
+    }
+}
+
+- (void)showFootprintToastWithText:(NSString *)text {
+    if (text.length == 0 || self.selectionMode) {
+        return;
+    }
+    UIView *toast = [[UIView alloc] initWithFrame:CGRectZero];
+    toast.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.96];
+    toast.layer.cornerRadius = 18.0;
+    toast.layer.borderWidth = 1.0;
+    toast.layer.borderColor = [self accentBorderColor].CGColor;
+    toast.alpha = 0.0;
+
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectZero];
+    label.text = text;
+    label.textColor = [UIColor labelColor];
+    label.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightSemibold];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.numberOfLines = 0;
+
+    [toast addSubview:label];
+    [self.view addSubview:toast];
+    [toast mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.centerX.equalTo(self.view);
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(12.0);
+        make.left.greaterThanOrEqualTo(self.view.mas_left).offset(20.0);
+        make.right.lessThanOrEqualTo(self.view.mas_right).offset(-20.0);
+    }];
+    [label mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(toast).insets(UIEdgeInsetsMake(9.0, 16.0, 9.0, 16.0));
+    }];
+
+    [UIView animateWithDuration:0.22 animations:^{
+        toast.alpha = 1.0;
+    } completion:^(__unused BOOL finished) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.8 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            [UIView animateWithDuration:0.22 animations:^{
+                toast.alpha = 0.0;
+            } completion:^(__unused BOOL finished2) {
+                [toast removeFromSuperview];
+            }];
+        });
+    }];
+}
+
+- (NSArray<YALMemoryPoint *> *)chronologicalFootprintPointsFromPoints:(NSArray<YALMemoryPoint *> *)points {
+    return [points sortedArrayUsingComparator:^NSComparisonResult(YALMemoryPoint * _Nonnull first, YALMemoryPoint * _Nonnull second) {
+        NSDate *firstDate = [self dateForPost:first.postModel];
+        NSDate *secondDate = [self dateForPost:second.postModel];
+        if (firstDate && secondDate) {
+            return [firstDate compare:secondDate];
+        }
+        if (firstDate) {
+            return NSOrderedAscending;
+        }
+        if (secondDate) {
+            return NSOrderedDescending;
+        }
+        NSNumber *firstId = first.postModel.contentId ?: @(0);
+        NSNumber *secondId = second.postModel.contentId ?: @(0);
+        return [firstId compare:secondId];
+    }];
+}
+
+- (NSDate *)dateForPost:(YALPostModel *)post {
+    NSArray<NSString *> *candidates = @[
+        post.createTime ?: @"",
+        post.year ?: @""
+    ];
+    NSArray<NSString *> *formats = @[
+        @"yyyy-MM-dd'T'HH:mm:ss.SSSZ",
+        @"yyyy-MM-dd'T'HH:mm:ssZ",
+        @"yyyy-MM-dd HH:mm:ss",
+        @"yyyy-MM-dd",
+        @"yyyy.MM.dd",
+        @"yyyy/MM/dd",
+        @"yyyy"
+    ];
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    for (NSString *raw in candidates) {
+        NSString *text = [raw stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (text.length == 0) {
+            continue;
+        }
+        NSDate *isoDate = nil;
+        if (@available(iOS 10.0, *)) {
+            NSISO8601DateFormatter *isoFormatter = [[NSISO8601DateFormatter alloc] init];
+            isoDate = [isoFormatter dateFromString:text];
+        }
+        if (isoDate) {
+            return isoDate;
+        }
+        for (NSString *format in formats) {
+            formatter.dateFormat = format;
+            NSDate *date = [formatter dateFromString:text];
+            if (date) {
+                return date;
+            }
+        }
+    }
+    return nil;
 }
 
 - (void)handleSearchButtonTapped {
@@ -629,6 +998,26 @@
     return view;
 }
 
+- (MKOverlayRenderer *)mapView:(MKMapView *)mapView rendererForOverlay:(id<MKOverlay>)overlay {
+    (void)mapView;
+    if (overlay == self.footprintRouteOverlay && [overlay isKindOfClass:[MKPolyline class]]) {
+        MKPolylineRenderer *renderer = [[MKPolylineRenderer alloc] initWithPolyline:(MKPolyline *)overlay];
+        renderer.strokeColor = [[self accentColor] colorWithAlphaComponent:0.92];
+        renderer.lineWidth = 5.0;
+        renderer.lineJoin = kCGLineJoinRound;
+        renderer.lineCap = kCGLineCapRound;
+        renderer.lineDashPattern = @[@10.0, @7.0];
+        return renderer;
+    }
+    if ([overlay isKindOfClass:[MKPolyline class]]) {
+        MKPolylineRenderer *renderer = [[MKPolylineRenderer alloc] initWithPolyline:(MKPolyline *)overlay];
+        renderer.strokeColor = [self accentColor];
+        renderer.lineWidth = 4.0;
+        return renderer;
+    }
+    return [[MKOverlayRenderer alloc] initWithOverlay:overlay];
+}
+
 
 
 - (void)mapView:(MKMapView *)mapView
@@ -660,6 +1049,15 @@ calloutAccessoryControlTapped:(UIControl *)control {
         memoryAnnotation.subtitle = @"左边垃圾桶删除，右边进入详情";
     } else {
         memoryAnnotation.subtitle = @"右边进入详情";
+    }
+}
+
+- (void)mapView:(MKMapView *)mapView regionDidChangeAnimated:(BOOL)animated {
+    (void)mapView;
+    (void)animated;
+    [self updateFootprintWalkerViewPosition];
+    if (self.footprintWalkerView) {
+        [self.mapView bringSubviewToFront:self.footprintWalkerView];
     }
 }
 

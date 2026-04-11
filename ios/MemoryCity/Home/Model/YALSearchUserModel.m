@@ -66,19 +66,19 @@ static NSNumber * _Nullable YALSearchUserFirstNumber(NSDictionary *dict, NSArray
             nestedUser = [dict[@"user_info"] isKindOfClass:[NSDictionary class]] ? dict[@"user_info"] : nil;
         }
 
-        _userId = YALSearchUserFirstNumber(dict, @[@"user_id", @"id", @"uid", @"author_id"]);
+        _userId = YALSearchUserFirstNumber(dict, @[@"user_id", @"userId", @"id", @"uid", @"author_id"]);
         if (_userId == nil) {
-            _userId = YALSearchUserFirstNumber(nestedUser, @[@"user_id", @"id", @"uid"]);
+            _userId = YALSearchUserFirstNumber(nestedUser, @[@"user_id", @"userId", @"id", @"uid"]);
         }
 
-        _nickname = YALSearchUserFirstString(dict, @[@"nickname", @"user_nickname", @"name"]);
+        _nickname = YALSearchUserFirstString(dict, @[@"nickname", @"nickName", @"user_nickname", @"userNickname", @"user_nick_name", @"name"]);
         if (_nickname.length == 0) {
-            _nickname = YALSearchUserFirstString(nestedUser, @[@"nickname", @"user_nickname", @"name"]);
+            _nickname = YALSearchUserFirstString(nestedUser, @[@"nickname", @"nickName", @"user_nickname", @"userNickname", @"user_nick_name", @"name"]);
         }
 
-        _username = YALSearchUserFirstString(dict, @[@"username", @"user_name", @"account"]);
+        _username = YALSearchUserFirstString(dict, @[@"username", @"userName", @"user_name", @"account", @"phone", @"email"]);
         if (_username.length == 0) {
-            _username = YALSearchUserFirstString(nestedUser, @[@"username", @"user_name", @"account"]);
+            _username = YALSearchUserFirstString(nestedUser, @[@"username", @"userName", @"user_name", @"account", @"phone", @"email"]);
         }
 
         _title = YALSearchUserFirstString(dict, @[@"title", @"headline", @"signature"]);
@@ -89,22 +89,22 @@ static NSNumber * _Nullable YALSearchUserFirstNumber(NSDictionary *dict, NSArray
             _title = _nickname.length > 0 ? _nickname : _username;
         }
 
-        _avatar = YALSearchUserFirstString(dict, @[@"avatar", @"avatar_url", @"user_avatar"]);
+        _avatar = YALSearchUserFirstString(dict, @[@"avatar", @"avatarUrl", @"avatar_url", @"user_avatar", @"userAvatar"]);
         if (_avatar.length == 0) {
-            _avatar = YALSearchUserFirstString(nestedUser, @[@"avatar", @"avatar_url", @"user_avatar"]);
+            _avatar = YALSearchUserFirstString(nestedUser, @[@"avatar", @"avatarUrl", @"avatar_url", @"user_avatar", @"userAvatar"]);
         }
 
-        _coverImage = YALSearchUserFirstString(dict, @[@"cover", @"cover_url", @"background", @"photo", @"image"]);
+        _coverImage = YALSearchUserFirstString(dict, @[@"cover", @"coverUrl", @"cover_url", @"background", @"photo", @"image"]);
         if (_coverImage.length == 0) {
-            _coverImage = YALSearchUserFirstString(nestedUser, @[@"cover", @"cover_url", @"background", @"photo", @"image"]);
+            _coverImage = YALSearchUserFirstString(nestedUser, @[@"cover", @"coverUrl", @"cover_url", @"background", @"photo", @"image"]);
         }
         if (_coverImage.length == 0) {
             _coverImage = _avatar;
         }
 
-        _bio = YALSearchUserFirstString(dict, @[@"bio", @"signature", @"intro", @"content", @"desc"]);
+        _bio = YALSearchUserFirstString(dict, @[@"bio", @"signature", @"intro", @"introduction", @"content", @"desc"]);
         if (_bio.length == 0) {
-            _bio = YALSearchUserFirstString(nestedUser, @[@"bio", @"signature", @"intro", @"desc"]);
+            _bio = YALSearchUserFirstString(nestedUser, @[@"bio", @"signature", @"intro", @"introduction", @"desc"]);
         }
 
         _mood = YALSearchUserFirstString(dict, @[@"mood", @"emotion"]);

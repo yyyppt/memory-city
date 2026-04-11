@@ -14,11 +14,11 @@
 #import "YALPostManager.h"
 #import <Masonry/Masonry.h>
 
-static CGFloat const kYALPostCellTextAreaHeight = 72.0;
-static CGFloat const kYALWaterfallTextAreaHeight = 72.0; // 与 YALPostCell 内部约束一致
+static CGFloat const kYALPostCellTextAreaHeight = 84.0;
+static CGFloat const kYALWaterfallTextAreaHeight = 84.0; // 与 YALPostCell 内部约束一致
 static CGFloat const kYALSingleColumnItemHeight = 336.0;
-static CGFloat const kYALHorizontalInset = 12.0;
-static CGFloat const kYALItemSpacing = 10.0;
+static CGFloat const kYALHorizontalInset = 14.0;
+static CGFloat const kYALItemSpacing = 12.0;
 
 @interface YALHomeController ()
 
@@ -33,6 +33,22 @@ static CGFloat const kYALItemSpacing = 10.0;
 @end
 
 @implementation YALHomeController
+
+- (UIColor *)pageBackgroundColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:0.075 green:0.068 blue:0.06 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.985 green:0.965 blue:0.935 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.985 green:0.965 blue:0.935 alpha:1.0];
+}
+
+- (UIColor *)accentColor {
+    return [UIColor colorWithRed:0.98 green:0.52 blue:0.18 alpha:1.0];
+}
 
 #pragma mark - Waterfall Height Simulation
 
@@ -99,11 +115,11 @@ static CGFloat const kYALItemSpacing = 10.0;
     [super viewDidLoad];
     
 
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.title = @"Home";
+    self.view.backgroundColor = [self pageBackgroundColor];
+    self.title = @"MemoryCity";
     self.useWaterfall = YES;
 
-    UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+    UIColor *highlightColor = [self accentColor];
 
     // 左上角布局切换按钮：显示“下一步可切换到的布局”
     if (@available(iOS 13.0, *)) {
@@ -140,9 +156,9 @@ static CGFloat const kYALItemSpacing = 10.0;
         searchField.layer.cornerRadius = 16.0;
         searchField.layer.masksToBounds = YES;
 
-        UIColor *fieldBackground = [UIColor colorWithWhite:0.0 alpha:0.05]; // 极浅暗色层
+        UIColor *fieldBackground = [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.72];
         searchField.backgroundColor = fieldBackground;
-        searchField.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightLight];
+        searchField.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightMedium];
         searchField.borderStyle = UITextBorderStyleNone;
         searchField.tintColor = highlightColor; // 光标颜色
         searchField.keyboardType = UIKeyboardTypeDefault;
@@ -230,14 +246,11 @@ static CGFloat const kYALItemSpacing = 10.0;
 
     self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero
                                              collectionViewLayout:layout];
-    if (@available(iOS 13.0, *)) {
-        self.collectionView.backgroundColor = [UIColor systemGroupedBackgroundColor];
-    } else {
-        self.collectionView.backgroundColor = [UIColor colorWithWhite:0.98 alpha:1.0];
-    }
+    self.collectionView.backgroundColor = [self pageBackgroundColor];
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     self.collectionView.showsVerticalScrollIndicator = NO;
+    self.collectionView.contentInset = UIEdgeInsetsMake(8.0, 0, 18.0, 0);
 
     [self.collectionView registerClass:[YALPostCell class]
             forCellWithReuseIdentifier:@"YALPostCell"];

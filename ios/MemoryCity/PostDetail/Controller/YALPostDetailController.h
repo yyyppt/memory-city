@@ -11,6 +11,8 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+FOUNDATION_EXPORT NSNotificationName const YALPostInteractionDidChangeNotification;
+
 @interface YALPostDetailController : UIViewController
 
 @property (nonatomic, strong) YALPostModel *post;

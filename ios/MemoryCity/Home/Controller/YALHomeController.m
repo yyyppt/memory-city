@@ -12,6 +12,7 @@
 #import "YALMessageController.h"
 #import "YALPostDetailController.h"
 #import "YALPostManager.h"
+#import "YALAuthManager.h"
 #import <Masonry/Masonry.h>
 
 static CGFloat const kYALPostCellTextAreaHeight = 84.0;
@@ -19,6 +20,9 @@ static CGFloat const kYALWaterfallTextAreaHeight = 84.0; // 与 YALPostCell 内�
 static CGFloat const kYALSingleColumnItemHeight = 336.0;
 static CGFloat const kYALHorizontalInset = 14.0;
 static CGFloat const kYALItemSpacing = 12.0;
+static NSString * const kYALPostDetailLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
+static NSString * const kYALPostDetailCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
+static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailInteractionCache";
 
 @interface YALHomeController ()
 
@@ -52,21 +56,64 @@ static CGFloat const kYALItemSpacing = 12.0;
 
 #pragma mark - Waterfall Height Simulation
 
-/// 以 index 作为 seed 生成稳定比例，禁止随机数。
+/// 用内容本身生成稳定 hash，避免同屏出现太多相同高度。
+- (NSUInteger)stableWaterfallSeedForItem:(NSInteger)item model:(YALPostModel *)model {
+    NSMutableString *source = [NSMutableString string];
+    if ([model.contentId respondsToSelector:@selector(integerValue)] && model.contentId.integerValue > 0) {
+        [source appendFormat:@"%@_", model.contentId];
+    }
+    if (model.title.length > 0) {
+        [source appendString:model.title];
+    }
+    if (model.city.length > 0) {
+        [source appendFormat:@"_%@", model.city];
+    }
+    if (model.imageURLString.length > 0) {
+        [source appendFormat:@"_%@", model.imageURLString];
+    }
+    if (model.content.length > 0) {
+        NSUInteger sampleLength = MIN((NSUInteger)24, model.content.length);
+        [source appendFormat:@"_%@", [model.content substringToIndex:sampleLength]];
+    }
+    if (source.length == 0) {
+        [source appendFormat:@"fallback_%ld", (long)item];
+    }
+
+    NSUInteger hash = 2166136261u;
+    for (NSUInteger i = 0; i < source.length; i++) {
+        unichar ch = [source characterAtIndex:i];
+        hash ^= (NSUInteger)ch;
+        hash *= 16777619u;
+    }
+    hash ^= (NSUInteger)(item * 131);
+    return hash;
+}
+
+/// 生成“稳定但不死板”的伪瀑布流比例，禁止随机数。
 - (CGFloat)simulatedRatioForItem:(NSInteger)item model:(YALPostModel *)model {
     static CGFloat const kBaseRatios[] = {
-        0.90, 0.96, 1.02, 1.08, 1.14, 1.22, 1.30, 1.38, 1.48, 1.60
+        0.86, 0.92, 0.98, 1.04, 1.10, 1.16, 1.24, 1.32, 1.40, 1.50, 1.62
     };
     static NSInteger const kBaseRatioCount = sizeof(kBaseRatios) / sizeof(CGFloat);
 
-    NSInteger mixed = (item * 37 + 17) % kBaseRatioCount;
-    CGFloat ratio = kBaseRatios[mixed];
+    NSUInteger seed = [self stableWaterfallSeedForItem:item model:model];
+    CGFloat ratio = kBaseRatios[seed % kBaseRatioCount];
 
     NSInteger contentLength = model.content.length;
-    CGFloat contentBoost = MIN(0.18, contentLength / 240.0 * 0.18);
+    CGFloat contentBoost = MIN(0.16, contentLength / 260.0 * 0.16);
     ratio += contentBoost;
 
-    return MAX(0.90, MIN(ratio, 1.60));
+    // 轻微扰动，让高度分布更自然，但仍然是稳定值。
+    CGFloat fineTuning = ((seed / kBaseRatioCount) % 7) * 0.025;
+    ratio += fineTuning;
+
+    // 相邻项做轻微错位，减少连续“齐平”感。
+    NSInteger columnBiasSeed = (NSInteger)((seed / 17) % 3);
+    if ((item % 2 == 0 && columnBiasSeed == 1) || (item % 2 != 0 && columnBiasSeed == 2)) {
+        ratio += 0.05;
+    }
+
+    return MAX(0.86, MIN(ratio, 1.68));
 }
 
 - (CGFloat)waterfallItemWidth {
@@ -116,6 +163,7 @@ static CGFloat const kYALItemSpacing = 12.0;
     
 
     self.view.backgroundColor = [self pageBackgroundColor];
+    self.navigationController.view.backgroundColor = [self pageBackgroundColor];
     self.title = @"MemoryCity";
     self.useWaterfall = YES;
 
@@ -205,11 +253,25 @@ static CGFloat const kYALItemSpacing = 12.0;
       [rc addTarget:self action:@selector(refreshPosts) forControlEvents:UIControlEventValueChanged];
       self.collectionView.refreshControl = rc;
     }
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handlePostInteractionDidChange:)
+                                                 name:YALPostInteractionDidChangeNotification
+                                               object:nil];
     [self loadPosts];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)refreshPosts {
     [self loadPosts];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self syncCachedInteractionStateForVisibleList];
 }
 
 - (void)loadPosts {
@@ -229,6 +291,7 @@ static CGFloat const kYALItemSpacing = 12.0;
             placeholder.desc = (error.localizedDescription.length > 0) ? error.localizedDescription : @"请检查网络或接口地址。";
             ws.data = [@[placeholder] mutableCopy];
         }
+        [ws syncCachedInteractionStateForVisibleList];
         [ws.waterfallHeightCache removeAllObjects];
         ws.cachedWaterfallItemWidth = 0;
         [ws prepareWaterfallMetricsIfNeeded];
@@ -394,12 +457,133 @@ static CGFloat const kYALItemSpacing = 12.0;
 - (void)messageTapped {
     YALMessageController *vc = [[YALMessageController alloc] init];
     vc.hidesBottomBarWhenPushed = YES;
+    [vc loadViewIfNeeded];
     [self.navigationController pushViewController:vc animated:YES];
 }
 
 
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
 
+}
+
+- (void)handlePostInteractionDidChange:(NSNotification *)notification {
+    NSDictionary *userInfo = [notification.userInfo isKindOfClass:[NSDictionary class]] ? notification.userInfo : nil;
+    NSNumber *contentId = [userInfo[@"content_id"] respondsToSelector:@selector(integerValue)] ? @([userInfo[@"content_id"] integerValue]) : nil;
+    if (contentId.integerValue <= 0 || self.data.count == 0) {
+        return;
+    }
+
+    __block NSInteger targetIndex = NSNotFound;
+    [self.data enumerateObjectsUsingBlock:^(YALPostModel * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
+        if ([obj.contentId respondsToSelector:@selector(integerValue)] &&
+            obj.contentId.integerValue == contentId.integerValue) {
+            targetIndex = (NSInteger)idx;
+            *stop = YES;
+        }
+    }];
+
+    if (targetIndex == NSNotFound || targetIndex >= (NSInteger)self.data.count) {
+        return;
+    }
+
+    YALPostModel *model = self.data[targetIndex];
+    if ([userInfo[@"like_count"] respondsToSelector:@selector(integerValue)]) {
+        model.likeCount = MAX([userInfo[@"like_count"] integerValue], 0);
+    }
+    if ([userInfo[@"collect_count"] respondsToSelector:@selector(integerValue)]) {
+        model.collectCount = MAX([userInfo[@"collect_count"] integerValue], 0);
+    }
+    if ([userInfo[@"comment_count"] respondsToSelector:@selector(integerValue)]) {
+        model.commentCount = MAX([userInfo[@"comment_count"] integerValue], 0);
+    }
+    if ([userInfo[@"is_liked"] respondsToSelector:@selector(boolValue)]) {
+        model.isLiked = [userInfo[@"is_liked"] boolValue];
+    }
+    if ([userInfo[@"is_collected"] respondsToSelector:@selector(boolValue)]) {
+        model.isCollected = [userInfo[@"is_collected"] boolValue];
+    }
+
+    NSIndexPath *indexPath = [NSIndexPath indexPathForItem:targetIndex inSection:0];
+    if ([self.collectionView numberOfSections] > 0 &&
+        targetIndex < (NSInteger)[self.collectionView numberOfItemsInSection:0]) {
+        [self.collectionView reloadItemsAtIndexPaths:@[indexPath]];
+    } else {
+        [self.collectionView reloadData];
+    }
+}
+
+- (NSString *)interactionCacheKeyWithPrefix:(NSString *)prefix contentId:(NSNumber *)contentId {
+    if (![contentId respondsToSelector:@selector(integerValue)] || contentId.integerValue <= 0) {
+        return nil;
+    }
+    NSInteger userId = [YALAuthManager sharedManager].currentUser.userId;
+    if (userId > 0) {
+        return [NSString stringWithFormat:@"%@_%ld_%@", prefix, (long)userId, contentId];
+    }
+    return [NSString stringWithFormat:@"%@_%@", prefix, contentId];
+}
+
+- (BOOL)syncCachedInteractionStateForPost:(YALPostModel *)post {
+    if (![post isKindOfClass:[YALPostModel class]]) {
+        return NO;
+    }
+
+    BOOL changed = NO;
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *likedKey = [self interactionCacheKeyWithPrefix:kYALPostDetailLikedStatusCachePrefix contentId:post.contentId];
+    if (likedKey.length > 0 && [defaults objectForKey:likedKey] != nil) {
+        BOOL cachedLiked = [defaults boolForKey:likedKey];
+        if (post.isLiked != cachedLiked) {
+            post.isLiked = cachedLiked;
+            changed = YES;
+        }
+    }
+
+    NSString *collectedKey = [self interactionCacheKeyWithPrefix:kYALPostDetailCollectedStatusCachePrefix contentId:post.contentId];
+    if (collectedKey.length > 0 && [defaults objectForKey:collectedKey] != nil) {
+        BOOL cachedCollected = [defaults boolForKey:collectedKey];
+        if (post.isCollected != cachedCollected) {
+            post.isCollected = cachedCollected;
+            changed = YES;
+        }
+    }
+
+    NSString *interactionKey = [self interactionCacheKeyWithPrefix:kYALPostDetailInteractionCachePrefix contentId:post.contentId];
+    NSDictionary *interactionCache = interactionKey.length > 0 ? [defaults objectForKey:interactionKey] : nil;
+    if ([interactionCache isKindOfClass:[NSDictionary class]]) {
+        id likeCountObj = interactionCache[@"like_count"];
+        if ([likeCountObj respondsToSelector:@selector(integerValue)]) {
+            NSInteger likeCount = MAX([likeCountObj integerValue], 0);
+            if (post.likeCount != likeCount) {
+                post.likeCount = likeCount;
+                changed = YES;
+            }
+        }
+        id collectCountObj = interactionCache[@"favorite_count"];
+        if ([collectCountObj respondsToSelector:@selector(integerValue)]) {
+            NSInteger collectCount = MAX([collectCountObj integerValue], 0);
+            if (post.collectCount != collectCount) {
+                post.collectCount = collectCount;
+                changed = YES;
+            }
+        }
+    }
+
+    return changed;
+}
+
+- (void)syncCachedInteractionStateForVisibleList {
+    if (self.data.count == 0) {
+        return;
+    }
+
+    BOOL hasChange = NO;
+    for (YALPostModel *model in self.data) {
+        hasChange = [self syncCachedInteractionStateForPost:model] || hasChange;
+    }
+    if (hasChange && self.isViewLoaded) {
+        [self.collectionView reloadData];
+    }
 }
 
 - (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar {

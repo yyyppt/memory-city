@@ -884,10 +884,14 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
 @property (nonatomic, copy, nullable) NSString *authorNickname;
 @property (nonatomic, copy, nullable) NSString *authorAvatar;
 @property (nonatomic, copy, nullable) NSString *authorBio;
+@property (nonatomic, assign) NSInteger detailLoadToken;
+@property (nonatomic, assign) NSInteger interactionRevision;
 
 @end
 
 @implementation YALPostDetailController
+
+NSNotificationName const YALPostInteractionDidChangeNotification = @"YALPostInteractionDidChangeNotification";
 
 static NSString * const kYALLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
 static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
@@ -1062,6 +1066,35 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     if ([cache[@"is_collected"] respondsToSelector:@selector(boolValue)]) {
         self.isCollected = [self boolValueFromLikeStatusObject:cache[@"is_collected"] fallback:self.isCollected];
     }
+}
+
+- (void)syncPostInteractionStateAndNotify {
+    if (![self.post isKindOfClass:[YALPostModel class]]) {
+        return;
+    }
+
+    self.post.likeCount = MAX(self.likeCount, 0);
+    self.post.collectCount = MAX(self.favoriteCount, 0);
+    self.post.commentCount = MAX(self.viewCount, 0);
+    self.post.isLiked = self.isLiked;
+    self.post.isCollected = self.isCollected;
+
+    NSNumber *contentId = self.post.contentId;
+    if (![contentId respondsToSelector:@selector(integerValue)] || contentId.integerValue <= 0) {
+        return;
+    }
+
+    NSDictionary *userInfo = @{
+        @"content_id": contentId,
+        @"like_count": @(self.post.likeCount),
+        @"collect_count": @(self.post.collectCount),
+        @"comment_count": @(self.post.commentCount),
+        @"is_liked": @(self.post.isLiked),
+        @"is_collected": @(self.post.isCollected)
+    };
+    [[NSNotificationCenter defaultCenter] postNotificationName:YALPostInteractionDidChangeNotification
+                                                        object:self
+                                                      userInfo:userInfo];
 }
 
 - (void)updateActionButtonsAppearance {
@@ -1570,7 +1603,7 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
 
     id likeObj = content[@"like_count"];
     if ([likeObj respondsToSelector:@selector(integerValue)]) {
-        self.likeCount = [likeObj integerValue];
+        self.likeCount = MAX([likeObj integerValue], 0);
     }
     id favoriteObj = content[@"favorite_count"];
     if (![favoriteObj respondsToSelector:@selector(integerValue)]) {
@@ -1580,13 +1613,13 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
         favoriteObj = content[@"collected_count"];
     }
     if ([favoriteObj respondsToSelector:@selector(integerValue)]) {
-        self.favoriteCount = [favoriteObj integerValue];
+        self.favoriteCount = MAX([favoriteObj integerValue], 0);
     } else if (self.favoriteCount < 0) {
         self.favoriteCount = 0;
     }
     id commentObj = content[@"comment_count"];
     if ([commentObj respondsToSelector:@selector(integerValue)]) {
-        self.viewCount = [commentObj integerValue];
+        self.viewCount = MAX([commentObj integerValue], 0);
     }
     BOOL hasLikedValue = NO;
     BOOL hasCollectedValue = NO;
@@ -1633,11 +1666,14 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     if (hasCollectedValue) {
         [self persistBoolStatus:self.isCollected prefix:kYALCollectedStatusCachePrefix];
     }
+    // 详情数据可能存在短暂延迟，最后再应用本地互动缓存，避免重新进入时先闪回旧计数。
+    [self applyCachedInteractionIfAvailable];
     self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
     self.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(self.favoriteCount, 0)];
     self.commentCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.viewCount];
     [self updateActionButtonsAppearance];
     [self persistInteractionCache];
+    [self syncPostInteractionStateAndNotify];
 
     NSArray *images = nil;
     if ([content[@"images"] isKindOfClass:[NSArray class]]) {
@@ -1658,10 +1694,15 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
         return;
     }
 
+    NSInteger loadToken = ++self.detailLoadToken;
+    NSInteger revisionAtStart = self.interactionRevision;
     __weak typeof(self) weakSelf = self;
     [[YALPostCacheStore sharedStore] fetchContentDetailWithId:self.post.contentId completion:^(NSDictionary * _Nullable content) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
+            return;
+        }
+        if (loadToken != strongSelf.detailLoadToken || revisionAtStart != strongSelf.interactionRevision) {
             return;
         }
         if ([content isKindOfClass:[NSDictionary class]]) {
@@ -1672,6 +1713,9 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     [[YALContentManager sharedManager] getContentDetailWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) { return; }
+        if (loadToken != strongSelf.detailLoadToken || revisionAtStart != strongSelf.interactionRevision) {
+            return;
+        }
         if (success) {
             [strongSelf applyDetailData:content];
         } else {
@@ -2687,9 +2731,11 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     if (self.post.contentId == nil) {
         self.likeCount += 1;
         self.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.likeCount];
+        [self syncPostInteractionStateAndNotify];
         return;
     }
 
+    self.interactionRevision += 1;
     BOOL previousLiked = self.isLiked;
     NSInteger previousLikeCount = self.likeCount;
     self.isLiked = !previousLiked;
@@ -2698,6 +2744,7 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     [self persistBoolStatus:self.isLiked prefix:kYALLikedStatusCachePrefix];
     [self updateActionButtonsAppearance];
     [self persistInteractionCache];
+    [self syncPostInteractionStateAndNotify];
 
     __weak typeof(self) weakSelf = self;
     [[YALContentManager sharedManager] toggleLikeContentWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error) {
@@ -2710,16 +2757,24 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             } else if ([result[@"is_likeed"] respondsToSelector:@selector(boolValue)]) {
                 strongSelf.isLiked = [strongSelf boolValueFromLikeStatusObject:result[@"is_likeed"] fallback:optimisticLiked];
             }
+            NSInteger expectedCount = MAX(0, previousLikeCount + (strongSelf.isLiked ? 1 : -1));
             if ([result[@"like_count"] respondsToSelector:@selector(integerValue)]) {
-                strongSelf.likeCount = MAX(0, [result[@"like_count"] integerValue]);
+                NSInteger serverCount = MAX(0, [result[@"like_count"] integerValue]);
+                if (strongSelf.isLiked && serverCount < expectedCount) {
+                    strongSelf.likeCount = expectedCount;
+                } else {
+                    strongSelf.likeCount = serverCount;
+                }
             } else if (strongSelf.isLiked != optimisticLiked) {
                 strongSelf.likeCount = MAX(0, previousLikeCount + (strongSelf.isLiked ? 1 : -1));
+            } else {
+                strongSelf.likeCount = expectedCount;
             }
             strongSelf.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.likeCount];
             [strongSelf persistBoolStatus:strongSelf.isLiked prefix:kYALLikedStatusCachePrefix];
             [strongSelf updateActionButtonsAppearance];
             [strongSelf persistInteractionCache];
-            [strongSelf loadContentDetailIfNeeded];
+            [strongSelf syncPostInteractionStateAndNotify];
         } else {
             NSLog(@"❌ 点赞失败: %@", error.localizedDescription);
             strongSelf.isLiked = previousLiked;
@@ -2728,6 +2783,7 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             [strongSelf persistBoolStatus:strongSelf.isLiked prefix:kYALLikedStatusCachePrefix];
             [strongSelf updateActionButtonsAppearance];
             [strongSelf persistInteractionCache];
+            [strongSelf syncPostInteractionStateAndNotify];
         }
     }];
 }
@@ -2736,9 +2792,11 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     [self animateActionButton:self.favoriteButton];
     if (self.post.contentId == nil) {
         self.favoriteCountLabel.text = @"0";
+        [self syncPostInteractionStateAndNotify];
         return;
     }
 
+    self.interactionRevision += 1;
     BOOL previousCollected = self.isCollected;
     NSInteger previousFavoriteCount = self.favoriteCount;
     self.isCollected = !previousCollected;
@@ -2747,6 +2805,7 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     [self persistBoolStatus:self.isCollected prefix:kYALCollectedStatusCachePrefix];
     [self updateActionButtonsAppearance];
     [self persistInteractionCache];
+    [self syncPostInteractionStateAndNotify];
 
     __weak typeof(self) weakSelf = self;
     [[YALContentManager sharedManager] toggleCollectContentWithId:self.post.contentId completion:^(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error) {
@@ -2772,15 +2831,22 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             if (![favoriteObj respondsToSelector:@selector(integerValue)]) {
                 favoriteObj = result[@"collected_count"];
             }
+            NSInteger expectedCount = MAX(0, previousFavoriteCount + (strongSelf.isCollected ? 1 : -1));
             if ([favoriteObj respondsToSelector:@selector(integerValue)]) {
-                strongSelf.favoriteCount = MAX(0, [favoriteObj integerValue]);
+                NSInteger serverCount = MAX(0, [favoriteObj integerValue]);
+                if (strongSelf.isCollected && serverCount < expectedCount) {
+                    strongSelf.favoriteCount = expectedCount;
+                } else {
+                    strongSelf.favoriteCount = serverCount;
+                }
             } else {
-                strongSelf.favoriteCount = MAX(0, previousFavoriteCount + (strongSelf.isCollected ? 1 : -1));
+                strongSelf.favoriteCount = expectedCount;
             }
             strongSelf.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(strongSelf.favoriteCount, 0)];
             [strongSelf persistBoolStatus:strongSelf.isCollected prefix:kYALCollectedStatusCachePrefix];
             [strongSelf updateActionButtonsAppearance];
             [strongSelf persistInteractionCache];
+            [strongSelf syncPostInteractionStateAndNotify];
         } else {
             NSLog(@"❌ 收藏失败: %@", error.localizedDescription);
             strongSelf.isCollected = previousCollected;
@@ -2789,6 +2855,7 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             [strongSelf persistBoolStatus:strongSelf.isCollected prefix:kYALCollectedStatusCachePrefix];
             [strongSelf updateActionButtonsAppearance];
             [strongSelf persistInteractionCache];
+            [strongSelf syncPostInteractionStateAndNotify];
         }
     }];
 }

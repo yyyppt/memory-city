@@ -45,14 +45,14 @@
   self.centerButton = [UIButton buttonWithType:UIButtonTypeCustom];
   self.centerButton.layer.cornerRadius = diameter / 2.0;
 
-  UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+  UIColor *highlightColor = [UIColor colorWithRed:0.98 green:0.52 blue:0.18 alpha:1.0];
   self.centerButton.backgroundColor = highlightColor;
-  self.centerButton.layer.borderColor = [UIColor whiteColor].CGColor;
+  self.centerButton.layer.borderColor = [UIColor colorWithRed:1.0 green:0.985 blue:0.955 alpha:1.0].CGColor;
   self.centerButton.layer.borderWidth = 4.0;
   self.centerButton.layer.shadowColor = highlightColor.CGColor;
-  self.centerButton.layer.shadowOpacity = 0.8;
-  self.centerButton.layer.shadowRadius = 12.0;
-  self.centerButton.layer.shadowOffset = CGSizeZero;
+  self.centerButton.layer.shadowOpacity = 0.35;
+  self.centerButton.layer.shadowRadius = 18.0;
+  self.centerButton.layer.shadowOffset = CGSizeMake(0.0, 8.0);
 
   [self addSubview:self.centerButton];
 

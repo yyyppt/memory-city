@@ -17,6 +17,7 @@
 @property (nonatomic, strong) UIView *bubbleView;
 @property (nonatomic, strong) UILabel *contentLabel;
 @property (nonatomic, assign) BOOL expanded;
+@property (nonatomic, assign) BOOL expandable;
 @property (nonatomic, strong) MASConstraint *avatarLeftConstraint;
 @property (nonatomic, strong) MASConstraint *bubbleLeftConstraint;
 
@@ -168,6 +169,80 @@
                      expanded:expanded];
 }
 
+- (NSMutableParagraphStyle *)commentParagraphStyle {
+    NSMutableParagraphStyle *paragraphStyle = [[NSMutableParagraphStyle alloc] init];
+    paragraphStyle.lineSpacing = 3.0;
+    paragraphStyle.lineBreakMode = NSLineBreakByWordWrapping;
+    return paragraphStyle;
+}
+
+- (CGFloat)availableContentWidthForReplyLevel:(NSInteger)replyLevel {
+    CGFloat width = CGRectGetWidth(self.contentView.bounds);
+    if (width <= 0) {
+        width = CGRectGetWidth(UIScreen.mainScreen.bounds);
+    }
+    CGFloat normalizedLevel = MAX(0, MIN((CGFloat)replyLevel, 3.0));
+    CGFloat avatarAndNameLeft = 12.0 + normalizedLevel * 24.0 + 32.0 + 8.0;
+    CGFloat replyBubbleExtraOffset = replyLevel > 0 ? 12.0 + normalizedLevel * 6.0 : 0.0;
+    CGFloat rightPadding = 12.0;
+    CGFloat contentInsets = 12.0 + 16.0;
+    return MAX(80.0, width - avatarAndNameLeft - replyBubbleExtraOffset - rightPadding - contentInsets);
+}
+
+- (CGFloat)heightForText:(NSString *)text
+                   width:(CGFloat)width
+          paragraphStyle:(NSParagraphStyle *)paragraphStyle {
+    if (text.length == 0 || width <= 0) {
+        return 0.0;
+    }
+    NSAttributedString *attr =
+        [[NSAttributedString alloc] initWithString:text
+                                        attributes:@{
+        NSFontAttributeName: self.contentLabel.font,
+        NSParagraphStyleAttributeName: paragraphStyle
+    }];
+    CGRect rect = [attr boundingRectWithSize:CGSizeMake(width, CGFLOAT_MAX)
+                                     options:NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading
+                                     context:nil];
+    return ceil(CGRectGetHeight(rect));
+}
+
+- (BOOL)textNeedsExpansion:(NSString *)text
+                     width:(CGFloat)width
+            paragraphStyle:(NSParagraphStyle *)paragraphStyle {
+    CGFloat twoLineHeight = ceil(self.contentLabel.font.lineHeight * 2.0 + paragraphStyle.lineSpacing + 1.0);
+    return [self heightForText:text width:width paragraphStyle:paragraphStyle] > twoLineHeight;
+}
+
+- (NSString *)prefixOfString:(NSString *)text length:(NSInteger)length {
+    if (length <= 0 || text.length == 0) {
+        return @"";
+    }
+    NSRange wantedRange = NSMakeRange(0, MIN((NSUInteger)length, text.length));
+    NSRange safeRange = [text rangeOfComposedCharacterSequencesForRange:wantedRange];
+    return [text substringWithRange:safeRange];
+}
+
+- (NSString *)collapsedPrefixForContent:(NSString *)content
+                                  suffix:(NSString *)suffix
+                                   width:(CGFloat)width
+                          paragraphStyle:(NSParagraphStyle *)paragraphStyle {
+    NSInteger low = 0;
+    NSInteger high = (NSInteger)content.length;
+    NSInteger best = 0;
+    while (low <= high) {
+        NSInteger mid = (low + high) / 2;
+        NSString *candidate = [[self prefixOfString:content length:mid] stringByAppendingString:suffix];
+        if (![self textNeedsExpansion:candidate width:width paragraphStyle:paragraphStyle]) {
+            best = mid;
+            low = mid + 1;
+        } else {
+            high = mid - 1;
+        }
+    }
+    return [[self prefixOfString:content length:best] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
 - (void)configureWithAvatar:(UIImage *)avatar
              avatarURLString:(nullable NSString *)avatarURLString
                         name:(NSString *)name
@@ -199,30 +274,53 @@
     self.bubbleView.layer.borderColor = [self bubbleBorderColor].CGColor;
     self.nameLabel.textColor = [UIColor labelColor];
 
-    // 富文本：长文时在末尾加“ 展开/收起”
+    // 根据 UILabel 实际宽度排版后的行数决定：超过两行才展示展开/收起。
+    NSString *safeContent = content ?: @"";
+    NSMutableParagraphStyle *paragraphStyle = [self commentParagraphStyle];
+    CGFloat availableWidth = [self availableContentWidthForReplyLevel:normalizedLevel];
+    self.expandable = [self textNeedsExpansion:safeContent width:availableWidth paragraphStyle:paragraphStyle];
+    NSString *visibleContent = safeContent;
     NSString *suffix = @"";
-    if (content.length > 40) {
-        suffix = expanded ? @"收起" : @"展开";
+    NSString *operationText = @"";
+    if (self.expandable) {
+        if (expanded) {
+            suffix = @"  收起";
+            operationText = @"收起";
+        } else {
+            suffix = @"... 展开全文";
+            operationText = @"展开全文";
+            visibleContent = [self collapsedPrefixForContent:safeContent
+                                                      suffix:suffix
+                                                       width:availableWidth
+                                              paragraphStyle:paragraphStyle];
+        }
     }
-    NSString *full = [content stringByAppendingString:suffix];
+
+    NSString *full = [visibleContent stringByAppendingString:suffix];
     NSMutableAttributedString *attr =
       [[NSMutableAttributedString alloc] initWithString:full
                                              attributes:@{
         NSForegroundColorAttributeName: [UIColor labelColor],
-        NSFontAttributeName: self.contentLabel.font
+        NSFontAttributeName: self.contentLabel.font,
+        NSParagraphStyleAttributeName: paragraphStyle
     }];
-    if (suffix.length > 0) {
-        NSRange range = [full rangeOfString:suffix];
+    if (operationText.length > 0) {
+        NSRange range = [full rangeOfString:operationText options:NSBackwardsSearch];
         if (range.location != NSNotFound) {
-            UIColor *accent = (@available(iOS 13.0, *)) ? [UIColor systemBlueColor] : [UIColor colorWithRed:0.2 green:0.4 blue:1 alpha:1];
+            UIColor *accent = nil;
+            if (@available(iOS 13.0, *)) {
+                accent = [UIColor systemBlueColor];
+            } else {
+                accent = [UIColor colorWithRed:0.2 green:0.4 blue:1 alpha:1];
+            }
             [attr addAttributes:@{
                 NSForegroundColorAttributeName: accent,
                 NSFontAttributeName: [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold]
             } range:range];
         }
     }
-    if (normalizedLevel > 0 && [content hasPrefix:@"回复 "]) {
-        NSRange colonRange = [content rangeOfString:@"："];
+    if (normalizedLevel > 0 && [safeContent hasPrefix:@"回复 "]) {
+        NSRange colonRange = [visibleContent rangeOfString:@"："];
         if (colonRange.location != NSNotFound) {
             NSRange prefixRange = NSMakeRange(0, colonRange.location + 1);
             [attr addAttributes:@{
@@ -232,11 +330,14 @@
         }
     }
     self.contentLabel.attributedText = attr;
-    self.contentLabel.userInteractionEnabled = (suffix.length > 0);
+    self.contentLabel.preferredMaxLayoutWidth = availableWidth;
+    self.contentLabel.numberOfLines = (self.expandable && !expanded) ? 2 : 0;
+    self.contentLabel.userInteractionEnabled = self.expandable;
+    [self.contentLabel invalidateIntrinsicContentSize];
 }
 
 - (void)didTapContent {
-    if (self.toggleExpandBlock) {
+    if (self.expandable && self.toggleExpandBlock) {
         self.toggleExpandBlock();
     }
 }

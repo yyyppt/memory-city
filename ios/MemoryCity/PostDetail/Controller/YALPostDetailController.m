@@ -2421,10 +2421,11 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
         } else {
             [strongSelf.expandedCommentIds addObject:commentId];
         }
-        [strongSelf.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [strongSelf refreshTableHeight];
-        });
+        [UIView performWithoutAnimation:^{
+            [strongSelf.tableView reloadData];
+            [strongSelf.tableView layoutIfNeeded];
+        }];
+        [strongSelf refreshTableHeight];
     };
 
     [cell configureWithAvatar:avatar
@@ -2456,6 +2457,12 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     BOOL expanded = commentId ? [self.expandedCommentIds containsObject:commentId] : NO;
     NSInteger replyLevel = [row[@"reply_level"] respondsToSelector:@selector(integerValue)] ? [row[@"reply_level"] integerValue] : ([row[@"is_reply"] boolValue] ? 1 : 0);
     UIImage *avatar = [[UIImage alloc] init];
+
+    CGFloat width = CGRectGetWidth(tableView.bounds);
+    sizingCell.bounds = CGRectMake(0, 0, width, CGFLOAT_MAX);
+    [sizingCell setNeedsLayout];
+    [sizingCell layoutIfNeeded];
+
     [sizingCell configureWithAvatar:avatar
                     avatarURLString:nil
                                name:comment[@"name"]
@@ -2465,12 +2472,14 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
                         replyLevel:replyLevel
                            expanded:expanded];
 
-    CGFloat width = CGRectGetWidth(tableView.bounds);
     sizingCell.bounds = CGRectMake(0, 0, width, CGFLOAT_MAX);
     [sizingCell setNeedsLayout];
     [sizingCell layoutIfNeeded];
 
-    CGSize size = [sizingCell.contentView systemLayoutSizeFittingSize:UILayoutFittingCompressedSize];
+    CGSize targetSize = CGSizeMake(width, UILayoutFittingCompressedSize.height);
+    CGSize size = [sizingCell.contentView systemLayoutSizeFittingSize:targetSize
+                                        withHorizontalFittingPriority:UILayoutPriorityRequired
+                                              verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
     return MAX(60.0, size.height);
 }
 

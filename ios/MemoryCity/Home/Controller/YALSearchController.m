@@ -57,6 +57,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 @property (nonatomic, copy) NSString *userErrorText;
 
 @property (nonatomic, assign) YALSearchTabType currentTab;
+@property (nonatomic, assign) YALSearchTabType initialTab;
 @property (nonatomic, assign) BOOL isResultPage;
 @property (nonatomic, assign) BOOL isContentLoading;
 @property (nonatomic, assign) BOOL isUserLoading;
@@ -73,7 +74,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     [super viewDidLoad];
 
     self.view.backgroundColor = [UIColor colorWithRed:0.98 green:0.97 blue:0.95 alpha:1.0];
-    self.currentTab = YALSearchTabTypeContent;
+    self.currentTab = self.initialTab;
     self.contentResults = @[];
     self.userResults = @[];
     self.aiErrorText = @"";
@@ -161,7 +162,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     [self.view addSubview:self.topGlowView];
 
     self.segmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"内容", @"用户"]];
-    self.segmentedControl.selectedSegmentIndex = 0;
+    self.segmentedControl.selectedSegmentIndex = self.currentTab == YALSearchTabTypeUser ? 1 : 0;
     self.segmentedControl.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.86];
     self.segmentedControl.selectedSegmentTintColor = [self accentColor];
     self.segmentedControl.layer.cornerRadius = 18.0;
@@ -246,6 +247,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     if (!self.isResultPage) {
         YALSearchController *resultVC = [[YALSearchController alloc] init];
         resultVC.keyword = keyword;
+        resultVC.initialTab = self.currentTab;
         resultVC.hidesBottomBarWhenPushed = YES;
         [self.navigationController pushViewController:resultVC animated:YES];
         return;
@@ -448,9 +450,9 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
                           isUser:NO];
     } else {
         YALSearchUserModel *item = self.userResults[indexPath.row];
-        NSString *title = item.title.length > 0 ? item.title : (item.nickname.length > 0 ? item.nickname : @"未命名用户");
+        NSString *title = item.nickname.length > 0 ? item.nickname : (item.username.length > 0 ? item.username : @"未命名用户");
         NSString *username = [self displayUserLineWithNickname:item.nickname username:item.username];
-        NSString *subtitle = item.bio.length > 0 ? item.bio : @"这个账号暂时还没有更多介绍";
+        NSString *subtitle = item.bio.length > 0 ? item.bio : (item.title.length > 0 ? item.title : @"这个账号暂时还没有更多介绍");
         NSString *meta = item.mood.length > 0 ? [NSString stringWithFormat:@"情绪标签：%@", item.mood] : @"账号信息";
         [cell configureWithTitle:title
                         username:username

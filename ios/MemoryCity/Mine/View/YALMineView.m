@@ -83,8 +83,12 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 - (void)buildProfileCard {
     self.profileCard = [[UIView alloc] init];
     self.profileCard.backgroundColor = [self warmCardBackgroundColor];
-    self.profileCard.layer.cornerRadius = 24.0;
-    self.profileCard.layer.masksToBounds = YES;
+    self.profileCard.layer.cornerRadius = 28.0;
+    self.profileCard.layer.masksToBounds = NO;
+    self.profileCard.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.24 blue:0.12 alpha:1.0].CGColor;
+    self.profileCard.layer.shadowOpacity = 0.10;
+    self.profileCard.layer.shadowRadius = 22.0;
+    self.profileCard.layer.shadowOffset = CGSizeMake(0.0, 10.0);
     [self.contentView addSubview:self.profileCard];
 
     self.avatarContainer = [[UIView alloc] init];
@@ -170,9 +174,13 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 
     self.statsCardView = [[UIView alloc] init];
     self.statsCardView.backgroundColor = [self cardBackgroundColor];
-    self.statsCardView.layer.cornerRadius = 18.0;
+    self.statsCardView.layer.cornerRadius = 22.0;
     self.statsCardView.layer.borderWidth = 1.0;
     self.statsCardView.layer.borderColor = [self borderColor].CGColor;
+    self.statsCardView.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.24 blue:0.12 alpha:1.0].CGColor;
+    self.statsCardView.layer.shadowOpacity = 0.07;
+    self.statsCardView.layer.shadowRadius = 16.0;
+    self.statsCardView.layer.shadowOffset = CGSizeMake(0.0, 8.0);
     [self.contentView addSubview:self.statsCardView];
 
     UIControl *publicStat = [self makeStatViewWithTitle:@"公开中" valueLabel:&_publicValueLabel tag:0];
@@ -293,9 +301,13 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.tag = tag;
     button.backgroundColor = [self cardBackgroundColor];
-    button.layer.cornerRadius = 18.0;
+    button.layer.cornerRadius = 22.0;
     button.layer.borderWidth = 1.0;
     button.layer.borderColor = [self borderColor].CGColor;
+    button.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.24 blue:0.12 alpha:1.0].CGColor;
+    button.layer.shadowOpacity = 0.06;
+    button.layer.shadowRadius = 14.0;
+    button.layer.shadowOffset = CGSizeMake(0.0, 7.0);
     [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
 
     UIView *iconBadge = [[UIView alloc] init];
@@ -548,19 +560,29 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
 #pragma mark - Colors
 
 - (UIColor *)accentColor {
-    return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
+    return [UIColor colorWithRed:0.98 green:0.52 blue:0.18 alpha:1.0];
 }
 
 - (UIColor *)pageBackgroundColor {
     if (@available(iOS 13.0, *)) {
-        return [UIColor systemGroupedBackgroundColor];
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:0.075 green:0.068 blue:0.06 alpha:1.0];
+            }
+            return [UIColor colorWithRed:0.985 green:0.965 blue:0.935 alpha:1.0];
+        }];
     }
-    return [UIColor colorWithWhite:0.97 alpha:1.0];
+    return [UIColor colorWithRed:0.985 green:0.965 blue:0.935 alpha:1.0];
 }
 
 - (UIColor *)cardBackgroundColor {
     if (@available(iOS 13.0, *)) {
-        return [UIColor secondarySystemBackgroundColor];
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+        }];
     }
     return [UIColor whiteColor];
 }

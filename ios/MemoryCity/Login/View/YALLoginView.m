@@ -95,6 +95,7 @@
     [_forgetButton setTitle:@"忘记密码?" forState:UIControlStateNormal];
     [_forgetButton setTitleColor:[UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0] forState:UIControlStateNormal];
     _forgetButton.titleLabel.font = [UIFont systemFontOfSize:13];
+    [_forgetButton addTarget:self action:@selector(pressForgetPassword) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_forgetButton];
 
     _registerButton = [[UIButton alloc] init];
@@ -166,6 +167,12 @@
 - (void)pressRegister {
     if (_tapRegisterBlock) {
         _tapRegisterBlock();
+    }
+}
+
+- (void)pressForgetPassword {
+    if (_tapForgetPasswordBlock) {
+        _tapForgetPasswordBlock();
     }
 }
 

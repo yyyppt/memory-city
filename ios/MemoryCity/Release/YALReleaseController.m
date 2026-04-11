@@ -604,6 +604,20 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     return;
   }
 
+  NSString *locationNameForValidation =
+      [[self currentLocationDisplayName] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  if (!self.hasPresetCoordinate ||
+      !CLLocationCoordinate2DIsValid(self.presetCoordinate) ||
+      locationNameForValidation.length == 0) {
+    UIAlertController *a =
+      [UIAlertController alertControllerWithTitle:@"未添加地点"
+                                          message:@"还未添加地点，请先选择地点后再发布。"
+                                   preferredStyle:UIAlertControllerStyleAlert];
+    [a addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:a animated:YES completion:nil];
+    return;
+  }
+
   // 未选择图片：直接提示并中断发布
   if (self.selectedImages.count == 0) {
     UIAlertController *a =

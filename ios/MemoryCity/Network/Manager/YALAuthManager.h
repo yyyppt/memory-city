@@ -8,7 +8,7 @@
 #import <Foundation/Foundation.h>
 #import "../../Login/Model/YALAuthUserModel.h"
 
-FOUNDATION_EXPORT NSString * const YALAuthManagerCurrentUserDidChangeNotification;
+FOUNDATION_EXPORT NSString * _Nonnull const YALAuthManagerCurrentUserDidChangeNotification;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -62,6 +62,23 @@ NS_ASSUME_NONNULL_BEGIN
                           newPassword:(NSString * _Nonnull)newPassword
                         repeatPassword:(NSString * _Nonnull)repeatPassword
                             completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;
+
+/// 忘记密码：发送短信验证码。手机号不存在时后端应返回非 200 code 和“该账号不存在”。
+- (void)requestPasswordResetCodeForPhone:(NSString * _Nonnull)phone
+                              completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;
+
+/// 忘记密码：校验短信验证码。若后端返回一次性 reset_token，会继续传给重置密码接口。
+- (void)verifyPasswordResetCodeForPhone:(NSString * _Nonnull)phone
+                                   code:(NSString * _Nonnull)code
+                             completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSString * _Nullable resetToken, NSError * _Nullable error))completion;
+
+/// 忘记密码：根据手机号、验证码/重置 token 设置新密码。
+- (void)resetPasswordForPhone:(NSString * _Nonnull)phone
+             verificationCode:(NSString * _Nonnull)code
+                   resetToken:(NSString * _Nullable)resetToken
+                  newPassword:(NSString * _Nonnull)newPassword
+                repeatPassword:(NSString * _Nonnull)repeatPassword
+                    completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;
 
 @end
 

@@ -9,6 +9,7 @@
 
 typedef void(^TapLoginBlock)(void);
 typedef void(^TapRegisterBlock)(void);
+typedef void(^TapForgetPasswordBlock)(void);
 
 @interface YALLoginView : UIView
 
@@ -21,5 +22,6 @@ typedef void(^TapRegisterBlock)(void);
 
 @property (nonatomic, copy) TapLoginBlock tapLoginBlock;
 @property (nonatomic, copy, nullable) TapRegisterBlock tapRegisterBlock;
+@property (nonatomic, copy, nullable) TapForgetPasswordBlock tapForgetPasswordBlock;
 
 @end

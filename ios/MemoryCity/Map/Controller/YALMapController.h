@@ -15,6 +15,7 @@ typedef void (^YALMapLocationSelectionHandler)(CLLocationCoordinate2D coordinate
 @interface YALMapController : UIViewController
 
 @property (nonatomic, assign) BOOL selectionMode;
+@property (nonatomic, assign) BOOL playsFootprintAnimationOnAppear;
 @property (nonatomic, copy, nullable) YALMapLocationSelectionHandler onLocationSelected;
 
 @end

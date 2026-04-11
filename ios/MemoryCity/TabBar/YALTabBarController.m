@@ -26,41 +26,57 @@
   YALTabBar *tabBar = [[YALTabBar alloc] init];
   [self setValue:tabBar forKey:@"tabBar"];
 
+  [self setupNavigationAppearance];
   [self setupViewControllers];
   [self setupTabBarAppearance];
   [self setupCenterButton];
+}
 
-//  // 顶部导航栏使用奶油白 + 橙色图标（支持深色模式）
-//  UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
-//  UINavigationBar *navigationBar = [UINavigationBar appearance];
-//  navigationBar.tintColor = highlightColor;
-//
-//  if (@available(iOS 13.0, *)) {
-//    UIColor *dynamicBackground = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull trait) {
-//      if (trait.userInterfaceStyle == UIUserInterfaceStyleDark) {
-//        // 深色模式：接近 systemBackground，略带透明
-//        return [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.95];
-//      } else {
-//        // 浅色模式：奶油白
-//        return [UIColor colorWithRed:252/255.0 green:251/255.0 blue:248/255.0 alpha:0.95];
-//      }
-//    }];
-//
-//    UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
-//    [appearance configureWithDefaultBackground];
-//    appearance.backgroundColor = dynamicBackground;
-//    appearance.shadowColor = [UIColor clearColor];
-//    appearance.titleTextAttributes = @{ NSForegroundColorAttributeName: [UIColor labelColor] };
-//
-//    navigationBar.standardAppearance = appearance;
-//    navigationBar.scrollEdgeAppearance = appearance;
-//    navigationBar.compactAppearance = appearance;
-//  } else {
-//    navigationBar.barTintColor = [UIColor whiteColor];
-//    navigationBar.translucent = YES;
-//    [navigationBar setShadowImage:[UIImage new]];
-//    [navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
-//  }
+- (UIColor *)yalAccentColor {
+  return [UIColor colorWithRed:0.98 green:0.52 blue:0.18 alpha:1.0];
+}
+
+- (UIColor *)yalChromeBackgroundColor {
+  if (@available(iOS 13.0, *)) {
+    return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+      if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+        return [[UIColor colorWithRed:0.12 green:0.105 blue:0.09 alpha:1.0] colorWithAlphaComponent:0.92];
+      }
+      return [[UIColor colorWithRed:1.0 green:0.985 blue:0.955 alpha:1.0] colorWithAlphaComponent:0.94];
+    }];
+  }
+  return [[UIColor colorWithRed:1.0 green:0.985 blue:0.955 alpha:1.0] colorWithAlphaComponent:0.94];
+}
+
+- (void)setupNavigationAppearance {
+  UIColor *accent = [self yalAccentColor];
+  UINavigationBar *navigationBar = [UINavigationBar appearance];
+  navigationBar.tintColor = accent;
+  navigationBar.translucent = YES;
+
+  if (@available(iOS 13.0, *)) {
+    UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+    [appearance configureWithTransparentBackground];
+    appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial];
+    appearance.backgroundColor = [self yalChromeBackgroundColor];
+    appearance.shadowColor = [[UIColor colorWithRed:0.58 green:0.38 blue:0.20 alpha:1.0] colorWithAlphaComponent:0.10];
+    appearance.titleTextAttributes = @{
+      NSForegroundColorAttributeName: [UIColor labelColor],
+      NSFontAttributeName: [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold]
+    };
+    appearance.largeTitleTextAttributes = @{
+      NSForegroundColorAttributeName: [UIColor labelColor],
+      NSFontAttributeName: [UIFont systemFontOfSize:32 weight:UIFontWeightHeavy]
+    };
+
+    navigationBar.standardAppearance = appearance;
+    navigationBar.scrollEdgeAppearance = appearance;
+    navigationBar.compactAppearance = appearance;
+  } else {
+    navigationBar.barTintColor = [UIColor colorWithRed:1.0 green:0.985 blue:0.955 alpha:1.0];
+    [navigationBar setShadowImage:[UIImage new]];
+    [navigationBar setBackgroundImage:[UIImage new] forBarMetrics:UIBarMetricsDefault];
+  }
 }
 
 - (void)setupViewControllers {
@@ -110,17 +126,30 @@
 }
 
 - (void)setupTabBarAppearance {
-  UIColor *highlightColor = [UIColor colorWithRed:1 green:0.6 blue:0.2 alpha:1];
+  UIColor *highlightColor = [self yalAccentColor];
   self.tabBar.tintColor = highlightColor;
+  self.tabBar.unselectedItemTintColor = [UIColor colorWithRed:0.55 green:0.46 blue:0.38 alpha:1.0];
 
-  if (@available(iOS 15.0, *)) {
+  if (@available(iOS 13.0, *)) {
       UITabBarAppearance *appearance = [[UITabBarAppearance alloc] init];
-      [appearance configureWithOpaqueBackground];
-      appearance.backgroundColor = UIColor.systemBackgroundColor;
+      [appearance configureWithTransparentBackground];
+      appearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial];
+      appearance.backgroundColor = [self yalChromeBackgroundColor];
       appearance.selectionIndicatorImage = [[UIImage alloc] init];
+      appearance.shadowColor = [[UIColor colorWithRed:0.58 green:0.38 blue:0.20 alpha:1.0] colorWithAlphaComponent:0.10];
+      appearance.stackedLayoutAppearance.normal.titleTextAttributes = @{
+        NSForegroundColorAttributeName: self.tabBar.unselectedItemTintColor,
+        NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightMedium]
+      };
+      appearance.stackedLayoutAppearance.selected.titleTextAttributes = @{
+        NSForegroundColorAttributeName: highlightColor,
+        NSFontAttributeName: [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold]
+      };
 
       self.tabBar.standardAppearance = appearance;
-      self.tabBar.scrollEdgeAppearance = appearance;
+      if (@available(iOS 15.0, *)) {
+        self.tabBar.scrollEdgeAppearance = appearance;
+      }
   }
   self.tabBar.selectionIndicatorImage = [UIImage new];
 

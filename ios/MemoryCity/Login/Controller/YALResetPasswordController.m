@@ -11,9 +11,6 @@
 
 @interface YALResetPasswordController () <UITextFieldDelegate, UIGestureRecognizerDelegate>
 
-@property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) UIView *formContainer;
 @property (nonatomic, copy) NSString *username;
 @property (nonatomic, copy) NSString *phone;
 @property (nonatomic, copy) NSString *verificationCode;
@@ -50,35 +47,24 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
 }
 
 - (void)buildUI {
-    self.scrollView = [[UIScrollView alloc] init];
-    self.scrollView.alwaysBounceVertical = YES;
-    self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    [self.view addSubview:self.scrollView];
-
-    self.contentView = [[UIView alloc] init];
-    [self.scrollView addSubview:self.contentView];
-
-    self.formContainer = [[UIView alloc] init];
-    [self.contentView addSubview:self.formContainer];
-
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = @"设置新密码";
     titleLabel.font = [UIFont systemFontOfSize:26.0 weight:UIFontWeightBold];
     titleLabel.textColor = [UIColor labelColor];
-    [self.formContainer addSubview:titleLabel];
+    [self.view addSubview:titleLabel];
 
     UILabel *hintLabel = [[UILabel alloc] init];
     hintLabel.text = @"新密码长度需为 6 到 15 位，请和确认密码保持一致。";
     hintLabel.font = [UIFont systemFontOfSize:14.0];
     hintLabel.textColor = [UIColor secondaryLabelColor];
     hintLabel.numberOfLines = 0;
-    [self.formContainer addSubview:hintLabel];
+    [self.view addSubview:hintLabel];
 
     UIView *cardView = [[UIView alloc] init];
     cardView.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cardView.layer.cornerRadius = 18.0;
     cardView.layer.masksToBounds = YES;
-    [self.formContainer addSubview:cardView];
+    [self.view addSubview:cardView];
 
     self.passwordField = [self makePasswordFieldWithPlaceholder:@"请输入新密码"];
     [cardView addSubview:self.passwordField];
@@ -94,40 +80,22 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
     self.saveButton.layer.cornerRadius = 25.0;
     self.saveButton.layer.masksToBounds = YES;
     [self.saveButton addTarget:self action:@selector(saveButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.formContainer addSubview:self.saveButton];
-
-    [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.edges.equalTo(self.view);
-    }];
-
-    [self.contentView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.edges.equalTo(self.scrollView.contentLayoutGuide);
-        make.width.equalTo(self.scrollView.frameLayoutGuide);
-        make.height.greaterThanOrEqualTo(self.scrollView.frameLayoutGuide);
-    }];
-
-    [self.formContainer mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.contentView.mas_safeAreaLayoutGuideTop).offset(24.0);
-        make.left.equalTo(self.contentView).offset(24.0);
-        make.right.equalTo(self.contentView).offset(-24.0);
-        make.centerX.equalTo(self.contentView);
-        make.width.lessThanOrEqualTo(@420.0);
-        make.bottom.equalTo(self.contentView.mas_safeAreaLayoutGuideBottom).offset(-24.0);
-    }];
+    [self.view addSubview:self.saveButton];
 
     [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.formContainer);
-        make.left.right.equalTo(self.formContainer);
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(28.0);
+        make.left.equalTo(self.view).offset(24.0);
+        make.right.equalTo(self.view).offset(-24.0);
     }];
 
     [hintLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(titleLabel.mas_bottom).offset(8.0);
-        make.left.right.equalTo(self.formContainer);
+        make.left.right.equalTo(titleLabel);
     }];
 
     [cardView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(hintLabel.mas_bottom).offset(24.0);
-        make.left.right.equalTo(self.formContainer);
+        make.left.right.equalTo(titleLabel);
     }];
 
     [self.passwordField mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -145,9 +113,8 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
 
     [self.saveButton mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(cardView.mas_bottom).offset(28.0);
-        make.left.right.equalTo(self.formContainer);
+        make.left.right.equalTo(titleLabel);
         make.height.mas_equalTo(50.0);
-        make.bottom.equalTo(self.formContainer);
     }];
 
     [self.passwordField addTarget:self action:@selector(passwordFieldsDidChange) forControlEvents:UIControlEventEditingChanged];

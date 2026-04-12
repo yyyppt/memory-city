@@ -12,9 +12,6 @@
 
 @interface YALForgotPasswordController () <UITextFieldDelegate, UIGestureRecognizerDelegate>
 
-@property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UIView *contentView;
-@property (nonatomic, strong) UIView *formContainer;
 @property (nonatomic, strong) UITextField *usernameField;
 @property (nonatomic, strong) UITextField *phoneField;
 @property (nonatomic, strong) UITextField *codeField;
@@ -43,35 +40,24 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 }
 
 - (void)buildUI {
-    self.scrollView = [[UIScrollView alloc] init];
-    self.scrollView.alwaysBounceVertical = YES;
-    self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    [self.view addSubview:self.scrollView];
-
-    self.contentView = [[UIView alloc] init];
-    [self.scrollView addSubview:self.contentView];
-
-    self.formContainer = [[UIView alloc] init];
-    [self.contentView addSubview:self.formContainer];
-
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = @"找回你的账号";
     titleLabel.font = [UIFont systemFontOfSize:26.0 weight:UIFontWeightBold];
     titleLabel.textColor = [UIColor labelColor];
-    [self.formContainer addSubview:titleLabel];
+    [self.view addSubview:titleLabel];
 
     UILabel *hintLabel = [[UILabel alloc] init];
     hintLabel.text = @"输入账号和注册手机号，我们会发送短信验证码用于重置密码。";
     hintLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightRegular];
     hintLabel.textColor = [UIColor secondaryLabelColor];
     hintLabel.numberOfLines = 0;
-    [self.formContainer addSubview:hintLabel];
+    [self.view addSubview:hintLabel];
 
     UIView *cardView = [[UIView alloc] init];
     cardView.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cardView.layer.cornerRadius = 18.0;
     cardView.layer.masksToBounds = YES;
-    [self.formContainer addSubview:cardView];
+    [self.view addSubview:cardView];
 
     self.usernameField = [self makeTextFieldWithPlaceholder:@"请输入账号"];
     self.usernameField.textContentType = UITextContentTypeUsername;
@@ -107,40 +93,22 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
     self.nextButton.layer.cornerRadius = 25.0;
     self.nextButton.layer.masksToBounds = YES;
     [self.nextButton addTarget:self action:@selector(nextButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.formContainer addSubview:self.nextButton];
-
-    [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.edges.equalTo(self.view);
-    }];
-
-    [self.contentView mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.edges.equalTo(self.scrollView.contentLayoutGuide);
-        make.width.equalTo(self.scrollView.frameLayoutGuide);
-        make.height.greaterThanOrEqualTo(self.scrollView.frameLayoutGuide);
-    }];
-
-    [self.formContainer mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.contentView.mas_safeAreaLayoutGuideTop).offset(24.0);
-        make.left.equalTo(self.contentView).offset(24.0);
-        make.right.equalTo(self.contentView).offset(-24.0);
-        make.centerX.equalTo(self.contentView);
-        make.width.lessThanOrEqualTo(@420.0);
-        make.bottom.equalTo(self.contentView.mas_safeAreaLayoutGuideBottom).offset(-24.0);
-    }];
+    [self.view addSubview:self.nextButton];
 
     [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.formContainer);
-        make.left.right.equalTo(self.formContainer);
+        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(28.0);
+        make.left.equalTo(self.view).offset(24.0);
+        make.right.equalTo(self.view).offset(-24.0);
     }];
 
     [hintLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(titleLabel.mas_bottom).offset(8.0);
-        make.left.right.equalTo(self.formContainer);
+        make.left.right.equalTo(titleLabel);
     }];
 
     [cardView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(hintLabel.mas_bottom).offset(24.0);
-        make.left.right.equalTo(self.formContainer);
+        make.left.right.equalTo(titleLabel);
     }];
 
     [self.usernameField mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -172,9 +140,8 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 
     [self.nextButton mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(cardView.mas_bottom).offset(28.0);
-        make.left.right.equalTo(self.formContainer);
+        make.left.right.equalTo(titleLabel);
         make.height.mas_equalTo(50.0);
-        make.bottom.equalTo(self.formContainer);
     }];
 
     [self.usernameField addTarget:self action:@selector(textFieldsDidChange) forControlEvents:UIControlEventEditingChanged];

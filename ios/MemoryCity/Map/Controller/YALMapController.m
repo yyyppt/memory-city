@@ -1122,14 +1122,18 @@
     if (!view) {
 
         view = [[MKMarkerAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:identifier];
-
-        view.canShowCallout = YES;
-        view.markerTintColor = [self accentColor];
-        view.clusteringIdentifier = @"memory";
-
     }
 
     view.annotation = annotation;
+    view.markerTintColor = [self accentColor];
+    if (@available(iOS 11.0, *)) {
+        view.glyphTintColor = [UIColor whiteColor];
+    }
+    view.canShowCallout = !self.playsFootprintAnimationOnAppear;
+    view.clusteringIdentifier = self.playsFootprintAnimationOnAppear ? nil : @"memory";
+    if (@available(iOS 11.0, *)) {
+        view.displayPriority = MKFeatureDisplayPriorityRequired;
+    }
 
     UIButton *deleteBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     if (@available(iOS 13.0, *)) {
@@ -1153,11 +1157,11 @@
 
     UIButton *detailBtn = [UIButton buttonWithType:UIButtonTypeDetailDisclosure];
     detailBtn.tintColor = [self accentColor];
-    view.rightCalloutAccessoryView = detailBtn;
+    view.rightCalloutAccessoryView = self.playsFootprintAnimationOnAppear ? nil : detailBtn;
 
     if ([annotation isKindOfClass:[YALMemoryPoint class]]) {
         YALMemoryPoint *memoryAnnotation = (YALMemoryPoint *)annotation;
-        view.leftCalloutAccessoryView.hidden = !memoryAnnotation.userCreated;
+        view.leftCalloutAccessoryView.hidden = self.playsFootprintAnimationOnAppear || !memoryAnnotation.userCreated;
     }
 
     return view;
@@ -1210,6 +1214,14 @@ calloutAccessoryControlTapped:(UIControl *)control {
     }
 
     YALMemoryPoint *memoryAnnotation = (YALMemoryPoint *)annotation;
+    if (self.playsFootprintAnimationOnAppear) {
+        [mapView deselectAnnotation:annotation animated:NO];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self showDetailForAnnotation:memoryAnnotation];
+        });
+        return;
+    }
+
     if (memoryAnnotation.userCreated) {
         memoryAnnotation.subtitle = @"左边垃圾桶删除，右边进入详情";
     } else {

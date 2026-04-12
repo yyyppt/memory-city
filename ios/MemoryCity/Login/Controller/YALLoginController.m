@@ -10,6 +10,7 @@
 #import "YALForgotPasswordController.h"
 #import "YALAuthManager.h"
 #import "SceneDelegate.h"
+#import <Masonry/Masonry.h>
 
 @interface YALLoginController () <UIGestureRecognizerDelegate>
 
@@ -27,8 +28,11 @@ static const NSUInteger kYALPasswordMaxLength = 15;
                                                                               style:UIBarButtonItemStylePlain
                                                                              target:nil
                                                                              action:nil];
-    _loginView = [[YALLoginView alloc] initWithFrame:self.view.bounds];
+    _loginView = [[YALLoginView alloc] initWithFrame:CGRectZero];
     [self.view addSubview:self.loginView];
+    [self.loginView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
 
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
     tap.cancelsTouchesInView = NO;

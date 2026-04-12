@@ -11,12 +11,16 @@
 
 @interface YALResetPasswordController () <UITextFieldDelegate, UIGestureRecognizerDelegate>
 
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) UIView *contentView;
+@property (nonatomic, strong) UIView *formContainer;
+@property (nonatomic, copy) NSString *username;
 @property (nonatomic, copy) NSString *phone;
 @property (nonatomic, copy) NSString *verificationCode;
-@property (nonatomic, copy, nullable) NSString *resetToken;
 @property (nonatomic, strong) UITextField *passwordField;
 @property (nonatomic, strong) UITextField *repeatPasswordField;
 @property (nonatomic, strong) UIButton *saveButton;
+@property (nonatomic, assign) BOOL isSubmitting;
 
 @end
 
@@ -25,14 +29,14 @@
 static const NSUInteger kYALForgotPasswordMinLength = 6;
 static const NSUInteger kYALForgotPasswordMaxLength = 15;
 
-- (instancetype)initWithPhone:(NSString *)phone
-             verificationCode:(NSString *)code
-                   resetToken:(NSString *)resetToken {
+- (instancetype)initWithUsername:(NSString *)username
+                           phone:(NSString *)phone
+                verificationCode:(NSString *)code {
     self = [super init];
     if (self) {
+        _username = [username copy] ?: @"";
         _phone = [phone copy] ?: @"";
         _verificationCode = [code copy] ?: @"";
-        _resetToken = [resetToken copy];
     }
     return self;
 }
@@ -46,24 +50,35 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
 }
 
 - (void)buildUI {
+    self.scrollView = [[UIScrollView alloc] init];
+    self.scrollView.alwaysBounceVertical = YES;
+    self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    [self.view addSubview:self.scrollView];
+
+    self.contentView = [[UIView alloc] init];
+    [self.scrollView addSubview:self.contentView];
+
+    self.formContainer = [[UIView alloc] init];
+    [self.contentView addSubview:self.formContainer];
+
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = @"设置新密码";
     titleLabel.font = [UIFont systemFontOfSize:26.0 weight:UIFontWeightBold];
     titleLabel.textColor = [UIColor labelColor];
-    [self.view addSubview:titleLabel];
+    [self.formContainer addSubview:titleLabel];
 
     UILabel *hintLabel = [[UILabel alloc] init];
     hintLabel.text = @"新密码长度需为 6 到 15 位，请和确认密码保持一致。";
     hintLabel.font = [UIFont systemFontOfSize:14.0];
     hintLabel.textColor = [UIColor secondaryLabelColor];
     hintLabel.numberOfLines = 0;
-    [self.view addSubview:hintLabel];
+    [self.formContainer addSubview:hintLabel];
 
     UIView *cardView = [[UIView alloc] init];
     cardView.backgroundColor = [UIColor secondarySystemBackgroundColor];
     cardView.layer.cornerRadius = 18.0;
     cardView.layer.masksToBounds = YES;
-    [self.view addSubview:cardView];
+    [self.formContainer addSubview:cardView];
 
     self.passwordField = [self makePasswordFieldWithPlaceholder:@"请输入新密码"];
     [cardView addSubview:self.passwordField];
@@ -79,22 +94,40 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
     self.saveButton.layer.cornerRadius = 25.0;
     self.saveButton.layer.masksToBounds = YES;
     [self.saveButton addTarget:self action:@selector(saveButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.saveButton];
+    [self.formContainer addSubview:self.saveButton];
+
+    [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.view);
+    }];
+
+    [self.contentView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.edges.equalTo(self.scrollView.contentLayoutGuide);
+        make.width.equalTo(self.scrollView.frameLayoutGuide);
+        make.height.greaterThanOrEqualTo(self.scrollView.frameLayoutGuide);
+    }];
+
+    [self.formContainer mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.contentView.mas_safeAreaLayoutGuideTop).offset(24.0);
+        make.left.equalTo(self.contentView).offset(24.0);
+        make.right.equalTo(self.contentView).offset(-24.0);
+        make.centerX.equalTo(self.contentView);
+        make.width.lessThanOrEqualTo(@420.0);
+        make.bottom.equalTo(self.contentView.mas_safeAreaLayoutGuideBottom).offset(-24.0);
+    }];
 
     [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.view.mas_safeAreaLayoutGuideTop).offset(28.0);
-        make.left.equalTo(self.view).offset(24.0);
-        make.right.equalTo(self.view).offset(-24.0);
+        make.top.equalTo(self.formContainer);
+        make.left.right.equalTo(self.formContainer);
     }];
 
     [hintLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(titleLabel.mas_bottom).offset(8.0);
-        make.left.right.equalTo(titleLabel);
+        make.left.right.equalTo(self.formContainer);
     }];
 
     [cardView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(hintLabel.mas_bottom).offset(24.0);
-        make.left.right.equalTo(titleLabel);
+        make.left.right.equalTo(self.formContainer);
     }];
 
     [self.passwordField mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -112,9 +145,14 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
 
     [self.saveButton mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(cardView.mas_bottom).offset(28.0);
-        make.left.right.equalTo(titleLabel);
+        make.left.right.equalTo(self.formContainer);
         make.height.mas_equalTo(50.0);
+        make.bottom.equalTo(self.formContainer);
     }];
+
+    [self.passwordField addTarget:self action:@selector(passwordFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self.repeatPasswordField addTarget:self action:@selector(passwordFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self updateSaveButtonState];
 }
 
 - (UITextField *)makePasswordFieldWithPlaceholder:(NSString *)placeholder {
@@ -161,21 +199,27 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
         return;
     }
 
-    self.saveButton.enabled = NO;
-    [[YALAuthManager sharedManager] resetPasswordForPhone:self.phone
-                                         verificationCode:self.verificationCode
-                                               resetToken:self.resetToken
-                                              newPassword:password
-                                            repeatPassword:repeatPassword
-                                                completion:^(BOOL success, NSString * _Nullable message, NSError * _Nullable error) {
+    self.isSubmitting = YES;
+    [self updateSaveButtonState];
+    [[YALAuthManager sharedManager] resetPasswordForUsername:self.username
+                                                       phone:self.phone
+                                            verificationCode:self.verificationCode
+                                                 newPassword:password
+                                              repeatPassword:repeatPassword
+                                                  completion:^(BOOL success, NSString * _Nullable message, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.saveButton.enabled = YES;
+            self.isSubmitting = NO;
             if (success) {
                 [self showAlert:@"密码重置成功，请重新登录" completion:^{
                     [self.navigationController popToRootViewControllerAnimated:YES];
                 }];
             } else {
-                [self showAlert:message.length > 0 ? message : (error.localizedDescription ?: @"密码重置失败") completion:nil];
+                [self updateSaveButtonState];
+                NSString *displayMessage = message.length > 0 ? message : (error.localizedDescription ?: @"密码重置失败");
+                if ([displayMessage containsString:@"验证码"]) {
+                    displayMessage = @"验证码无效或已过期，请返回上一步重新获取验证码";
+                }
+                [self showAlert:displayMessage completion:nil];
             }
         });
     }];
@@ -187,6 +231,19 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
 
 - (void)dismissKeyboard {
     [self.view endEditing:YES];
+}
+
+- (void)passwordFieldsDidChange {
+    [self updateSaveButtonState];
+}
+
+- (void)updateSaveButtonState {
+    BOOL hasValidLength = [self trimmedText:self.passwordField.text].length >= kYALForgotPasswordMinLength &&
+                          [self trimmedText:self.repeatPasswordField.text].length >= kYALForgotPasswordMinLength;
+    BOOL canSubmit = hasValidLength && !self.isSubmitting;
+    self.saveButton.enabled = canSubmit;
+    self.saveButton.alpha = canSubmit ? 1.0 : 0.6;
+    [self.saveButton setTitle:(self.isSubmitting ? @"提交中..." : @"确认重置") forState:UIControlStateNormal];
 }
 
 - (void)showAlert:(NSString *)message completion:(void (^ __nullable)(void))completion {

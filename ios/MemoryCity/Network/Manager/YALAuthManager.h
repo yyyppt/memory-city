@@ -77,19 +77,15 @@ NS_ASSUME_NONNULL_BEGIN
                         repeatPassword:(NSString * _Nonnull)repeatPassword
                             completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;
 
-/// 忘记密码：发送短信验证码。手机号不存在时后端应返回非 200 code 和“该账号不存在”。
-- (void)requestPasswordResetCodeForPhone:(NSString * _Nonnull)phone
+/// 忘记密码：根据用户名和手机号发送验证码。
+- (void)requestPasswordResetCodeForUsername:(NSString * _Nonnull)username
+                                      phone:(NSString * _Nonnull)phone
                               completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;
 
-/// 忘记密码：校验短信验证码。若后端返回一次性 reset_token，会继续传给重置密码接口。
-- (void)verifyPasswordResetCodeForPhone:(NSString * _Nonnull)phone
-                                   code:(NSString * _Nonnull)code
-                             completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSString * _Nullable resetToken, NSError * _Nullable error))completion;
-
-/// 忘记密码：根据手机号、验证码/重置 token 设置新密码。
-- (void)resetPasswordForPhone:(NSString * _Nonnull)phone
-             verificationCode:(NSString * _Nonnull)code
-                   resetToken:(NSString * _Nullable)resetToken
+/// 忘记密码：根据用户名、手机号和验证码修改密码。
+- (void)resetPasswordForUsername:(NSString * _Nonnull)username
+                           phone:(NSString * _Nonnull)phone
+                verificationCode:(NSString * _Nonnull)code
                   newPassword:(NSString * _Nonnull)newPassword
                 repeatPassword:(NSString * _Nonnull)repeatPassword
                     completion:(void (^ _Nonnull)(BOOL success, NSString * _Nullable message, NSError * _Nullable error))completion;

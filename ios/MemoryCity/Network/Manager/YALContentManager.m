@@ -109,6 +109,21 @@ static NSArray *YALFlattenSearchWrappedList(NSArray *rawList, NSArray<NSString *
     return [flattened copy];
 }
 
+static BOOL YALIsValidSearchContentModel(YALSearchContentModel *model) {
+    if (![model isKindOfClass:[YALSearchContentModel class]]) {
+        return NO;
+    }
+
+    BOOL hasIdentity = [model.contentId respondsToSelector:@selector(integerValue)] && model.contentId.integerValue > 0;
+    BOOL hasTitle = model.title.length > 0;
+    BOOL hasContent = model.content.length > 0;
+    BOOL hasImages = model.images.count > 0;
+    BOOL hasMeta = model.city.length > 0 || model.year.length > 0 || model.mood.length > 0;
+    BOOL hasAuthor = model.authorNickname.length > 0 || model.authorUsername.length > 0;
+
+    return hasIdentity && (hasTitle || hasContent || hasImages || hasMeta || hasAuthor);
+}
+
 static BOOL YALIsFormatError(id responseObject) {
     NSString *msg = YALResponseMessage(responseObject);
     return (YALResponseCode(responseObject) == 400 &&
@@ -423,7 +438,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             if (![item isKindOfClass:[NSDictionary class]]) {
                 continue;
             }
-            [models addObject:[[YALSearchContentModel alloc] initWithDictionary:item]];
+            YALSearchContentModel *model = [[YALSearchContentModel alloc] initWithDictionary:item];
+            if (YALIsValidSearchContentModel(model)) {
+                [models addObject:model];
+            }
         }
 
         NSInteger total = 0;
@@ -545,7 +563,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             if (![item isKindOfClass:[NSDictionary class]]) {
                 continue;
             }
-            [contentModels addObject:[[YALSearchContentModel alloc] initWithDictionary:item]];
+            YALSearchContentModel *model = [[YALSearchContentModel alloc] initWithDictionary:item];
+            if (YALIsValidSearchContentModel(model)) {
+                [contentModels addObject:model];
+            }
         }
 
         NSArray *rawUserList = YALSearchListFromResponse(responseObject, data, @[@"user_list", @"userList", @"users"]);
@@ -593,7 +614,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             NSDictionary *response = (NSDictionary *)responseObject;
             if ([response[@"summary"] isKindOfClass:[NSString class]] ||
                 [response[@"tags"] isKindOfClass:[NSArray class]] ||
-                [response[@"mood"] isKindOfClass:[NSString class]]) {
+                [response[@"mood"] isKindOfClass:[NSString class]] ||
+                [response[@"suggestions"] isKindOfClass:[NSString class]] ||
+                [response[@"highlights"] isKindOfClass:[NSArray class]] ||
+                [response[@"guide"] isKindOfClass:[NSString class]]) {
                 payload = response;
             } else {
                 code = YALResponseCode(responseObject);

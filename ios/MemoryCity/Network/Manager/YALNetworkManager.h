@@ -8,6 +8,9 @@
 #import <Foundation/Foundation.h>
 #import <AFNetworking/AFNetworking.h>
 
+FOUNDATION_EXPORT NSString * const YALAPIBaseURLString;
+FOUNDATION_EXPORT NSString * const YALAPIRootURLString;
+
 @interface YALNetworkManager : NSObject
 
 @property (nonatomic, strong) AFHTTPSessionManager * _Nullable sessionManager;
@@ -39,4 +42,3 @@
 
 
 @end
-

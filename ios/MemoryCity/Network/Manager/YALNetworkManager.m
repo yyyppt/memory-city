@@ -9,6 +9,9 @@
 
 #import "YALAuthManager.h"
 
+NSString * const YALAPIBaseURLString = @"http://8.137.158.7:9000/api";
+NSString * const YALAPIRootURLString = @"http://8.137.158.7:9000/api";
+
 @interface YALNetworkManager ()
 
 @property (nonatomic, assign) BOOL isRefreshingToken;

@@ -14,9 +14,6 @@
 #import "YALAIAnalyzeResultModel.h"
 #import "YALPostCacheStore.h"
 
-static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-//static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
-
 static NSNumber *YALResolvedUserId(void) {
     YALAuthUserModel *currentUser = [[YALAuthManager sharedManager] currentUser];
     if (currentUser.userId > 0) {
@@ -109,6 +106,53 @@ static NSArray *YALFlattenSearchWrappedList(NSArray *rawList, NSArray<NSString *
     return [flattened copy];
 }
 
+static BOOL YALContentListBoolValue(id value, BOOL fallback) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [((NSNumber *)value) integerValue] != 0;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *text = [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (text.length == 0) {
+            return fallback;
+        }
+        NSString *lower = text.lowercaseString;
+        if ([lower isEqualToString:@"1"] ||
+            [lower isEqualToString:@"true"] ||
+            [lower isEqualToString:@"yes"] ||
+            [lower isEqualToString:@"public"] ||
+            [lower isEqualToString:@"公开"]) {
+            return YES;
+        }
+        if ([lower isEqualToString:@"0"] ||
+            [lower isEqualToString:@"false"] ||
+            [lower isEqualToString:@"no"] ||
+            [lower isEqualToString:@"private"] ||
+            [lower isEqualToString:@"私密"] ||
+            [lower isEqualToString:@"仅自己可见"]) {
+            return NO;
+        }
+    }
+    return fallback;
+}
+
+static BOOL YALContentListShouldShowPublicContent(NSDictionary *dict) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return NO;
+    }
+
+    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
+    for (NSString *key in publicKeys) {
+        id value = dict[key];
+        if (!value || value == [NSNull null]) {
+            continue;
+        }
+        return YALContentListBoolValue(value, NO);
+    }
+
+    // 公开流里拿不到明确公开标记时，按不展示处理。
+    return NO;
+}
+
 static BOOL YALIsValidSearchContentModel(YALSearchContentModel *model) {
     if (![model isKindOfClass:[YALSearchContentModel class]]) {
         return NO;
@@ -182,7 +226,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                          userId:(nullable NSNumber *)userId
                      completion:(void (^)(BOOL success, NSString *message, NSNumber * _Nullable contentId, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/publish", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/publish", YALAPIBaseURLString];
 
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"title"] = title;
@@ -239,7 +283,11 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     }
     parameters[@"latitude"] = @(latitude);
     parameters[@"longitude"] = @(longitude);
+    // 兼容不同后端字段命名，避免服务端未识别 is_public 时把私密内容落成公开。
     parameters[@"is_public"] = @(isPublic);
+    parameters[@"isPublic"] = @(isPublic);
+    parameters[@"visible"] = @(isPublic);
+    parameters[@"public_status"] = @(isPublic ? 1 : 0);
 
     if (locationName) {
         parameters[@"location_name"] = locationName;
@@ -342,7 +390,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 - (void)getContentDetailWithId:(NSNumber *)contentId
                     completion:(void (^)(BOOL success, NSDictionary * _Nullable content, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/detail", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/detail", YALAPIBaseURLString];
 
     NSDictionary *parameters = @{@"content_id": contentId};
 
@@ -399,7 +447,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                         pageSize:(NSInteger)pageSize
                       completion:(void (^)(BOOL success, NSArray<YALSearchContentModel *> * _Nullable contentList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/search", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/search", YALAPIBaseURLString];
 
     NSDictionary *parameters = @{
         @"keyword": keyword ?: @"",
@@ -467,7 +515,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                       pageSize:(NSInteger)pageSize
                     completion:(void (^)(BOOL success, NSArray<YALSearchUserModel *> * _Nullable userList, NSInteger total, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/search", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/search", YALAPIBaseURLString];
 
     NSDictionary *parameters = @{
         @"keyword": keyword ?: @"",
@@ -529,7 +577,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                                        NSString * _Nullable message,
                                        NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/search", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/search", YALAPIBaseURLString];
 
     NSDictionary *parameters = @{
         @"keyword": keyword ?: @"",
@@ -601,7 +649,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 - (void)analyzeText:(NSString *)text
          completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/ai/analyze", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/ai/analyze", YALAPIBaseURLString];
     NSDictionary *parameters = @{@"text": text ?: @""};
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
@@ -653,7 +701,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 - (void)toggleLikeContentWithId:(NSNumber *)contentId
                      completion:(void (^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/interact/like", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/like", YALAPIBaseURLString];
     NSNumber *userId = YALResolvedUserId();
 
     NSArray<NSDictionary *> *parameterCandidates = @[
@@ -700,7 +748,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                            pageSize:(NSInteger)pageSize
                          completion:(void (^)(BOOL success, NSArray * _Nullable comments, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/interact/comment/list", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/comment/list", YALAPIBaseURLString];
     NSDictionary *parameters = @{
         @"content_id": contentId ?: @(0),
         @"page": @(MAX(page, 1)),
@@ -755,7 +803,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                          completion:(void (^)(BOOL success, NSDictionary * _Nullable comment, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSNumber *userId = YALResolvedUserId();
-    NSString *url = [NSString stringWithFormat:@"%@/interact/comment", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/comment", YALAPIBaseURLString];
     NSNumber *resolvedContentId = contentId ?: @(0);
     NSNumber *resolvedParentId = parentId ?: @(0);
     NSString *contentString = content ?: @"";
@@ -835,7 +883,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSNumber *userId = YALResolvedUserId();
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
-    NSString *url = [NSString stringWithFormat:@"%@/interact/comment/delete", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/comment/delete", YALAPIBaseURLString];
     NSDictionary *parameters = @{
         @"comment_id": commentId ?: @(0),
         @"user_id": userId
@@ -869,23 +917,23 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     NSString *userIdString = [NSString stringWithFormat:@"%@", userId ?: @(0)];
     NSArray<NSDictionary *> *requestCandidates = @[
         @{
-            @"url": [NSString stringWithFormat:@"%@/interact/collect?content_id=%@&user_id=%@", kYALAPIBaseURL, contentIdString, userIdString],
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?content_id=%@&user_id=%@", YALAPIBaseURLString, contentIdString, userIdString],
             @"parameters": [NSNull null]
         },
         @{
-            @"url": [NSString stringWithFormat:@"%@/interact/collect?content_id=%@", kYALAPIBaseURL, contentIdString],
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?content_id=%@", YALAPIBaseURLString, contentIdString],
             @"parameters": [NSNull null]
         },
         @{
-            @"url": [NSString stringWithFormat:@"%@/interact/collect?contentId=%@&userId=%@", kYALAPIBaseURL, contentIdString, userIdString],
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?contentId=%@&userId=%@", YALAPIBaseURLString, contentIdString, userIdString],
             @"parameters": [NSNull null]
         },
         @{
-            @"url": [NSString stringWithFormat:@"%@/interact/collect?contentId=%@", kYALAPIBaseURL, contentIdString],
+            @"url": [NSString stringWithFormat:@"%@/interact/collect?contentId=%@", YALAPIBaseURLString, contentIdString],
             @"parameters": [NSNull null]
         },
         @{
-            @"url": [NSString stringWithFormat:@"%@/interact/collect", kYALAPIBaseURL],
+            @"url": [NSString stringWithFormat:@"%@/interact/collect", YALAPIBaseURLString],
             @"parameters": @{@"content_id": contentId ?: @(0), @"user_id": userId}
         }
     ];
@@ -929,7 +977,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                         pageSize:(NSInteger)pageSize
                       completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/my", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/my", YALAPIBaseURLString];
 
     // 构建请求参数
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
@@ -1026,7 +1074,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                          pageSize:(NSInteger)pageSize
                        completion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/list", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/list", YALAPIBaseURLString];
 
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"page"] = @(MAX(page, 1));
@@ -1091,7 +1139,12 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             if (![item isKindOfClass:[NSDictionary class]]) {
                 continue;
             }
-            YALPostModel *model = [[YALPostModel alloc] initWithDictionary:(NSDictionary *)item];
+            NSDictionary *itemDict = (NSDictionary *)item;
+            if (!YALContentListShouldShowPublicContent(itemDict)) {
+                NSLog(@"🔒 /content/list 跳过非公开内容: %@", itemDict[@"content_id"]);
+                continue;
+            }
+            YALPostModel *model = [[YALPostModel alloc] initWithDictionary:itemDict];
             [contentList addObject:model];
         }
 
@@ -1108,7 +1161,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 
 - (void)getMyCollectListWithCompletion:(void (^)(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/interact/collect/my", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/interact/collect/my", YALAPIBaseURLString];
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
     NSLog(@"📡 获取我的收藏列表请求详情：");
@@ -1214,7 +1267,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 -(void)deleteContentWithId:(NSNumber *)contentId
                 completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/delete?content_id=%@", kYALAPIBaseURL, contentId ?: @(0)];
+    NSString *url = [NSString stringWithFormat:@"%@/content/delete?content_id=%@", YALAPIBaseURLString, contentId ?: @(0)];
     NSLog(@"🚨 DELETE URL = %@", url);
     NSDictionary *parameters = nil;
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];

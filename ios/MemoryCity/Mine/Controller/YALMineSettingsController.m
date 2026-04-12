@@ -18,9 +18,7 @@ typedef NS_ENUM(NSInteger, YALMineSettingsSection) {
 typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
     YALMineSettingsCommonRowDarkMode = 0,
     YALMineSettingsCommonRowChangePassword = 1,
-    YALMineSettingsCommonRowShareApp = 2,
-    YALMineSettingsCommonRowClearBadge = 3,
-    YALMineSettingsCommonRowCount = 4
+    YALMineSettingsCommonRowCount = 2
 };
 
 @interface YALMineSettingsController () <UITableViewDataSource, UITableViewDelegate>
@@ -121,12 +119,6 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
             case YALMineSettingsCommonRowChangePassword:
                 cell.textLabel.text = @"修改密码";
                 break;
-            case YALMineSettingsCommonRowShareApp:
-                cell.textLabel.text = @"分享 MemoryCity";
-                break;
-            case YALMineSettingsCommonRowClearBadge:
-                cell.textLabel.text = @"清空消息提醒";
-                break;
             default:
                 break;
         }
@@ -147,16 +139,6 @@ typedef NS_ENUM(NSInteger, YALMineSettingsCommonRow) {
             case YALMineSettingsCommonRowChangePassword:
                 if (self.tapChangePasswordBlock) {
                     self.tapChangePasswordBlock();
-                }
-                break;
-            case YALMineSettingsCommonRowShareApp:
-                if (self.tapShareBlock) {
-                    self.tapShareBlock();
-                }
-                break;
-            case YALMineSettingsCommonRowClearBadge:
-                if (self.tapClearBadgeBlock) {
-                    self.tapClearBadgeBlock();
                 }
                 break;
             default:

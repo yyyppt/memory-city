@@ -134,7 +134,6 @@
 
     [self.contentView addSubview:_imageView];
     [self.contentView addSubview:_titleLabel];
-    [self.contentView addSubview:_cityLabel];
     [self.contentView addSubview:_descLabel];
     [self.contentView addSubview:_metaRowView];
     [self.metaRowView addSubview:_heartImageView];
@@ -142,6 +141,7 @@
     [self.metaRowView addSubview:_metaDividerView];
     [self.metaRowView addSubview:_collectImageView];
     [self.metaRowView addSubview:_collectCountLabel];
+    [self.metaRowView addSubview:_cityLabel];
 
     [self.imageView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.contentView.mas_top).offset(9.0);
@@ -153,14 +153,14 @@
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.imageView.mas_bottom).offset(9.0);
         make.left.equalTo(self.contentView.mas_left).offset(14.0);
-        make.right.lessThanOrEqualTo(self.cityLabel.mas_left).offset(-8.0);
+        make.right.equalTo(self.contentView.mas_right).offset(-14.0);
         make.height.mas_equalTo(20.0);
     }];
 
     [self.cityLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.right.equalTo(self.contentView.mas_right).offset(-14.0);
-        make.centerY.equalTo(self.titleLabel.mas_centerY);
-        make.width.lessThanOrEqualTo(self.contentView.mas_width).multipliedBy(0.45);
+        make.right.equalTo(self.metaRowView.mas_right);
+        make.centerY.equalTo(self.metaRowView.mas_centerY);
+        make.width.lessThanOrEqualTo(self.metaRowView.mas_width).multipliedBy(0.45);
     }];
 
     [self.descLabel mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -198,7 +198,7 @@
     [self.collectCountLabel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.equalTo(self.collectImageView.mas_right).offset(4.0);
         make.centerY.equalTo(self.metaRowView.mas_centerY);
-        make.right.lessThanOrEqualTo(self.metaRowView.mas_right);
+        make.right.lessThanOrEqualTo(self.cityLabel.mas_left).offset(-10.0);
     }];
 
     [self applyAppearanceForCurrentTrait];

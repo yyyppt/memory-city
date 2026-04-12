@@ -8,6 +8,12 @@
 #import "YALLoginView.h"
 #import <Masonry/Masonry.h>
 
+@interface YALLoginView ()
+
+@property (nonatomic, strong) UIButton *passwordVisibilityButton;
+
+@end
+
 @implementation YALLoginView
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -75,6 +81,22 @@
     _passwordField.textContentType = UITextContentTypePassword;
     _passwordField.keyboardType = UIKeyboardTypeASCIICapable;
     _passwordField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    self.passwordVisibilityButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *symbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightMedium];
+        UIImage *hiddenImage = [UIImage systemImageNamed:@"eye.slash" withConfiguration:symbolConfig];
+        [self.passwordVisibilityButton setImage:hiddenImage forState:UIControlStateNormal];
+    } else {
+        [self.passwordVisibilityButton setTitle:@"显示" forState:UIControlStateNormal];
+    }
+    self.passwordVisibilityButton.tintColor = [UIColor colorWithWhite:0.45 alpha:1.0];
+    self.passwordVisibilityButton.frame = CGRectMake(0, 0, 24, 24);
+    UIView *passwordRightContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 36, 24)];
+    self.passwordVisibilityButton.center = CGPointMake(14, 12);
+    [passwordRightContainer addSubview:self.passwordVisibilityButton];
+    [self.passwordVisibilityButton addTarget:self action:@selector(togglePasswordVisibility) forControlEvents:UIControlEventTouchUpInside];
+    _passwordField.rightView = passwordRightContainer;
+    _passwordField.rightViewMode = UITextFieldViewModeAlways;
     if (@available(iOS 13.0, *)) {
         _passwordField.passwordRules = [UITextInputPasswordRules passwordRulesWithDescriptor:@"minlength: 6; maxlength: 15;"];
     }
@@ -101,6 +123,8 @@
     _registerButton = [[UIButton alloc] init];
     [_registerButton setTitle:@"注册" forState:UIControlStateNormal];
     [_registerButton setTitleColor:[UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0] forState:UIControlStateNormal];
+    _registerButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
+    _registerButton.contentEdgeInsets = UIEdgeInsetsMake(10, 16, 10, 16);
     [_registerButton addTarget:self action:@selector(pressRegister) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_registerButton];
 
@@ -148,10 +172,10 @@
     }];
 
     [_registerButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.mas_top).offset(80);
-        make.right.equalTo(self.mas_right).offset(-10);
-        make.width.mas_equalTo(60);
-        make.height.mas_equalTo(30);
+        make.top.equalTo(self.mas_safeAreaLayoutGuideTop).offset(6);
+        make.right.equalTo(self.mas_right).offset(-16);
+        make.width.mas_greaterThanOrEqualTo(84);
+        make.height.mas_equalTo(44);
     }];
 }
 
@@ -170,6 +194,24 @@
 - (void)pressForgetPassword {
     if (_tapForgetPasswordBlock) {
         _tapForgetPasswordBlock();
+    }
+}
+
+- (void)togglePasswordVisibility {
+    BOOL shouldShowPassword = self.passwordField.secureTextEntry;
+    self.passwordField.secureTextEntry = !shouldShowPassword;
+
+    NSString *currentText = self.passwordField.text ?: @"";
+    self.passwordField.text = @"";
+    self.passwordField.text = currentText;
+
+    if (@available(iOS 13.0, *)) {
+        NSString *imageName = shouldShowPassword ? @"eye" : @"eye.slash";
+        UIImageSymbolConfiguration *symbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightMedium];
+        UIImage *iconImage = [UIImage systemImageNamed:imageName withConfiguration:symbolConfig];
+        [self.passwordVisibilityButton setImage:iconImage forState:UIControlStateNormal];
+    } else {
+        [self.passwordVisibilityButton setTitle:shouldShowPassword ? @"隐藏" : @"显示" forState:UIControlStateNormal];
     }
 }
 

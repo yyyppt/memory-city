@@ -23,11 +23,6 @@ static NSString * const userProfileNicknameKey = @"YALAuthUserProfileNickname";
 static NSString * const userProfileAvatarKey = @"YALAuthUserProfileAvatar";
 static NSString * const userProfileBioKey = @"YALAuthUserProfileBio";
 
-static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-//static NSString * const kYALAPIBaseURL = @"http://192.168.1.65:9000/api";
-static NSString * const kYALAPIRootURL = @"http://8.137.158.7:9000/api";
-//static NSString * const kYALAPIRootURL = @"http://192.168.1.65:9000";
-
 NSString * const YALAuthManagerCurrentUserDidChangeNotification = @"YALAuthManagerCurrentUserDidChangeNotification";
 
 static id YALJSONNonNull(id obj) {
@@ -387,7 +382,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/refresh", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/refresh", YALAPIBaseURLString];
 
     NSDictionary *headers = @{
         @"Refresh-Authorization": [NSString stringWithFormat:@"Bearer %@", refreshToken]
@@ -576,7 +571,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/login", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/login", YALAPIBaseURLString];
     NSString *u = @"";
     if (username) {
         u = username;
@@ -635,7 +630,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/info", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/info", YALAPIBaseURLString];
 
     NSLog(@"📡 拉取用户信息请求(GET): %@", url);
 
@@ -682,7 +677,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/profile", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/profile", YALAPIBaseURLString];
     NSDictionary *headers = [self getAuthHeadersWithToken];
     NSString *userIdString = [NSString stringWithFormat:@"%@", userId];
     NSArray<NSDictionary *> *requestCandidates = @[
@@ -838,7 +833,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/register", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/register", YALAPIBaseURLString];
     NSMutableDictionary *parameters = [@{@"username": trimUsername,
                                          @"password": trimPassword,
                                          @"nickname": trimNickname} mutableCopy];
@@ -909,7 +904,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
     // 文档：PUT /user/info，参数 nickname / avatar，可扩展 bio
-    NSString *url = [NSString stringWithFormat:@"%@/user/info", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/info", YALAPIBaseURLString];
 
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"nickname"] = trimmedNickname;
@@ -1012,7 +1007,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
     // 文档：PUT /user/info
-    NSString *url = [NSString stringWithFormat:@"%@/user/info", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/info", YALAPIBaseURLString];
 
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"nickname"] = trimmedNickname;
@@ -1117,7 +1112,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/info", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/info", YALAPIBaseURLString];
 
     NSMutableDictionary *parameters = [NSMutableDictionary dictionary];
     parameters[@"nickname"] = trimmedNickname;
@@ -1222,7 +1217,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     }
 
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/user/info/updatepassword", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/info/updatepassword", YALAPIBaseURLString];
     NSDictionary *parameters = @{
         @"old_password": oldP,
         @"new_password": newP,
@@ -1284,7 +1279,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         return;
     }
 
-    NSString *url = [NSString stringWithFormat:@"%@/user/forgetPasswd/fgt", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/forgetPasswd/fgt", YALAPIBaseURLString];
     NSDictionary *parameters = @{@"user_name": trimUsername,
                                  @"phone": trimPhone};
 
@@ -1365,7 +1360,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         @"repeat_passwd": repeatP
     } mutableCopy];
 
-    NSString *url = [NSString stringWithFormat:@"%@/user/forgetPasswd/update", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/user/forgetPasswd/update", YALAPIBaseURLString];
     [[YALNetworkManager shareManager] POST:url
                                parameters:parameters
                                   headers:nil

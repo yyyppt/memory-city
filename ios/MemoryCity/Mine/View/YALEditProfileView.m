@@ -31,7 +31,7 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     return [UIImage imageWithData:data];
 }
 
-@interface YALEditProfileView ()
+@interface YALEditProfileView () <UIGestureRecognizerDelegate>
 
 // UI Components
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -136,7 +136,7 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     [self.contentView addSubview:self.bioContainer];
     
     self.bioLabel = [[UILabel alloc] init];
-    self.bioLabel.text = @"个人简介";
+    self.bioLabel.text = @"个性签名";
     self.bioLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     [self.bioContainer addSubview:self.bioLabel];
     
@@ -273,6 +273,11 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     [self.cancelButton addTarget:self action:@selector(cancelButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     
     [self.nicknameTextField addTarget:self action:@selector(textFieldDidChange:) forControlEvents:UIControlEventEditingChanged];
+
+    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleBackgroundTap)];
+    tapGesture.cancelsTouchesInView = NO;
+    tapGesture.delegate = self;
+    [self addGestureRecognizer:tapGesture];
 }
 
 #pragma mark - Public Methods
@@ -386,12 +391,31 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     }
 }
 
+- (void)handleBackgroundTap {
+    [self endEditing:YES];
+}
+
 #pragma mark - UITextViewDelegate
 
 - (void)textViewDidChange:(UITextView *)textView {
     if (textView == self.bioTextView) {
         [self clearErrorMessageForField:@"bio"];
     }
+}
+
+#pragma mark - UIGestureRecognizerDelegate
+
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    UIView *view = touch.view;
+    while (view && view != self) {
+        if ([view isKindOfClass:[UIControl class]] ||
+            [view isKindOfClass:[UITextField class]] ||
+            [view isKindOfClass:[UITextView class]]) {
+            return NO;
+        }
+        view = view.superview;
+    }
+    return YES;
 }
 
 @end

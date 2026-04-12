@@ -12,6 +12,49 @@ static NSString *YALTimeLineFullImageURLString(NSString *raw) {
     return [NSString stringWithFormat:@"http://%@", raw];
 }
 
+static UIColor *YALTimeLineDayPillColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor tertiarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:0.99 green:0.95 blue:0.89 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.99 green:0.95 blue:0.89 alpha:1.0];
+}
+
+static UIColor *YALTimeLineDayCardColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+}
+
+static UIColor *YALTimeLineDayPrimaryAccentTextColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor systemOrangeColor];
+            }
+            return [UIColor colorWithRed:0.40 green:0.24 blue:0.08 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.40 green:0.24 blue:0.08 alpha:1.0];
+}
+
+static UIColor *YALTimeLineDaySecondaryAccentTextColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor systemOrangeColor];
+    }
+    return [UIColor colorWithRed:0.69 green:0.46 blue:0.22 alpha:1.0];
+}
+
 @interface YALTimeLineDayCell ()
 
 @property (nonatomic, strong) UIView *dayPill;
@@ -39,24 +82,24 @@ static NSString *YALTimeLineFullImageURLString(NSString *raw) {
         self.contentView.backgroundColor = [UIColor clearColor];
 
         _dayPill = [[UIView alloc] init];
-        _dayPill.backgroundColor = [UIColor colorWithRed:0.99 green:0.95 blue:0.89 alpha:1.0];
+        _dayPill.backgroundColor = YALTimeLineDayPillColor();
         _dayPill.layer.cornerRadius = 18.0;
         [self.contentView addSubview:_dayPill];
 
         _dayNumLabel = [[UILabel alloc] init];
         _dayNumLabel.font = [UIFont systemFontOfSize:26 weight:UIFontWeightHeavy];
-        _dayNumLabel.textColor = [UIColor colorWithRed:0.40 green:0.24 blue:0.08 alpha:1.0];
+        _dayNumLabel.textColor = YALTimeLineDayPrimaryAccentTextColor();
         _dayNumLabel.textAlignment = NSTextAlignmentCenter;
         [_dayPill addSubview:_dayNumLabel];
 
         _weekdayLabel = [[UILabel alloc] init];
         _weekdayLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
-        _weekdayLabel.textColor = [UIColor colorWithRed:0.69 green:0.46 blue:0.22 alpha:1.0];
+        _weekdayLabel.textColor = YALTimeLineDaySecondaryAccentTextColor();
         _weekdayLabel.textAlignment = NSTextAlignmentCenter;
         [_dayPill addSubview:_weekdayLabel];
 
         _card = [[UIView alloc] init];
-        _card.backgroundColor = [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+        _card.backgroundColor = YALTimeLineDayCardColor();
         _card.layer.cornerRadius = 22.0;
         _card.layer.borderWidth = 1.0 / [UIScreen mainScreen].scale;
         _card.layer.borderColor = [UIColor colorWithWhite:0 alpha:0.05].CGColor;
@@ -114,7 +157,7 @@ static NSString *YALTimeLineFullImageURLString(NSString *raw) {
 
         _metaLabel = [[UILabel alloc] init];
         _metaLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
-        _metaLabel.textColor = [UIColor colorWithRed:0.69 green:0.46 blue:0.22 alpha:1.0];
+        _metaLabel.textColor = YALTimeLineDaySecondaryAccentTextColor();
         [_card addSubview:_metaLabel];
 
         [_dayPill mas_makeConstraints:^(MASConstraintMaker *make) {

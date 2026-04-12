@@ -20,6 +20,80 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     YALSearchTabTypeUser = 1
 };
 
+static UIColor *YALSearchPageBackgroundColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor systemBackgroundColor];
+            }
+            return [UIColor colorWithRed:0.98 green:0.97 blue:0.95 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.98 green:0.97 blue:0.95 alpha:1.0];
+}
+
+static UIColor *YALSearchSegmentBackgroundColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor tertiarySystemBackgroundColor];
+            }
+            return [[UIColor whiteColor] colorWithAlphaComponent:0.86];
+        }];
+    }
+    return [[UIColor whiteColor] colorWithAlphaComponent:0.86];
+}
+
+static UIColor *YALSearchCardBackgroundColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [[UIColor whiteColor] colorWithAlphaComponent:0.92];
+        }];
+    }
+    return [[UIColor whiteColor] colorWithAlphaComponent:0.92];
+}
+
+static UIColor *YALSearchAICardBackgroundColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:1.0 green:0.98 blue:0.95 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:1.0 green:0.98 blue:0.95 alpha:1.0];
+}
+
+static UIColor *YALSearchSoftCardBorderColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor separatorColor];
+    }
+    return [[UIColor whiteColor] colorWithAlphaComponent:0.78];
+}
+
+static UIColor *YALSearchSecondaryTextColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor secondaryLabelColor];
+    }
+    return [UIColor colorWithRed:0.45 green:0.40 blue:0.36 alpha:1.0];
+}
+
+static UIColor *YALSearchBodyTextColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondaryLabelColor];
+            }
+            return [UIColor colorWithRed:0.32 green:0.28 blue:0.25 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.32 green:0.28 blue:0.25 alpha:1.0];
+}
+
 @interface YALSearchResultCardCell : UITableViewCell
 
 - (void)configureWithTitle:(NSString *)title
@@ -73,7 +147,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = [UIColor colorWithRed:0.98 green:0.97 blue:0.95 alpha:1.0];
+    self.view.backgroundColor = YALSearchPageBackgroundColor();
     self.currentTab = self.initialTab;
     self.contentResults = @[];
     self.userResults = @[];
@@ -166,12 +240,12 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
     self.segmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"内容", @"用户"]];
     self.segmentedControl.selectedSegmentIndex = self.currentTab == YALSearchTabTypeUser ? 1 : 0;
-    self.segmentedControl.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.86];
+    self.segmentedControl.backgroundColor = YALSearchSegmentBackgroundColor();
     self.segmentedControl.selectedSegmentTintColor = [self accentColor];
     self.segmentedControl.layer.cornerRadius = 18.0;
     self.segmentedControl.layer.masksToBounds = YES;
     [self.segmentedControl setTitleTextAttributes:@{
-        NSForegroundColorAttributeName: [UIColor colorWithRed:0.45 green:0.40 blue:0.36 alpha:1.0],
+        NSForegroundColorAttributeName: YALSearchSecondaryTextColor(),
         NSFontAttributeName: [UIFont systemFontOfSize:15.0 weight:UIFontWeightSemibold]
     } forState:UIControlStateNormal];
     [self.segmentedControl setTitleTextAttributes:@{
@@ -328,7 +402,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 }
 
 - (void)requestAIForSearchResults {
-    NSString *resultText = [self aiAnalysisTextFromCurrentResults];
+    NSString *resultText = [self aiAnalysisPromptFromCurrentResults];
     if (resultText.length == 0) {
         self.isAILoading = NO;
         self.aiResult = nil;
@@ -401,7 +475,14 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         if (!self.isResultPage) {
             return 1;
         }
-        return [self hasContentResultSection] ? 2 : 1;
+        NSInteger sections = 0;
+        if ([self hasVisibleAISection]) {
+            sections += 1;
+        }
+        if ([self hasContentResultSection]) {
+            sections += 1;
+        }
+        return sections;
     }
     return 1;
 }
@@ -415,10 +496,10 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         if ([self shouldShowEmptySearchResult]) {
             return 0;
         }
-        if (section == 0) {
+        if ([self hasVisibleAISection] && section == 0) {
             return 1;
         }
-        return [self hasContentResultSection] ? self.contentResults.count : 0;
+        return self.contentResults.count;
     }
     if ([self shouldShowEmptySearchResult]) {
         return 0;
@@ -428,7 +509,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     (void)tableView;
-    if (self.currentTab == YALSearchTabTypeContent && indexPath.section == 0) {
+    if (self.currentTab == YALSearchTabTypeContent && [self hasVisibleAISection] && indexPath.section == 0) {
         YALSearchAIResultCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"YALSearchAIResultCell" forIndexPath:indexPath];
         [cell configureWithKeyword:self.keyword ?: @""
                             result:self.aiResult
@@ -510,7 +591,8 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         return;
     }
 
-    if (indexPath.section != 1 || indexPath.row >= self.contentResults.count) {
+    NSInteger contentSection = [self hasVisibleAISection] ? 1 : 0;
+    if (indexPath.section != contentSection || indexPath.row >= self.contentResults.count) {
         return;
     }
 
@@ -557,8 +639,55 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     return [parts componentsJoinedByString:@"  "];
 }
 
-- (NSString *)aiAnalysisTextFromCurrentResults {
+- (NSString *)processedKeywordForAIAnalysis {
+    NSString *trimmedKeyword = [self.keyword stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimmedKeyword.length == 0) {
+        return @"当前搜索，请先做简洁介绍，再结合站内结果总结";
+    }
+    return [NSString stringWithFormat:@"%@，请先做简洁介绍，再结合站内结果总结", trimmedKeyword];
+}
+
+- (BOOL)isLikelyLocationKeyword:(NSString *)keyword {
+    NSString *trimmedKeyword = [keyword stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimmedKeyword.length == 0) {
+        return NO;
+    }
+
+    NSArray<NSString *> *locationSuffixes = @[@"市", @"区", @"县", @"镇", @"乡", @"村", @"省", @"路", @"街", @"巷", @"胡同", @"湾", @"湖", @"山", @"江", @"河", @"园", @"宫", @"站", @"机场", @"大学", @"公园", @"广场", @"地铁站", @"博物馆"];
+    for (NSString *suffix in locationSuffixes) {
+        if ([trimmedKeyword hasSuffix:suffix]) {
+            return YES;
+        }
+    }
+
+    NSSet<NSString *> *commonLocations = [NSSet setWithArray:@[@"北京", @"上海", @"广州", @"深圳", @"杭州", @"南京", @"苏州", @"成都", @"重庆", @"武汉", @"西安", @"天津", @"长沙", @"青岛", @"厦门", @"香港", @"澳门", @"台北"]];
+    if ([commonLocations containsObject:trimmedKeyword]) {
+        return YES;
+    }
+
+    for (YALSearchContentModel *item in self.contentResults) {
+        if (![item isKindOfClass:[YALSearchContentModel class]]) {
+            continue;
+        }
+        if (item.city.length > 0 && [item.city isEqualToString:trimmedKeyword]) {
+            return YES;
+        }
+    }
+
+    return NO;
+}
+
+- (NSString *)aiAnalysisPromptFromCurrentResults {
     NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    NSString *processedKeyword = [self processedKeywordForAIAnalysis];
+    NSString *originalKeyword = [self.keyword stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    BOOL isLikelyLocationKeyword = [self isLikelyLocationKeyword:originalKeyword];
+
+    if (originalKeyword.length > 0) {
+        [lines addObject:[NSString stringWithFormat:@"原始搜索词：%@", originalKeyword]];
+    }
+    [lines addObject:[NSString stringWithFormat:@"搜索词类型：%@", isLikelyLocationKeyword ? @"地点/地名倾向" : @"普通主题词"]];
+    [lines addObject:[NSString stringWithFormat:@"AI加工搜索词：%@", processedKeyword]];
     [lines addObject:[NSString stringWithFormat:@"内容结果数：%lu", (unsigned long)self.contentResults.count]];
     [lines addObject:[NSString stringWithFormat:@"用户结果数：%lu", (unsigned long)self.userResults.count]];
 
@@ -637,27 +766,29 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
     return [NSString stringWithFormat:
             @"你是一个\"城市记忆搜索助手\"，需要帮助用户更好地探索内容。\n\n"
-            @"请根据【搜索结果】，生成搜索辅助信息。\n\n"
+            @"请结合【搜索词】和【搜索结果】，生成偏“百科介绍”风格的搜索辅助信息。\n\n"
             @"要求：\n"
-            @"1. summary：用1段完整自然的中文总结当前搜索结果，尽量写得具体一些，长度控制在90到140字；\n"
+            @"1. summary：用不超过90字输出。默认结构是“先介绍搜索词本身，再概括站内结果”；如果搜索词是地点、城市、景点、街区、地标等地名，开头必须先给出像百科导语一样的地点介绍，再补充站内搜到的内容方向；\n"
             @"2. suggestions：给出3个推荐继续搜索的关键词（中文，英文逗号分隔）；\n"
-            @"3. highlights：提取2-3个有代表性的内容点（短句，每条不超过20字）；\n"
-            @"4. guide：用1句更自然、更完整的搜索提示引导用户继续探索，长度控制在40到70字；\n"
-            @"5. 如果搜索结果较少或内容不集中，请明确说明结果较少，并优先生成扩展搜索建议；\n"
-            @"6. 优先关注并提炼城市、地点、时间、情绪、人物、内容主题这些线索；如果结果里出现城市或时间，不要忽略；\n"
-            @"7. 如果结果中出现点赞数、评论数、发布时间、作者、图片数量等信息，可以用于辅助概括内容热度和特征；\n"
-            @"8. suggestions 尽量围绕城市、地点、时间、情绪或主题做延展，避免只给空泛词；\n"
-            @"9. 严禁编造不存在的信息；\n"
+            @"3. highlights：提取2-3个有代表性的内容点（短句，每条不超过20字）；如果是地点词，前1-2条优先写地点本身的定位、特征、历史文化、城市角色、知名标签，再写站内内容线索；\n"
+            @"4. guide：用一句话引导用户继续探索，不超过40字；如果是地点词，优先引导用户继续搜它的历史、街区、地标、美食、生活记忆；\n"
+            @"5. 如果搜索词明显是地点词，而站内结果只是零散动态，也必须补一小段该地点的基础介绍，不能只复述搜索结果；\n"
+            @"6. 如果搜索结果较少、内容不集中，或用户的问题本身更像常识问答，请优先基于【搜索词】给出简洁清晰的解释，再补充\"扩展搜索建议\"；\n"
+            @"7. 优先使用【搜索结果】里的事实；当搜索结果不足时，可以结合【搜索词】做稳定、常识性的通用解释，但不要捏造具体人物、地点、事件细节，也不要写未经验证的冷门数据；\n"
+            @"8. 整体语气更像百科导语或旅游目的地简介，不要只写“搜索结果包含了什么”；\n"
+            @"9. 如果站内结果与地点关联较弱，也要优先保证地点介绍有信息量；\n"
             @"10. 输出必须是JSON，不能有任何额外文字或说明。\n\n"
             @"请严格按照以下格式返回：\n\n"
             @"{\n"
-            @"  \"summary\": \"较完整的搜索结果总结\",\n"
+            @"  \"summary\": \"搜索结果总结\",\n"
             @"  \"suggestions\": \"关键词1,关键词2,关键词3\",\n"
             @"  \"highlights\": [\"亮点1\",\"亮点2\"],\n"
-            @"  \"guide\": \"一句较完整的搜索提示\"\n"
+            @"  \"guide\": \"一句探索引导\"\n"
             @"}\n\n"
-            @"请特别注意：如果搜索结果中有城市、时间或情绪信息，summary、highlights 和 guide 应尽量体现这些线索。\n\n"
+            @"特别注意：如果搜索词是“北京”“上海”这类地点词，summary 不能只写“搜索结果主要包含相关内容”，而应该像“北京是中国的首都，也是历史文化名城……”这样先做地点介绍，再概括站内内容。\n\n"
+            @"搜索词：%@\n\n"
             @"搜索结果内容：\n%@",
+            processedKeyword,
             resultBody];
 }
 
@@ -768,11 +899,11 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         self.contentView.backgroundColor = [UIColor clearColor];
 
         self.cardView = [[UIView alloc] init];
-        self.cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.92];
+        self.cardView.backgroundColor = YALSearchCardBackgroundColor();
         self.cardView.layer.cornerRadius = 24.0;
         self.cardView.layer.masksToBounds = NO;
         self.cardView.layer.borderWidth = 1.0;
-        self.cardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.78].CGColor;
+        self.cardView.layer.borderColor = YALSearchSoftCardBorderColor().CGColor;
         self.cardView.layer.shadowColor = [UIColor colorWithRed:0.38 green:0.26 blue:0.18 alpha:1.0].CGColor;
         self.cardView.layer.shadowOpacity = 0.08;
         self.cardView.layer.shadowRadius = 20.0;
@@ -780,7 +911,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         [self.contentView addSubview:self.cardView];
 
         self.coverImageView = [[UIImageView alloc] init];
-        self.coverImageView.backgroundColor = [UIColor colorWithRed:0.95 green:0.92 blue:0.89 alpha:1.0];
+        self.coverImageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
         self.coverImageView.layer.cornerRadius = 20.0;
         self.coverImageView.layer.masksToBounds = YES;
         self.coverImageView.contentMode = UIViewContentModeScaleAspectFill;
@@ -792,11 +923,11 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         [self.coverImageView addSubview:self.coverShadeView];
 
         self.avatarView = [[UIImageView alloc] init];
-        self.avatarView.backgroundColor = [UIColor whiteColor];
+        self.avatarView.backgroundColor = [UIColor systemBackgroundColor];
         self.avatarView.layer.cornerRadius = 18.0;
         self.avatarView.layer.masksToBounds = YES;
         self.avatarView.layer.borderWidth = 2.0;
-        self.avatarView.layer.borderColor = [UIColor whiteColor].CGColor;
+        self.avatarView.layer.borderColor = [UIColor systemBackgroundColor].CGColor;
         self.avatarView.contentMode = UIViewContentModeScaleAspectFill;
         [self.cardView addSubview:self.avatarView];
 
@@ -815,13 +946,13 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
         self.usernameLabel = [[UILabel alloc] init];
         self.usernameLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
-        self.usernameLabel.textColor = [UIColor colorWithRed:0.46 green:0.40 blue:0.36 alpha:1.0];
+        self.usernameLabel.textColor = YALSearchSecondaryTextColor();
         self.usernameLabel.numberOfLines = 1;
         [self.cardView addSubview:self.usernameLabel];
 
         self.subtitleLabel = [[UILabel alloc] init];
         self.subtitleLabel.font = [UIFont systemFontOfSize:13.0 weight:UIFontWeightRegular];
-        self.subtitleLabel.textColor = [UIColor colorWithRed:0.34 green:0.31 blue:0.28 alpha:1.0];
+        self.subtitleLabel.textColor = YALSearchBodyTextColor();
         self.subtitleLabel.numberOfLines = 2;
         [self.cardView addSubview:self.subtitleLabel];
 
@@ -954,6 +1085,8 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 @property (nonatomic, strong) UIView *topAccentBar;
 @property (nonatomic, strong) UIView *glowBubble;
 @property (nonatomic, assign) NSUInteger streamingGeneration;
+@property (nonatomic, assign) NSTimeInterval streamingCharacterInterval;
+@property (nonatomic, assign) NSUInteger streamedCharacterCount;
 
 @end
 
@@ -966,11 +1099,11 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         self.contentView.backgroundColor = [UIColor clearColor];
 
         self.cardView = [[UIView alloc] init];
-        self.cardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.98 blue:0.95 alpha:1.0];
+        self.cardView.backgroundColor = YALSearchAICardBackgroundColor();
         self.cardView.layer.cornerRadius = 28.0;
         self.cardView.layer.masksToBounds = NO;
         self.cardView.layer.borderWidth = 1.0;
-        self.cardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.78].CGColor;
+        self.cardView.layer.borderColor = YALSearchSoftCardBorderColor().CGColor;
         self.cardView.layer.shadowColor = [UIColor colorWithRed:0.60 green:0.35 blue:0.16 alpha:1.0].CGColor;
         self.cardView.layer.shadowOpacity = 0.10;
         self.cardView.layer.shadowRadius = 24.0;
@@ -1005,7 +1138,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
         self.summaryLabel = [[UILabel alloc] init];
         self.summaryLabel.font = [UIFont systemFontOfSize:14.5 weight:UIFontWeightRegular];
-        self.summaryLabel.textColor = [UIColor colorWithRed:0.32 green:0.28 blue:0.25 alpha:1.0];
+        self.summaryLabel.textColor = YALSearchBodyTextColor();
         self.summaryLabel.numberOfLines = 0;
 
         self.tagsLabel = [[UILabel alloc] init];
@@ -1015,7 +1148,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
         self.highlightsLabel = [[UILabel alloc] init];
         self.highlightsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightMedium];
-        self.highlightsLabel.textColor = [UIColor colorWithRed:0.45 green:0.36 blue:0.28 alpha:1.0];
+        self.highlightsLabel.textColor = YALSearchSecondaryTextColor();
         self.highlightsLabel.numberOfLines = 0;
 
         self.suggestionsLabel = [[UILabel alloc] init];
@@ -1025,7 +1158,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
         self.guideLabel = [[UILabel alloc] init];
         self.guideLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightRegular];
-        self.guideLabel.textColor = [UIColor colorWithRed:0.38 green:0.33 blue:0.29 alpha:1.0];
+        self.guideLabel.textColor = YALSearchSecondaryTextColor();
         self.guideLabel.numberOfLines = 0;
 
         self.contentStack = [[UIStackView alloc] initWithArrangedSubviews:@[
@@ -1040,12 +1173,13 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         self.contentStack.alignment = UIStackViewAlignmentFill;
         self.contentStack.distribution = UIStackViewDistributionFill;
         [self.cardView addSubview:self.contentStack];
+        self.streamingCharacterInterval = 0.06;
 
         [self.cardView mas_makeConstraints:^(MASConstraintMaker *make) {
             make.top.equalTo(self.contentView).offset(10.0);
             make.left.equalTo(self.contentView).offset(16.0);
             make.right.equalTo(self.contentView).offset(-16.0);
-            make.bottom.lessThanOrEqualTo(self.contentView).offset(-6.0);
+            make.bottom.equalTo(self.contentView).offset(-6.0);
         }];
         [self.glowBubble mas_makeConstraints:^(MASConstraintMaker *make) {
             make.top.equalTo(self.cardView).offset(-18.0);
@@ -1073,7 +1207,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
             make.top.equalTo(self.titleLabel.mas_bottom).offset(10.0);
             make.left.equalTo(self.badgeLabel);
             make.right.equalTo(self.cardView).offset(-18.0);
-            make.bottom.lessThanOrEqualTo(self.cardView).offset(-18.0);
+            make.bottom.equalTo(self.cardView).offset(-18.0);
         }];
     }
     return self;
@@ -1094,7 +1228,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     [self resetContentVisibility];
 
     if (loading) {
-        self.summaryLabel.text = @"AI 正在整理与你搜索最相关的内容、语义和情绪倾向，请稍候片刻。";
+        self.summaryLabel.text = @"AI 正在补充地点介绍并整理站内相关内容，请稍候片刻。";
         self.tagsLabel.text = @"";
         self.highlightsLabel.text = @"";
         self.suggestionsLabel.text = @"";
@@ -1110,22 +1244,26 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     if (result != nil) {
         NSString *summaryText = result.summary.length > 0 ? result.summary : @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
         NSString *highlightsText = result.highlights.count > 0 ? [NSString stringWithFormat:@"亮点：%@", [result.highlights componentsJoinedByString:@" · "]] : @"亮点：暂无";
-        NSString *suggestionsText = result.suggestions.length > 0 ? [NSString stringWithFormat:@"推荐搜索：%@", result.suggestions] : @"推荐搜索：暂无";
+        NSString *suggestionsText = result.suggestions.length > 0 ? [NSString stringWithFormat:@"推荐搜索：%@", result.suggestions] : @"";
         NSString *guideText = result.guide.length > 0 ? [NSString stringWithFormat:@"搜索提示：%@", result.guide] : @"搜索提示：可以继续从地点、情绪、人物或时间线索展开搜索。";
         self.tagsLabel.text = result.tags.count > 0 ? [NSString stringWithFormat:@"关键词：%@", [result.tags componentsJoinedByString:@" · "]] : @"";
-        self.summaryLabel.text = @"";
-        self.highlightsLabel.text = @"";
-        self.suggestionsLabel.text = @"";
-        self.guideLabel.text = @"";
+        self.summaryLabel.text = summaryText;
+        self.highlightsLabel.text = highlightsText;
+        self.suggestionsLabel.text = suggestionsText;
+        self.guideLabel.text = guideText;
+        [self updateVisibilityForLabel:self.summaryLabel];
         [self updateVisibilityForLabel:self.tagsLabel];
-        [self startStreamingWithSummaryText:summaryText highlightsText:highlightsText suggestionsText:suggestionsText guideText:guideText];
+        [self updateVisibilityForLabel:self.highlightsLabel];
+        [self updateVisibilityForLabel:self.suggestionsLabel];
+        [self updateVisibilityForLabel:self.guideLabel];
+        [self startStreaming];
         return;
     }
 
     self.summaryLabel.text = errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。";
     self.tagsLabel.text = @"";
     self.highlightsLabel.text = @"亮点：暂不可用";
-    self.suggestionsLabel.text = @"推荐搜索：暂不可用";
+    self.suggestionsLabel.text = @"";
     self.guideLabel.text = @"搜索提示：你仍然可以结合当前结果继续细化搜索。";
     [self updateVisibilityForLabel:self.summaryLabel];
     [self updateVisibilityForLabel:self.tagsLabel];
@@ -1134,52 +1272,115 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     [self updateVisibilityForLabel:self.guideLabel];
 }
 
-- (void)startStreamingWithSummaryText:(NSString *)summaryText
-                       highlightsText:(NSString *)highlightsText
-                      suggestionsText:(NSString *)suggestionsText
-                            guideText:(NSString *)guideText {
+- (void)startStreaming {
     [self cancelStreaming];
-    self.summaryLabel.alpha = 0.0;
-    self.highlightsLabel.alpha = 0.0;
-    self.suggestionsLabel.alpha = 0.0;
-    self.guideLabel.alpha = 0.0;
-    [self updateVisibilityForLabel:self.summaryLabel];
-    [self updateVisibilityForLabel:self.highlightsLabel];
-    [self updateVisibilityForLabel:self.suggestionsLabel];
-    [self updateVisibilityForLabel:self.guideLabel];
-
+    self.streamedCharacterCount = 0;
     NSUInteger generation = ++self.streamingGeneration;
-    [self revealLabel:self.summaryLabel withText:summaryText delay:0.00 generation:generation];
-    [self revealLabel:self.highlightsLabel withText:highlightsText delay:0.32 generation:generation];
-    [self revealLabel:self.suggestionsLabel withText:suggestionsText delay:0.64 generation:generation];
-    [self revealLabel:self.guideLabel withText:guideText delay:0.96 generation:generation];
+    [self streamLabel:self.summaryLabel delay:0.00 generation:generation];
+    [self streamLabel:self.highlightsLabel delay:0.28 generation:generation];
+    [self streamLabel:self.suggestionsLabel delay:0.56 generation:generation];
+    [self streamLabel:self.guideLabel delay:0.84 generation:generation];
 }
 
-- (void)revealLabel:(UILabel *)label
-           withText:(NSString *)text
+- (void)streamLabel:(UILabel *)label
               delay:(NSTimeInterval)delay
          generation:(NSUInteger)generation {
-    NSString *safeText = text ?: @"";
-    if (safeText.length == 0 || label == nil) {
-        label.text = @"";
-        [self updateVisibilityForLabel:label];
+    if (label == nil || label.hidden) {
         return;
     }
+
+    NSString *fullText = label.text ?: @"";
+    if (fullText.length == 0) {
+        return;
+    }
+
+    label.alpha = 1.0;
+    label.text = @"";
+    [self layoutIfNeeded];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self.streamingGeneration != generation) {
             return;
         }
-        label.text = safeText;
-        label.hidden = NO;
-        [UIView animateWithDuration:0.22 animations:^{
-            label.alpha = 1.0;
-        }];
+        [self appendCharactersForLabel:label
+                              fromText:fullText
+                                 index:0
+                            generation:generation];
+    });
+}
+
+- (void)appendCharactersForLabel:(UILabel *)label
+                        fromText:(NSString *)fullText
+                           index:(NSUInteger)index
+                      generation:(NSUInteger)generation {
+    if (self.streamingGeneration != generation || label == nil || fullText.length == 0) {
+        return;
+    }
+
+    __block NSUInteger currentCharacterIndex = 0;
+    __block NSString *nextText = nil;
+    __block BOOL appended = NO;
+    [fullText enumerateSubstringsInRange:NSMakeRange(0, fullText.length)
+                                 options:NSStringEnumerationByComposedCharacterSequences
+                              usingBlock:^(NSString * _Nullable substring, NSRange substringRange, NSRange enclosingRange, BOOL * _Nonnull stop) {
+        (void)substringRange;
+        (void)enclosingRange;
+        if (currentCharacterIndex == index) {
+            nextText = [fullText substringToIndex:NSMaxRange(substringRange)];
+            appended = YES;
+            *stop = YES;
+            return;
+        }
+        currentCharacterIndex += 1;
+    }];
+
+    if (!appended) {
+        label.text = fullText;
+        [self refreshContainingTableViewLayout];
+        return;
+    }
+
+    label.text = nextText;
+    self.streamedCharacterCount += 1;
+    [self setNeedsLayout];
+    [self layoutIfNeeded];
+    if (self.streamedCharacterCount % 2 == 0 || index == 0) {
+        [self refreshContainingTableViewLayout];
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(self.streamingCharacterInterval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self.streamingGeneration != generation) {
+            return;
+        }
+        [self appendCharactersForLabel:label
+                              fromText:fullText
+                                 index:index + 1
+                            generation:generation];
     });
 }
 
 - (void)cancelStreaming {
     self.streamingGeneration += 1;
+}
+
+- (UITableView *)containingTableView {
+    UIView *view = self.superview;
+    while (view != nil && ![view isKindOfClass:[UITableView class]]) {
+        view = view.superview;
+    }
+    return (UITableView *)view;
+}
+
+- (void)refreshContainingTableViewLayout {
+    UITableView *tableView = [self containingTableView];
+    if (tableView == nil) {
+        return;
+    }
+
+    [UIView performWithoutAnimation:^{
+        [tableView beginUpdates];
+        [tableView endUpdates];
+    }];
 }
 
 - (void)resetContentVisibility {

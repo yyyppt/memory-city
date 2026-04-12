@@ -19,6 +19,25 @@ static NSString *YALCardAbsoluteURLString(NSString *raw) {
     return [NSString stringWithFormat:@"http://%@", raw];
 }
 
+static UIColor *YALTimeLineCardBackgroundColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+}
+
+static UIColor *YALTimeLineCardDateColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor systemOrangeColor];
+    }
+    return [UIColor colorWithRed:0.65 green:0.42 blue:0.18 alpha:1.0];
+}
+
 @interface YALTimeLineCardView ()
 
 @property (nonatomic, strong) UIImageView *imageView;
@@ -36,7 +55,7 @@ static NSString *YALCardAbsoluteURLString(NSString *raw) {
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        self.backgroundColor = [UIColor colorWithRed:1.0 green:0.995 blue:0.985 alpha:1.0];
+        self.backgroundColor = YALTimeLineCardBackgroundColor();
         self.layer.cornerRadius = 18.0;
         self.layer.masksToBounds = NO;
         self.layer.borderWidth = 1.0 / [UIScreen mainScreen].scale;
@@ -79,7 +98,7 @@ static NSString *YALCardAbsoluteURLString(NSString *raw) {
 
         _dateLabel = [[UILabel alloc] init];
         _dateLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-        _dateLabel.textColor = [UIColor colorWithRed:0.65 green:0.42 blue:0.18 alpha:1.0];
+        _dateLabel.textColor = YALTimeLineCardDateColor();
         [self addSubview:_dateLabel];
 
         _summaryLabel = [[UILabel alloc] init];

@@ -10,8 +10,6 @@
 #import "YALAuthManager.h"
 #import "YALContentManager.h"
 
-static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";
-
 @implementation YALTimelineManager
 
 + (instancetype)sharedManager {
@@ -55,7 +53,7 @@ static NSInteger YALExtractCode(id responseObject) {
                                           NSString * _Nullable message,
                                           NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/timeline/my", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/timeline/my", YALAPIBaseURLString];
     NSMutableDictionary *params = [NSMutableDictionary dictionary];
     NSLog(@"日期：%@", params[@"year"]);
     if (year && [year respondsToSelector:@selector(integerValue)] && year.integerValue > 0) {
@@ -100,7 +98,7 @@ static NSInteger YALExtractCode(id responseObject) {
                          mood:(nullable NSString *)mood
                    completion:(void (^)(BOOL success, NSArray * _Nullable list, NSString * _Nullable message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
-    NSString *url = [NSString stringWithFormat:@"%@/content/filter", kYALAPIBaseURL];
+    NSString *url = [NSString stringWithFormat:@"%@/content/filter", YALAPIBaseURLString];
     NSMutableDictionary *params = [NSMutableDictionary dictionary];
     if (city.length > 0) params[@"city"] = city;
     if (year.length > 0) params[@"year"] = year;
@@ -153,4 +151,3 @@ static NSInteger YALExtractCode(id responseObject) {
 }
 
 @end
-

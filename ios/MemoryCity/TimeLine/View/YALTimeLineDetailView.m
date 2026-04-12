@@ -11,6 +11,37 @@
 
 static NSString * const kYALDetailImageCellIdentifier = @"YALDetailImageCell";
 
+static UIColor *YALTimeLineDetailCardColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+}
+
+static UIColor *YALTimeLineDetailActionBarColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor tertiarySystemBackgroundColor];
+    }
+    return [UIColor colorWithWhite:1 alpha:0.78];
+}
+
+static UIColor *YALTimeLineDetailDateColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor systemOrangeColor];
+            }
+            return [UIColor colorWithRed:0.64 green:0.40 blue:0.16 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.64 green:0.40 blue:0.16 alpha:1.0];
+}
+
 static NSString *YALAbsoluteImageURLString(NSString *raw) {
     if (![raw isKindOfClass:[NSString class]] || raw.length == 0) {
         return nil;
@@ -156,7 +187,7 @@ static NSString *YALAbsoluteImageURLString(NSString *raw) {
     [_scrollView addSubview:_contentView];
 
     _card = [[UIView alloc] init];
-    _card.backgroundColor = [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+    _card.backgroundColor = YALTimeLineDetailCardColor();
     _card.layer.cornerRadius = 28.0;
     _card.layer.masksToBounds = NO;
     _card.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.12].CGColor;
@@ -224,7 +255,7 @@ static NSString *YALAbsoluteImageURLString(NSString *raw) {
 
     _dateLabel = [[UILabel alloc] init];
     _dateLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-    _dateLabel.textColor = [UIColor colorWithRed:0.64 green:0.40 blue:0.16 alpha:1.0];
+    _dateLabel.textColor = YALTimeLineDetailDateColor();
     [_card addSubview:_dateLabel];
 
     _bodyLabel = [[UILabel alloc] init];
@@ -234,7 +265,7 @@ static NSString *YALAbsoluteImageURLString(NSString *raw) {
     [_card addSubview:_bodyLabel];
 
     _actionBar = [[UIView alloc] init];
-    _actionBar.backgroundColor = [UIColor colorWithWhite:1 alpha:0.78];
+    _actionBar.backgroundColor = YALTimeLineDetailActionBarColor();
     _actionBar.layer.cornerRadius = 18.0;
     [_card addSubview:_actionBar];
 

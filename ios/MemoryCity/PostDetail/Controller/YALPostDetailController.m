@@ -28,6 +28,25 @@ static UIImage * _Nullable YALPostDetailImageFromDataURLString(NSString *dataURL
 
 static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
 
+static UIColor *YALAuthorProfileHeaderCardColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor secondarySystemBackgroundColor];
+            }
+            return [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+        }];
+    }
+    return [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+}
+
+static UIColor *YALAuthorProfileCardColor(void) {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor tertiarySystemBackgroundColor];
+    }
+    return [UIColor systemBackgroundColor];
+}
+
 @interface YALAuthorProfileController : UIViewController
 
 @property (nonatomic, strong) NSNumber *userId;
@@ -82,6 +101,7 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
     }];
 
     self.contentView = [[UIView alloc] init];
+    self.contentView.backgroundColor = [UIColor clearColor];
     [self.scrollView addSubview:self.contentView];
     [self.contentView mas_makeConstraints:^(MASConstraintMaker *make) {
         make.edges.equalTo(self.scrollView);
@@ -89,7 +109,7 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
     }];
 
     self.headerCard = [[UIView alloc] init];
-    self.headerCard.backgroundColor = [UIColor colorWithRed:0.995 green:0.985 blue:0.965 alpha:1.0];
+    self.headerCard.backgroundColor = YALAuthorProfileHeaderCardColor();
     self.headerCard.layer.cornerRadius = 24.0;
     self.headerCard.layer.masksToBounds = YES;
     [self.contentView addSubview:self.headerCard];
@@ -125,7 +145,7 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
     [self.headerCard addSubview:self.bioLabel];
 
     self.statsCard = [[UIView alloc] init];
-    self.statsCard.backgroundColor = [UIColor systemBackgroundColor];
+    self.statsCard.backgroundColor = YALAuthorProfileCardColor();
     self.statsCard.layer.cornerRadius = 20.0;
     self.statsCard.layer.masksToBounds = YES;
     [self.contentView addSubview:self.statsCard];
@@ -177,7 +197,7 @@ static const void *kYALAuthorWorkModelKey = &kYALAuthorWorkModelKey;
     }];
 
     self.worksCard = [[UIView alloc] init];
-    self.worksCard.backgroundColor = [UIColor systemBackgroundColor];
+    self.worksCard.backgroundColor = YALAuthorProfileCardColor();
     self.worksCard.layer.cornerRadius = 20.0;
     self.worksCard.layer.masksToBounds = YES;
     [self.contentView addSubview:self.worksCard];

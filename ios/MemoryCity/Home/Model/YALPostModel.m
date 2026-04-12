@@ -19,15 +19,39 @@ static BOOL YALPostModelBoolValue(id value, BOOL fallback) {
             return fallback;
         }
         NSString *lower = [text lowercaseString];
-        if ([lower isEqualToString:@"true"] || [lower isEqualToString:@"yes"]) {
+        if ([lower isEqualToString:@"true"] || [lower isEqualToString:@"yes"] || [lower isEqualToString:@"公开"]) {
             return YES;
         }
-        if ([lower isEqualToString:@"false"] || [lower isEqualToString:@"no"]) {
+        if ([lower isEqualToString:@"public"]) {
+            return YES;
+        }
+        if ([lower isEqualToString:@"false"] || [lower isEqualToString:@"no"] || [lower isEqualToString:@"私密"]) {
+            return NO;
+        }
+        if ([lower isEqualToString:@"private"] || [lower isEqualToString:@"仅自己可见"]) {
             return NO;
         }
         return text.integerValue != 0;
     }
     return fallback;
+}
+
+static BOOL YALPostModelResolvedPublicFlag(NSDictionary *dict) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return NO;
+    }
+
+    NSArray<NSString *> *keys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if (!value || value == [NSNull null]) {
+            continue;
+        }
+        return YALPostModelBoolValue(value, NO);
+    }
+
+    // 隐私字段缺失时按私密处理，避免把本不该出现在公开列表的内容展示出来。
+    return NO;
 }
 
 static double YALPostModelCoordinateValue(id value) {
@@ -186,13 +210,7 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
         if (self.authorBio.length == 0) {
             self.authorBio = YALPostModelFirstString(authorInfo, @[@"bio", @"user_bio", @"signature", @"intro"]);
         }
-        id publicValue = dict[@"is_public"];
-        if ([publicValue respondsToSelector:@selector(boolValue)]) {
-            self.isPublic = [publicValue boolValue];
-        } else {
-            // 接口未返回隐私字段时，首页默认按公开内容处理。
-            self.isPublic = YES;
-        }
+        self.isPublic = YALPostModelResolvedPublicFlag(dict);
 
         // 解析图片数组 - 尝试多种可能的字段名
         NSArray *imageArray = nil;

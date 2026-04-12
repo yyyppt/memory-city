@@ -482,7 +482,7 @@ static UIImage * _Nullable YALImageFromDataURLString(NSString *dataURL) {
     if (user.bio.length > 0) {
         self.bioLabel.text = user.bio;
     } else {
-        self.bioLabel.text = @"暂无个人简介";
+        self.bioLabel.text = @"暂无个性签名";
     }
 
     if (user.avatar.length > 0) {

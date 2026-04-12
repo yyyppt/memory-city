@@ -92,6 +92,10 @@
   UINavigationController *mapNav = [[UINavigationController alloc] initWithRootViewController:mapVC];
   UINavigationController *mineNav = [[UINavigationController alloc] initWithRootViewController:mineVC];
 
+  releaseVC.title = @"";
+  releaseVC.navigationItem.title = @"";
+  releaseNav.title = @"";
+
   if (@available(iOS 13.0, *)) {
     homeNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home"
                                                       image:[UIImage systemImageNamed:@"house"]
@@ -104,8 +108,9 @@
     UITabBarItem *releaseItem =
     [[UITabBarItem alloc] initWithTitle:nil image:[[UIImage alloc] init] tag:2];
     releaseItem.enabled = NO;
-    releaseItem.title = @"";
+    releaseItem.title = nil;
     releaseItem.titlePositionAdjustment = UIOffsetMake(0.0, 1000.0);
+    releaseItem.imageInsets = UIEdgeInsetsMake(20.0, 0.0, -20.0, 0.0);
     [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
                                forState:UIControlStateNormal];
     [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
@@ -123,8 +128,9 @@
     homeNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Home" image:nil tag:0];
     memoriesNav.tabBarItem = [[UITabBarItem alloc] initWithTitle:@"Memories" image:nil tag:1];
     UITabBarItem *releaseItem = [[UITabBarItem alloc] initWithTitle:nil image:nil tag:2];
-    releaseItem.title = @"";
+    releaseItem.title = nil;
     releaseItem.titlePositionAdjustment = UIOffsetMake(0.0, 1000.0);
+    releaseItem.imageInsets = UIEdgeInsetsMake(20.0, 0.0, -20.0, 0.0);
     [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}
                                forState:UIControlStateNormal];
     [releaseItem setTitleTextAttributes:@{NSForegroundColorAttributeName: [UIColor clearColor]}

@@ -47,6 +47,52 @@ static NSString * _Nullable YALPostManagerFirstNonEmptyStringRecursively(id obj,
     return nil;
 }
 
+static BOOL YALPostManagerBoolValue(id value, BOOL fallback) {
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return [((NSNumber *)value) integerValue] != 0;
+    }
+    if ([value isKindOfClass:[NSString class]]) {
+        NSString *text = [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (text.length == 0) {
+            return fallback;
+        }
+        NSString *lower = text.lowercaseString;
+        if ([lower isEqualToString:@"1"] ||
+            [lower isEqualToString:@"true"] ||
+            [lower isEqualToString:@"yes"] ||
+            [lower isEqualToString:@"public"] ||
+            [lower isEqualToString:@"公开"]) {
+            return YES;
+        }
+        if ([lower isEqualToString:@"0"] ||
+            [lower isEqualToString:@"false"] ||
+            [lower isEqualToString:@"no"] ||
+            [lower isEqualToString:@"private"] ||
+            [lower isEqualToString:@"私密"] ||
+            [lower isEqualToString:@"仅自己可见"]) {
+            return NO;
+        }
+    }
+    return fallback;
+}
+
+static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return NO;
+    }
+
+    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
+    for (NSString *key in publicKeys) {
+        id value = dict[key];
+        if (!value || value == [NSNull null]) {
+            continue;
+        }
+        return YALPostManagerBoolValue(value, NO);
+    }
+
+    return NO;
+}
+
 @implementation YALPostManager
                      
 + (instancetype)shareManager {
@@ -71,23 +117,19 @@ static NSString * _Nullable YALPostManagerFirstNonEmptyStringRecursively(id obj,
 
 - (void)getPostsWithCache:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
     [[YALPostCacheStore sharedStore] fetchHomeFeedPostsWithCompletion:^(NSArray<YALPostModel *> *posts) {
-        BOOL hasDeliveredCache = (posts.count > 0);
-        if (hasDeliveredCache) {
-            NSLog(@"💾 首页命中 Core Data 缓存：%lu 条", (unsigned long)posts.count);
-            if (completion) {
-                completion(posts, YES, nil);
-            }
+        NSArray<YALPostModel *> *cachedPosts = posts ?: @[];
+        if (cachedPosts.count > 0) {
+            NSLog(@"💾 首页命中 Core Data 缓存：%lu 条", (unsigned long)cachedPosts.count);
         }
 
-        [self requestLatestPostsHasDeliveredCache:hasDeliveredCache completion:completion];
+        [self requestLatestPostsWithCachedPosts:cachedPosts completion:completion];
     }];
 }
 
-- (void)requestLatestPostsHasDeliveredCache:(BOOL)hasDeliveredCache
-                                 completion:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
+- (void)requestLatestPostsWithCachedPosts:(NSArray<YALPostModel *> *)cachedPosts
+                               completion:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
     YALNetworkManager *manager = [YALNetworkManager shareManager];
-    //static NSString * const kYALAPIBaseURL = @"http://8.137.158.7:9000/api";@"http://8.137.158.7:9000/api/content/list";http://192.168.1.65:9000/api
-    NSString *url = @"http://8.137.158.7:9000/api/content/list";
+    NSString *url = [NSString stringWithFormat:@"%@/content/list", YALAPIBaseURLString];
 
     NSDictionary *parameters = @{@"limit": @10};
 
@@ -176,6 +218,10 @@ static NSString * _Nullable YALPostManagerFirstNonEmptyStringRecursively(id obj,
                 continue;
             }
             NSDictionary *dic = (NSDictionary *)item;
+            if (!YALPostManagerShouldShowPublicContent(dic)) {
+                NSLog(@"🔒 首页原始数据过滤掉非公开内容ID: %@", dic[@"content_id"]);
+                continue;
+            }
             YALPostModel *model = [[YALPostModel alloc] initWithDictionary:dic];
             if (!model.isPublic) {
                 NSLog(@"🔒 跳过私密内容ID: %@", model.contentId);
@@ -200,8 +246,12 @@ static NSString * _Nullable YALPostManagerFirstNonEmptyStringRecursively(id obj,
         }];
     } failure:^(NSURLSessionDataTask *task, NSError *error) {
         NSLog(@"❌ 首页获取内容列表失败: %@", error);
-        if (completion && !hasDeliveredCache) {
-            completion(nil, NO, error);
+        if (completion) {
+            if (cachedPosts.count > 0) {
+                completion(cachedPosts, YES, error);
+            } else {
+                completion(nil, NO, error);
+            }
         }
     }];
 }

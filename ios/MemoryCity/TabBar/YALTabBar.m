@@ -63,6 +63,43 @@
   }];
 }
 
+- (void)layoutSubviews {
+  [super layoutSubviews];
+
+  NSMutableArray<UIControl *> *tabBarButtons = [NSMutableArray array];
+  for (UIView *subview in self.subviews) {
+    if ([subview isKindOfClass:[UIControl class]] &&
+        [NSStringFromClass(subview.class) containsString:@"UITabBarButton"]) {
+      [tabBarButtons addObject:(UIControl *)subview];
+    }
+  }
+
+  [tabBarButtons sortUsingComparator:^NSComparisonResult(UIControl *obj1, UIControl *obj2) {
+    if (CGRectGetMinX(obj1.frame) < CGRectGetMinX(obj2.frame)) {
+      return NSOrderedAscending;
+    }
+    if (CGRectGetMinX(obj1.frame) > CGRectGetMinX(obj2.frame)) {
+      return NSOrderedDescending;
+    }
+    return NSOrderedSame;
+  }];
+
+  if (tabBarButtons.count < 3) {
+    return;
+  }
+
+  UIControl *centerTabBarButton = tabBarButtons[tabBarButtons.count / 2];
+  centerTabBarButton.enabled = NO;
+
+  for (UIView *subview in centerTabBarButton.subviews) {
+    if ([subview isKindOfClass:[UILabel class]] ||
+        [subview isKindOfClass:[UIImageView class]]) {
+      subview.hidden = YES;
+      subview.alpha = 0.0;
+    }
+  }
+}
+
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
   if (self.hidden == NO) {
     CGPoint converted = [self convertPoint:point toView:self.centerButton];

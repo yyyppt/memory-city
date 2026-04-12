@@ -47,7 +47,7 @@
     [self addSubview:sub];
 
     _accountField = [[UITextField alloc] init];
-    _accountField.placeholder = @"请输入您的联系方式";
+    _accountField.placeholder = @"请输入账号";
     _accountField.backgroundColor = [UIColor colorWithRed:1.0 green:0.97 blue:0.92 alpha:1.0];
     _accountField.textColor = [UIColor colorWithWhite:0.16 alpha:1.0];
     _accountField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:_accountField.placeholder
@@ -104,12 +104,9 @@
     [_registerButton addTarget:self action:@selector(pressRegister) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_registerButton];
 
-    // Masonry 约束
     [logo mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.mas_top).offset(140);
         make.centerX.equalTo(self);
-        // make.left.equalTo(self.mas_left).offset(40);
-        // make.right.equalTo(self.mas_right).offset(-40);
         make.width.height.mas_equalTo(80);
     }];
 

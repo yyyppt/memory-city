@@ -12,12 +12,14 @@
 
 @interface YALForgotPasswordController () <UITextFieldDelegate, UIGestureRecognizerDelegate>
 
+@property (nonatomic, strong) UITextField *usernameField;
 @property (nonatomic, strong) UITextField *phoneField;
 @property (nonatomic, strong) UITextField *codeField;
 @property (nonatomic, strong) UIButton *sendCodeButton;
 @property (nonatomic, strong) UIButton *nextButton;
 @property (nonatomic, strong) NSTimer *countdownTimer;
 @property (nonatomic, assign) NSInteger remainingSeconds;
+@property (nonatomic, assign) BOOL isSendingCode;
 
 @end
 
@@ -39,13 +41,13 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 
 - (void)buildUI {
     UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.text = @"验证你的手机号";
+    titleLabel.text = @"找回你的账号";
     titleLabel.font = [UIFont systemFontOfSize:26.0 weight:UIFontWeightBold];
     titleLabel.textColor = [UIColor labelColor];
     [self.view addSubview:titleLabel];
 
     UILabel *hintLabel = [[UILabel alloc] init];
-    hintLabel.text = @"输入注册手机号，我们会发送短信验证码用于重置密码。";
+    hintLabel.text = @"输入账号和注册手机号，我们会发送短信验证码用于重置密码。";
     hintLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightRegular];
     hintLabel.textColor = [UIColor secondaryLabelColor];
     hintLabel.numberOfLines = 0;
@@ -56,6 +58,12 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
     cardView.layer.cornerRadius = 18.0;
     cardView.layer.masksToBounds = YES;
     [self.view addSubview:cardView];
+
+    self.usernameField = [self makeTextFieldWithPlaceholder:@"请输入账号"];
+    self.usernameField.textContentType = UITextContentTypeUsername;
+    self.usernameField.keyboardType = UIKeyboardTypeASCIICapable;
+    self.usernameField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    [cardView addSubview:self.usernameField];
 
     self.phoneField = [self makeTextFieldWithPlaceholder:@"请输入手机号"];
     self.phoneField.keyboardType = UIKeyboardTypePhonePad;
@@ -103,16 +111,22 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
         make.left.right.equalTo(titleLabel);
     }];
 
-    [self.phoneField mas_makeConstraints:^(MASConstraintMaker *make) {
+    [self.usernameField mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(cardView).offset(18.0);
         make.left.equalTo(cardView).offset(16.0);
         make.right.equalTo(cardView).offset(-16.0);
         make.height.mas_equalTo(50.0);
     }];
 
+    [self.phoneField mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self.usernameField.mas_bottom).offset(14.0);
+        make.left.right.height.equalTo(self.usernameField);
+    }];
+
     [self.codeField mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(self.phoneField.mas_bottom).offset(14.0);
-        make.left.height.equalTo(self.phoneField);
+        make.left.equalTo(self.phoneField);
+        make.height.equalTo(self.phoneField);
         make.right.equalTo(self.sendCodeButton.mas_left).offset(-10.0);
         make.bottom.equalTo(cardView).offset(-18.0);
     }];
@@ -129,6 +143,11 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
         make.left.right.equalTo(titleLabel);
         make.height.mas_equalTo(50.0);
     }];
+
+    [self.usernameField addTarget:self action:@selector(textFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self.phoneField addTarget:self action:@selector(textFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self.codeField addTarget:self action:@selector(textFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self updateActionButtons];
 }
 
 - (UITextField *)makeTextFieldWithPlaceholder:(NSString *)placeholder {
@@ -152,20 +171,26 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 }
 
 - (void)sendCodeButtonTapped {
+    NSString *username = [self trimmedText:self.usernameField.text];
     NSString *phone = [self trimmedText:self.phoneField.text];
+    if (![self isValidUsername:username]) {
+        [self showAlert:@"请输入3到20位用户名，不能包含空格"];
+        return;
+    }
     if (![self isValidPhone:phone]) {
         [self showAlert:@"请输入有效手机号"];
         return;
     }
 
-    self.sendCodeButton.enabled = NO;
-    [[YALAuthManager sharedManager] requestPasswordResetCodeForPhone:phone completion:^(BOOL success, NSString * _Nullable message, NSError * _Nullable error) {
+    self.isSendingCode = YES;
+    [self updateActionButtons];
+    [[YALAuthManager sharedManager] requestPasswordResetCodeForUsername:username phone:phone completion:^(BOOL success, NSString * _Nullable message, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            self.isSendingCode = NO;
             if (success) {
                 [self startCountdown];
-                [self showAlert:message.length > 0 ? message : @"验证码已发送"];
             } else {
-                self.sendCodeButton.enabled = YES;
+                [self updateActionButtons];
                 [self showAlert:message.length > 0 ? message : (error.localizedDescription ?: @"验证码发送失败")];
             }
         });
@@ -173,8 +198,13 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 }
 
 - (void)nextButtonTapped {
+    NSString *username = [self trimmedText:self.usernameField.text];
     NSString *phone = [self trimmedText:self.phoneField.text];
     NSString *code = [self trimmedText:self.codeField.text];
+    if (![self isValidUsername:username]) {
+        [self showAlert:@"请输入3到20位用户名，不能包含空格"];
+        return;
+    }
     if (![self isValidPhone:phone]) {
         [self showAlert:@"请输入有效手机号"];
         return;
@@ -188,24 +218,18 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
         return;
     }
 
-    self.nextButton.enabled = NO;
-    [[YALAuthManager sharedManager] verifyPasswordResetCodeForPhone:phone code:code completion:^(BOOL success, NSString * _Nullable message, NSString * _Nullable resetToken, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            self.nextButton.enabled = YES;
-            if (success) {
-                YALResetPasswordController *resetVC = [[YALResetPasswordController alloc] initWithPhone:phone verificationCode:code resetToken:resetToken];
-                [self.navigationController pushViewController:resetVC animated:YES];
-            } else {
-                [self showAlert:message.length > 0 ? message : (error.localizedDescription ?: @"验证码错误或已过期")];
-            }
-        });
-    }];
+    YALResetPasswordController *resetVC = [[YALResetPasswordController alloc] initWithUsername:username
+                                                                                          phone:phone
+                                                                               verificationCode:code];
+    [self.navigationController pushViewController:resetVC animated:YES];
 }
 
 - (void)startCountdown {
     [self invalidateCountdownTimer];
     self.remainingSeconds = kYALResetCodeCountdownSeconds;
     [self updateCountdownButtonTitle];
+    [self applySendCodeButtonStyle];
+    [self updateActionButtons];
     self.countdownTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
                                                            target:self
                                                          selector:@selector(countdownTimerFired)
@@ -217,11 +241,14 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
     self.remainingSeconds -= 1;
     if (self.remainingSeconds <= 0) {
         [self invalidateCountdownTimer];
-        self.sendCodeButton.enabled = YES;
+        [self updateActionButtons];
         [self.sendCodeButton setTitle:@"重新获取" forState:UIControlStateNormal];
+        [self applySendCodeButtonStyle];
         return;
     }
     [self updateCountdownButtonTitle];
+    [self applySendCodeButtonStyle];
+    [self updateActionButtons];
 }
 
 - (void)updateCountdownButtonTitle {
@@ -232,6 +259,7 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 - (void)invalidateCountdownTimer {
     [self.countdownTimer invalidate];
     self.countdownTimer = nil;
+    self.remainingSeconds = 0;
 }
 
 - (NSString *)trimmedText:(NSString *)text {
@@ -246,8 +274,58 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
     return [phone rangeOfCharacterFromSet:nonDigits].location == NSNotFound;
 }
 
+- (BOOL)isValidUsername:(NSString *)username {
+    if (username.length < 3 || username.length > 20) {
+        return NO;
+    }
+    NSCharacterSet *whitespace = [NSCharacterSet whitespaceAndNewlineCharacterSet];
+    return [username rangeOfCharacterFromSet:whitespace].location == NSNotFound;
+}
+
 - (void)dismissKeyboard {
     [self.view endEditing:YES];
+}
+
+- (void)textFieldsDidChange {
+    [self updateActionButtons];
+}
+
+- (void)updateActionButtons {
+    BOOL canSendCode = !self.isSendingCode && self.countdownTimer == nil && [self isValidUsername:[self trimmedText:self.usernameField.text]] && [self isValidPhone:[self trimmedText:self.phoneField.text]];
+    self.sendCodeButton.enabled = canSendCode;
+    if (self.countdownTimer == nil && !self.isSendingCode) {
+        NSString *title = self.remainingSeconds > 0 ? [NSString stringWithFormat:@"%lds后重试", (long)self.remainingSeconds] : @"获取验证码";
+        [self.sendCodeButton setTitle:title forState:UIControlStateNormal];
+    } else if (self.isSendingCode) {
+        [self.sendCodeButton setTitle:@"发送中..." forState:UIControlStateNormal];
+    }
+    [self applySendCodeButtonStyle];
+
+    BOOL canGoNext = [self isValidUsername:[self trimmedText:self.usernameField.text]] &&
+                     [self isValidPhone:[self trimmedText:self.phoneField.text]] &&
+                     [self trimmedText:self.codeField.text].length >= 4;
+    self.nextButton.enabled = canGoNext;
+    self.nextButton.alpha = canGoNext ? 1.0 : 0.6;
+}
+
+- (void)applySendCodeButtonStyle {
+    BOOL isCountingDown = (self.countdownTimer != nil || self.remainingSeconds > 0);
+    if (self.isSendingCode || isCountingDown) {
+        self.sendCodeButton.backgroundColor = [UIColor colorWithWhite:0.92 alpha:1.0];
+        [self.sendCodeButton setTitleColor:[UIColor colorWithWhite:0.55 alpha:1.0] forState:UIControlStateNormal];
+        self.sendCodeButton.alpha = 1.0;
+        return;
+    }
+
+    if (self.sendCodeButton.enabled) {
+        self.sendCodeButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.94 blue:0.84 alpha:1.0];
+        [self.sendCodeButton setTitleColor:[UIColor colorWithRed:0.90 green:0.40 blue:0.12 alpha:1.0] forState:UIControlStateNormal];
+        self.sendCodeButton.alpha = 1.0;
+    } else {
+        self.sendCodeButton.backgroundColor = [UIColor colorWithWhite:0.95 alpha:1.0];
+        [self.sendCodeButton setTitleColor:[UIColor colorWithWhite:0.7 alpha:1.0] forState:UIControlStateNormal];
+        self.sendCodeButton.alpha = 1.0;
+    }
 }
 
 - (void)showAlert:(NSString *)message {

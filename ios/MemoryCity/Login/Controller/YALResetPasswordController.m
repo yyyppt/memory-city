@@ -11,12 +11,13 @@
 
 @interface YALResetPasswordController () <UITextFieldDelegate, UIGestureRecognizerDelegate>
 
+@property (nonatomic, copy) NSString *username;
 @property (nonatomic, copy) NSString *phone;
 @property (nonatomic, copy) NSString *verificationCode;
-@property (nonatomic, copy, nullable) NSString *resetToken;
 @property (nonatomic, strong) UITextField *passwordField;
 @property (nonatomic, strong) UITextField *repeatPasswordField;
 @property (nonatomic, strong) UIButton *saveButton;
+@property (nonatomic, assign) BOOL isSubmitting;
 
 @end
 
@@ -25,14 +26,14 @@
 static const NSUInteger kYALForgotPasswordMinLength = 6;
 static const NSUInteger kYALForgotPasswordMaxLength = 15;
 
-- (instancetype)initWithPhone:(NSString *)phone
-             verificationCode:(NSString *)code
-                   resetToken:(NSString *)resetToken {
+- (instancetype)initWithUsername:(NSString *)username
+                           phone:(NSString *)phone
+                verificationCode:(NSString *)code {
     self = [super init];
     if (self) {
+        _username = [username copy] ?: @"";
         _phone = [phone copy] ?: @"";
         _verificationCode = [code copy] ?: @"";
-        _resetToken = [resetToken copy];
     }
     return self;
 }
@@ -115,6 +116,10 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
         make.left.right.equalTo(titleLabel);
         make.height.mas_equalTo(50.0);
     }];
+
+    [self.passwordField addTarget:self action:@selector(passwordFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self.repeatPasswordField addTarget:self action:@selector(passwordFieldsDidChange) forControlEvents:UIControlEventEditingChanged];
+    [self updateSaveButtonState];
 }
 
 - (UITextField *)makePasswordFieldWithPlaceholder:(NSString *)placeholder {
@@ -161,21 +166,27 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
         return;
     }
 
-    self.saveButton.enabled = NO;
-    [[YALAuthManager sharedManager] resetPasswordForPhone:self.phone
-                                         verificationCode:self.verificationCode
-                                               resetToken:self.resetToken
-                                              newPassword:password
-                                            repeatPassword:repeatPassword
-                                                completion:^(BOOL success, NSString * _Nullable message, NSError * _Nullable error) {
+    self.isSubmitting = YES;
+    [self updateSaveButtonState];
+    [[YALAuthManager sharedManager] resetPasswordForUsername:self.username
+                                                       phone:self.phone
+                                            verificationCode:self.verificationCode
+                                                 newPassword:password
+                                              repeatPassword:repeatPassword
+                                                  completion:^(BOOL success, NSString * _Nullable message, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.saveButton.enabled = YES;
+            self.isSubmitting = NO;
             if (success) {
                 [self showAlert:@"密码重置成功，请重新登录" completion:^{
                     [self.navigationController popToRootViewControllerAnimated:YES];
                 }];
             } else {
-                [self showAlert:message.length > 0 ? message : (error.localizedDescription ?: @"密码重置失败") completion:nil];
+                [self updateSaveButtonState];
+                NSString *displayMessage = message.length > 0 ? message : (error.localizedDescription ?: @"密码重置失败");
+                if ([displayMessage containsString:@"验证码"]) {
+                    displayMessage = @"验证码无效或已过期，请返回上一步重新获取验证码";
+                }
+                [self showAlert:displayMessage completion:nil];
             }
         });
     }];
@@ -187,6 +198,19 @@ static const NSUInteger kYALForgotPasswordMaxLength = 15;
 
 - (void)dismissKeyboard {
     [self.view endEditing:YES];
+}
+
+- (void)passwordFieldsDidChange {
+    [self updateSaveButtonState];
+}
+
+- (void)updateSaveButtonState {
+    BOOL hasValidLength = [self trimmedText:self.passwordField.text].length >= kYALForgotPasswordMinLength &&
+                          [self trimmedText:self.repeatPasswordField.text].length >= kYALForgotPasswordMinLength;
+    BOOL canSubmit = hasValidLength && !self.isSubmitting;
+    self.saveButton.enabled = canSubmit;
+    self.saveButton.alpha = canSubmit ? 1.0 : 0.6;
+    [self.saveButton setTitle:(self.isSubmitting ? @"提交中..." : @"确认重置") forState:UIControlStateNormal];
 }
 
 - (void)showAlert:(NSString *)message completion:(void (^ __nullable)(void))completion {

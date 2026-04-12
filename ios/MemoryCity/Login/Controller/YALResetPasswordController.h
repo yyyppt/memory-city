@@ -11,9 +11,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface YALResetPasswordController : UIViewController
 
-- (instancetype)initWithPhone:(NSString *)phone
-             verificationCode:(NSString *)code
-                   resetToken:(nullable NSString *)resetToken;
+- (instancetype)initWithUsername:(NSString *)username
+                           phone:(NSString *)phone
+                verificationCode:(NSString *)code;
 
 @end
 

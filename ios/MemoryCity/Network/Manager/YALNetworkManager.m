@@ -238,7 +238,9 @@
     if ([path containsString:@"/user/login"] ||
         [path containsString:@"/user/register"] ||
         [path containsString:@"/user/password/forgot/"] ||
-        [path containsString:@"/user/password/forgot"]) {
+        [path containsString:@"/user/password/forgot"] ||
+        [path containsString:@"/forgetpasswd/"] ||
+        [path containsString:@"/forgetpasswd"]) {
         return NO;
     }
     return YES;

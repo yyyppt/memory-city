@@ -27,6 +27,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 @property (nonatomic, assign) NSInteger unreadInteractionCount;
 @property (nonatomic, assign) NSInteger messageLoadToken;
 @property (nonatomic, strong, nullable) NSNumber *serverCollectTotal;
+@property (nonatomic, assign) BOOL isRenderingProvisionalMessages;
 
 @end
 
@@ -103,6 +104,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 
 - (void)loadMessages {
   NSInteger loadToken = ++self.messageLoadToken;
+  self.isRenderingProvisionalMessages = NO;
 
   if (![[YALAuthManager sharedManager] hasLoggedInSession]) {
     self.totalLikeCount = 0;
@@ -124,6 +126,13 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
   }
 
   [self.loadingIndicator startAnimating];
+  self.emptyLabel.text = @"互动消息加载中...";
+  self.emptyLabel.hidden = NO;
+  self.tableView.backgroundView.hidden = NO;
+  [self refreshHeaderView];
+  if (self.messages.count == 0) {
+    [self.tableView reloadData];
+  }
 
   __weak typeof(self) weakSelf = self;
   [[YALContentManager sharedManager] getMyContentListWithPage:1
@@ -169,23 +178,25 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
     }
 
     strongSelf.serverCollectTotal = [YALContentManager sharedManager].lastMyContentCollectCount;
+    NSArray<YALPostModel *> *postsSnapshot = [posts copy];
+    NSArray<YALPostModel *> *targets = [strongSelf postsNeedingDetailEnrichmentFromPosts:postsSnapshot];
+    BOOL needsEnrichment = targets.count > 0;
+    strongSelf.isRenderingProvisionalMessages = needsEnrichment;
+    [strongSelf buildMessagesFromPosts:postsSnapshot persistSnapshots:!needsEnrichment];
 
-    [strongSelf enrichPostsWithDetailIfNeeded:posts loadToken:loadToken completion:^(NSArray<YALPostModel *> * _Nonnull enrichedPosts) {
-      [strongSelf buildMessagesFromPosts:enrichedPosts];
+    if (!needsEnrichment) {
+      return;
+    }
+
+    [strongSelf enrichPosts:targets loadToken:loadToken completion:^(NSArray<YALPostModel *> * _Nonnull enrichedPosts) {
+      (void)enrichedPosts;
+      strongSelf.isRenderingProvisionalMessages = NO;
+      [strongSelf buildMessagesFromPosts:postsSnapshot persistSnapshots:YES];
     }];
   }];
 }
 
-- (void)enrichPostsWithDetailIfNeeded:(NSArray<YALPostModel *> *)posts
-                            loadToken:(NSInteger)loadToken
-                           completion:(void (^)(NSArray<YALPostModel *> *enrichedPosts))completion {
-  if (posts.count == 0) {
-    if (completion) {
-      completion(@[]);
-    }
-    return;
-  }
-
+- (NSArray<YALPostModel *> *)postsNeedingDetailEnrichmentFromPosts:(NSArray<YALPostModel *> *)posts {
   NSMutableArray<YALPostModel *> *targets = [NSMutableArray array];
   for (YALPostModel *post in posts) {
     if (![post isKindOfClass:[YALPostModel class]] || post.contentId.integerValue <= 0) {
@@ -197,9 +208,15 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
     }
   }
 
+  return [targets copy];
+}
+
+- (void)enrichPosts:(NSArray<YALPostModel *> *)targets
+          loadToken:(NSInteger)loadToken
+         completion:(void (^)(NSArray<YALPostModel *> *enrichedPosts))completion {
   if (targets.count == 0) {
     if (completion) {
-      completion(posts);
+      completion(@[]);
     }
     return;
   }
@@ -232,7 +249,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
       return;
     }
     if (completion) {
-      completion(posts);
+      completion(targets);
     }
   });
 }
@@ -292,7 +309,8 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
   return fallback;
 }
 
-- (void)buildMessagesFromPosts:(NSArray<YALPostModel *> *)posts {
+- (void)buildMessagesFromPosts:(NSArray<YALPostModel *> *)posts
+              persistSnapshots:(BOOL)persistSnapshots {
   NSMutableArray<NSDictionary *> *items = [NSMutableArray array];
   NSMutableDictionary<NSString *, NSDictionary *> *snapshotsToSave = [NSMutableDictionary dictionary];
   NSDictionary<NSString *, NSDictionary *> *savedSnapshots = [self savedInteractionSnapshots];
@@ -387,11 +405,17 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
     }];
 
   self.messages = sortedItems;
-  [self saveInteractionSnapshots:snapshotsToSave];
+  if (persistSnapshots) {
+    [self saveInteractionSnapshots:snapshotsToSave];
+  }
   [self refreshHeaderView];
 
   if (self.messages.count == 0) {
-    self.emptyLabel.text = posts.count > 0 ? @"你已经发布内容了，等大家来点赞评论后，这里就会热闹起来。" : @"你还没有发布内容，先去首页或发布页留下第一条记忆吧。";
+    if (self.isRenderingProvisionalMessages) {
+      self.emptyLabel.text = @"正在整理互动统计...";
+    } else {
+      self.emptyLabel.text = posts.count > 0 ? @"你已经发布内容了，等大家来点赞评论后，这里就会热闹起来。" : @"你还没有发布内容，先去首页或发布页留下第一条记忆吧。";
+    }
     self.emptyLabel.hidden = NO;
     self.tableView.backgroundView.hidden = NO;
   } else {

@@ -85,6 +85,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     [self setupNavigationBar];
     [self setupSegmentedControl];
     [self setupTableView];
+    [self setupKeyboardDismissGesture];
     [self updateEmptyState];
 
     if (self.isResultPage) {
@@ -104,7 +105,9 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    self.tabBarController.tabBar.hidden = NO;
+    if (self.isMovingFromParentViewController || self.isBeingDismissed) {
+        self.tabBarController.tabBar.hidden = NO;
+    }
 }
 
 #pragma mark - Setup
@@ -200,7 +203,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.showsVerticalScrollIndicator = NO;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.estimatedRowHeight = 140.0;
+    self.tableView.estimatedRowHeight = 220.0;
     self.tableView.sectionHeaderHeight = 0.01;
     self.tableView.sectionFooterHeight = 8.0;
     self.tableView.contentInset = UIEdgeInsetsMake(6.0, 0, 24.0, 0);
@@ -221,10 +224,24 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     self.tableView.backgroundView = self.emptyLabel;
 }
 
+- (void)setupKeyboardDismissGesture {
+    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleBackgroundTapped)];
+    tapGesture.cancelsTouchesInView = NO;
+    [self.tableView addGestureRecognizer:tapGesture];
+}
+
 #pragma mark - Actions
 
 - (void)backTapped {
     [self.navigationController popViewControllerAnimated:YES];
+}
+
+- (void)handleBackgroundTapped {
+    [self.searchBar resignFirstResponder];
+    if (@available(iOS 13.0, *)) {
+        [self.searchBar.searchTextField resignFirstResponder];
+    }
+    [self.view endEditing:YES];
 }
 
 - (void)handleSegmentChanged:(UISegmentedControl *)sender {
@@ -237,15 +254,6 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     NSString *keyword = [self.searchBar.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     [self.searchBar resignFirstResponder];
     if (keyword.length == 0) {
-        return;
-    }
-
-    if (!self.isResultPage) {
-        YALSearchController *resultVC = [[YALSearchController alloc] init];
-        resultVC.keyword = keyword;
-        resultVC.initialTab = self.currentTab;
-        resultVC.hidesBottomBarWhenPushed = YES;
-        [self.navigationController pushViewController:resultVC animated:YES];
         return;
     }
 
@@ -265,10 +273,10 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     self.isContentLoading = NO;
     self.isUserLoading = NO;
     self.isAILoading = NO;
+    self.aiRequestToken += 1;
     [self updateEmptyState];
     [self.tableView reloadData];
     [self requestCombinedResultsForKeyword:keyword];
-    [self requestAIForKeyword:keyword];
 }
 
 - (void)requestCombinedResultsForKeyword:(NSString *)keyword {
@@ -303,19 +311,33 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         if (success) {
             self.contentResults = contentList ?: @[];
             self.userResults = userList ?: @[];
+            [self requestAIForSearchResults];
         } else {
             NSString *errorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"搜索失败，请稍后重试");
             self.contentResults = @[];
             self.userResults = @[];
             self.contentErrorText = errorText;
             self.userErrorText = errorText;
+            self.isAILoading = NO;
+            self.aiResult = nil;
+            self.aiErrorText = @"";
         }
         [self updateEmptyState];
         [self.tableView reloadData];
     }];
 }
 
-- (void)requestAIForKeyword:(NSString *)keyword {
+- (void)requestAIForSearchResults {
+    NSString *resultText = [self aiAnalysisTextFromCurrentResults];
+    if (resultText.length == 0) {
+        self.isAILoading = NO;
+        self.aiResult = nil;
+        self.aiErrorText = @"";
+        [self updateEmptyState];
+        [self.tableView reloadData];
+        return;
+    }
+
     self.isAILoading = YES;
     self.aiResult = nil;
     self.aiErrorText = @"";
@@ -324,10 +346,10 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     [self.tableView reloadData];
 
     __weak typeof(self) weakSelf = self;
-    [[YALContentManager sharedManager] analyzeText:keyword
+    [[YALContentManager sharedManager] analyzeText:resultText
                                         completion:^(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || requestToken != self.aiRequestToken || ![self.keyword isEqualToString:keyword]) {
+        if (!self || requestToken != self.aiRequestToken) {
             return;
         }
 
@@ -351,7 +373,7 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
             text = @"正在搜索内容...";
         } else if (self.contentErrorText.length > 0) {
             text = self.contentErrorText;
-        } else if (self.contentResults.count == 0) {
+        } else if (self.contentResults.count == 0 && ![self hasVisibleAISection]) {
             text = @"什么都没搜到";
         }
     } else {
@@ -376,7 +398,10 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         if ([self shouldShowEmptySearchResult]) {
             return 0;
         }
-        return self.isResultPage ? 2 : 1;
+        if (!self.isResultPage) {
+            return 1;
+        }
+        return [self hasContentResultSection] ? 2 : 1;
     }
     return 1;
 }
@@ -390,7 +415,10 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         if ([self shouldShowEmptySearchResult]) {
             return 0;
         }
-        return section == 0 ? 1 : self.contentResults.count;
+        if (section == 0) {
+            return 1;
+        }
+        return [self hasContentResultSection] ? self.contentResults.count : 0;
     }
     if ([self shouldShowEmptySearchResult]) {
         return 0;
@@ -474,37 +502,19 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    if (self.currentTab != YALSearchTabTypeContent || indexPath.section != 1) {
+    if (self.currentTab == YALSearchTabTypeUser) {
+        if (indexPath.row >= self.userResults.count) {
+            return;
+        }
+        [self showAuthorProfileForSearchUser:self.userResults[indexPath.row]];
         return;
     }
 
-    YALSearchContentModel *item = self.contentResults[indexPath.row];
-    if (item.contentId == nil) {
+    if (indexPath.section != 1 || indexPath.row >= self.contentResults.count) {
         return;
     }
 
-    YALPostModel *post = [[YALPostModel alloc] init];
-    post.contentId = item.contentId;
-    post.title = item.title ?: @"";
-    post.desc = item.content ?: @"";
-    post.content = item.content ?: @"";
-    post.city = item.city ?: @"";
-    post.year = item.year ?: @"";
-    post.mood = item.mood ?: @"";
-    post.images = item.images ?: @[];
-    post.imageURLString = item.images.firstObject ?: @"";
-    post.likeCount = item.likeCount;
-    post.commentCount = item.commentCount;
-    post.createTime = item.createdAt ?: @"";
-    post.authorUserId = item.userId;
-    post.authorNickname = item.authorNickname;
-    post.authorAvatar = item.authorAvatar;
-    post.authorBio = item.authorBio;
-
-    YALPostDetailController *detailVC = [[YALPostDetailController alloc] init];
-    detailVC.post = post;
-    detailVC.hidesBottomBarWhenPushed = YES;
-    [self.navigationController pushViewController:detailVC animated:YES];
+    [self showPostDetailForSearchContent:self.contentResults[indexPath.row]];
 }
 
 #pragma mark - UISearchBarDelegate
@@ -547,6 +557,164 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
     return [parts componentsJoinedByString:@"  "];
 }
 
+- (NSString *)aiAnalysisTextFromCurrentResults {
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    [lines addObject:[NSString stringWithFormat:@"内容结果数：%lu", (unsigned long)self.contentResults.count]];
+    [lines addObject:[NSString stringWithFormat:@"用户结果数：%lu", (unsigned long)self.userResults.count]];
+
+    for (YALSearchContentModel *item in self.contentResults) {
+        if (![item isKindOfClass:[YALSearchContentModel class]]) {
+            continue;
+        }
+
+        NSMutableArray<NSString *> *parts = [NSMutableArray array];
+        if (item.title.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"标题：%@", item.title]];
+        }
+        if (item.content.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"内容：%@", item.content]];
+        }
+        if (item.city.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"城市：%@", item.city]];
+        }
+        if (item.year.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"时间：%@", item.year]];
+        }
+        if (item.mood.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"情绪：%@", item.mood]];
+        }
+        if (item.createdAt.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"发布时间：%@", item.createdAt]];
+        }
+        if (item.authorNickname.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"作者：%@", item.authorNickname]];
+        }
+        if (item.likeCount >= 0) {
+            [parts addObject:[NSString stringWithFormat:@"点赞：%ld", (long)item.likeCount]];
+        }
+        if (item.commentCount >= 0) {
+            [parts addObject:[NSString stringWithFormat:@"评论：%ld", (long)item.commentCount]];
+        }
+        [parts addObject:[NSString stringWithFormat:@"图片数：%lu", (unsigned long)item.images.count]];
+        [parts addObject:[NSString stringWithFormat:@"公开状态：%@", item.contentId.integerValue > 0 ? @"可查看详情" : @"信息不完整"]];
+        if (parts.count > 0) {
+            [lines addObject:[parts componentsJoinedByString:@"；"]];
+        }
+    }
+
+    for (YALSearchUserModel *item in self.userResults) {
+        if (![item isKindOfClass:[YALSearchUserModel class]]) {
+            continue;
+        }
+
+        NSMutableArray<NSString *> *parts = [NSMutableArray array];
+        if (item.nickname.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"用户：%@", item.nickname]];
+        } else if (item.username.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"用户：%@", item.username]];
+        }
+        if (item.title.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"标题：%@", item.title]];
+        }
+        if (item.bio.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"简介：%@", item.bio]];
+        }
+        if (item.mood.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"情绪：%@", item.mood]];
+        }
+        if (item.userId.integerValue > 0) {
+            [parts addObject:[NSString stringWithFormat:@"用户ID：%@", item.userId]];
+        }
+        if (parts.count > 0) {
+            [lines addObject:[parts componentsJoinedByString:@"；"]];
+        }
+    }
+
+    NSString *resultBody = [lines componentsJoinedByString:@"\n"];
+    if (resultBody.length == 0) {
+        return @"";
+    }
+
+    return [NSString stringWithFormat:
+            @"你是一个\"城市记忆搜索助手\"，需要帮助用户更好地探索内容。\n\n"
+            @"请根据【搜索结果】，生成搜索辅助信息。\n\n"
+            @"要求：\n"
+            @"1. summary：用1段完整自然的中文总结当前搜索结果，尽量写得具体一些，长度控制在90到140字；\n"
+            @"2. suggestions：给出3个推荐继续搜索的关键词（中文，英文逗号分隔）；\n"
+            @"3. highlights：提取2-3个有代表性的内容点（短句，每条不超过20字）；\n"
+            @"4. guide：用1句更自然、更完整的搜索提示引导用户继续探索，长度控制在40到70字；\n"
+            @"5. 如果搜索结果较少或内容不集中，请明确说明结果较少，并优先生成扩展搜索建议；\n"
+            @"6. 优先关注并提炼城市、地点、时间、情绪、人物、内容主题这些线索；如果结果里出现城市或时间，不要忽略；\n"
+            @"7. 如果结果中出现点赞数、评论数、发布时间、作者、图片数量等信息，可以用于辅助概括内容热度和特征；\n"
+            @"8. suggestions 尽量围绕城市、地点、时间、情绪或主题做延展，避免只给空泛词；\n"
+            @"9. 严禁编造不存在的信息；\n"
+            @"10. 输出必须是JSON，不能有任何额外文字或说明。\n\n"
+            @"请严格按照以下格式返回：\n\n"
+            @"{\n"
+            @"  \"summary\": \"较完整的搜索结果总结\",\n"
+            @"  \"suggestions\": \"关键词1,关键词2,关键词3\",\n"
+            @"  \"highlights\": [\"亮点1\",\"亮点2\"],\n"
+            @"  \"guide\": \"一句较完整的搜索提示\"\n"
+            @"}\n\n"
+            @"请特别注意：如果搜索结果中有城市、时间或情绪信息，summary、highlights 和 guide 应尽量体现这些线索。\n\n"
+            @"搜索结果内容：\n%@",
+            resultBody];
+}
+
+- (void)showPostDetailForSearchContent:(YALSearchContentModel *)item {
+    if (![item isKindOfClass:[YALSearchContentModel class]] || item.contentId == nil) {
+        return;
+    }
+
+    YALPostModel *post = [[YALPostModel alloc] init];
+    post.contentId = item.contentId;
+    post.title = item.title ?: @"";
+    post.desc = item.content ?: @"";
+    post.content = item.content ?: @"";
+    post.city = item.city ?: @"";
+    post.year = item.year ?: @"";
+    post.mood = item.mood ?: @"";
+    post.images = item.images ?: @[];
+    post.imageURLString = item.images.firstObject ?: @"";
+    post.likeCount = item.likeCount;
+    post.commentCount = item.commentCount;
+    post.createTime = item.createdAt ?: @"";
+    post.authorUserId = item.userId;
+    post.authorNickname = item.authorNickname;
+    post.authorAvatar = item.authorAvatar;
+    post.authorBio = item.authorBio;
+
+    YALPostDetailController *detailVC = [[YALPostDetailController alloc] init];
+    detailVC.post = post;
+    detailVC.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:detailVC animated:YES];
+}
+
+- (void)showAuthorProfileForSearchUser:(YALSearchUserModel *)item {
+    if (![item isKindOfClass:[YALSearchUserModel class]] || item.userId.integerValue <= 0) {
+        return;
+    }
+
+    Class profileControllerClass = NSClassFromString(@"YALAuthorProfileController");
+    if (![profileControllerClass isSubclassOfClass:[UIViewController class]]) {
+        return;
+    }
+
+    UIViewController *controller = [[profileControllerClass alloc] init];
+    [controller setValue:item.userId forKey:@"userId"];
+    if (item.nickname.length > 0) {
+        [controller setValue:item.nickname forKey:@"prefilledNickname"];
+    }
+    if (item.avatar.length > 0) {
+        [controller setValue:item.avatar forKey:@"prefilledAvatar"];
+    }
+    if (item.bio.length > 0) {
+        [controller setValue:item.bio forKey:@"prefilledBio"];
+    }
+    controller.hidesBottomBarWhenPushed = YES;
+    [self.navigationController pushViewController:controller animated:YES];
+}
+
 - (UIColor *)accentColor {
     return [UIColor colorWithRed:0.98 green:0.49 blue:0.18 alpha:1.0];
 }
@@ -556,9 +724,20 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         return NO;
     }
     if (self.currentTab == YALSearchTabTypeContent) {
-        return !self.isContentLoading && self.contentErrorText.length == 0 && self.contentResults.count == 0;
+        return !self.isContentLoading &&
+               self.contentErrorText.length == 0 &&
+               self.contentResults.count == 0 &&
+               ![self hasVisibleAISection];
     }
     return !self.isUserLoading && self.userErrorText.length == 0 && self.userResults.count == 0;
+}
+
+- (BOOL)hasContentResultSection {
+    return self.contentResults.count > 0;
+}
+
+- (BOOL)hasVisibleAISection {
+    return self.isAILoading || self.aiResult != nil || self.aiErrorText.length > 0;
 }
 
 @end
@@ -766,11 +945,15 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
 @property (nonatomic, strong) UIView *cardView;
 @property (nonatomic, strong) UILabel *badgeLabel;
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIStackView *contentStack;
 @property (nonatomic, strong) UILabel *summaryLabel;
-@property (nonatomic, strong) UILabel *moodLabel;
 @property (nonatomic, strong) UILabel *tagsLabel;
+@property (nonatomic, strong) UILabel *highlightsLabel;
+@property (nonatomic, strong) UILabel *suggestionsLabel;
+@property (nonatomic, strong) UILabel *guideLabel;
 @property (nonatomic, strong) UIView *topAccentBar;
 @property (nonatomic, strong) UIView *glowBubble;
+@property (nonatomic, assign) NSUInteger streamingGeneration;
 
 @end
 
@@ -824,25 +1007,45 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
         self.summaryLabel.font = [UIFont systemFontOfSize:14.5 weight:UIFontWeightRegular];
         self.summaryLabel.textColor = [UIColor colorWithRed:0.32 green:0.28 blue:0.25 alpha:1.0];
         self.summaryLabel.numberOfLines = 0;
-        [self.cardView addSubview:self.summaryLabel];
-
-        self.moodLabel = [[UILabel alloc] init];
-        self.moodLabel.font = [UIFont systemFontOfSize:12.0 weight:UIFontWeightSemibold];
-        self.moodLabel.textColor = [UIColor colorWithRed:0.77 green:0.32 blue:0.21 alpha:1.0];
-        self.moodLabel.backgroundColor = [[UIColor colorWithRed:0.77 green:0.32 blue:0.21 alpha:1.0] colorWithAlphaComponent:0.10];
-        self.moodLabel.layer.cornerRadius = 12.0;
-        self.moodLabel.layer.masksToBounds = YES;
-        self.moodLabel.textAlignment = NSTextAlignmentCenter;
-        [self.cardView addSubview:self.moodLabel];
 
         self.tagsLabel = [[UILabel alloc] init];
         self.tagsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
         self.tagsLabel.textColor = [UIColor secondaryLabelColor];
         self.tagsLabel.numberOfLines = 0;
-        [self.cardView addSubview:self.tagsLabel];
+
+        self.highlightsLabel = [[UILabel alloc] init];
+        self.highlightsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightMedium];
+        self.highlightsLabel.textColor = [UIColor colorWithRed:0.45 green:0.36 blue:0.28 alpha:1.0];
+        self.highlightsLabel.numberOfLines = 0;
+
+        self.suggestionsLabel = [[UILabel alloc] init];
+        self.suggestionsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
+        self.suggestionsLabel.textColor = [UIColor colorWithRed:0.86 green:0.45 blue:0.19 alpha:1.0];
+        self.suggestionsLabel.numberOfLines = 0;
+
+        self.guideLabel = [[UILabel alloc] init];
+        self.guideLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightRegular];
+        self.guideLabel.textColor = [UIColor colorWithRed:0.38 green:0.33 blue:0.29 alpha:1.0];
+        self.guideLabel.numberOfLines = 0;
+
+        self.contentStack = [[UIStackView alloc] initWithArrangedSubviews:@[
+            self.summaryLabel,
+            self.tagsLabel,
+            self.highlightsLabel,
+            self.suggestionsLabel,
+            self.guideLabel
+        ]];
+        self.contentStack.axis = UILayoutConstraintAxisVertical;
+        self.contentStack.spacing = 10.0;
+        self.contentStack.alignment = UIStackViewAlignmentFill;
+        self.contentStack.distribution = UIStackViewDistributionFill;
+        [self.cardView addSubview:self.contentStack];
 
         [self.cardView mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.edges.equalTo(self.contentView).insets(UIEdgeInsetsMake(10.0, 16.0, 6.0, 16.0));
+            make.top.equalTo(self.contentView).offset(10.0);
+            make.left.equalTo(self.contentView).offset(16.0);
+            make.right.equalTo(self.contentView).offset(-16.0);
+            make.bottom.lessThanOrEqualTo(self.contentView).offset(-6.0);
         }];
         [self.glowBubble mas_makeConstraints:^(MASConstraintMaker *make) {
             make.top.equalTo(self.cardView).offset(-18.0);
@@ -866,25 +1069,20 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
             make.left.equalTo(self.badgeLabel);
             make.right.equalTo(self.cardView).offset(-18.0);
         }];
-        [self.summaryLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+        [self.contentStack mas_makeConstraints:^(MASConstraintMaker *make) {
             make.top.equalTo(self.titleLabel.mas_bottom).offset(10.0);
             make.left.equalTo(self.badgeLabel);
             make.right.equalTo(self.cardView).offset(-18.0);
-        }];
-        [self.moodLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(self.summaryLabel.mas_bottom).offset(12.0);
-            make.left.equalTo(self.badgeLabel);
-            make.height.mas_equalTo(24.0);
-            make.width.mas_greaterThanOrEqualTo(92.0);
-        }];
-        [self.tagsLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-            make.top.equalTo(self.moodLabel.mas_bottom).offset(12.0);
-            make.left.equalTo(self.badgeLabel);
-            make.right.equalTo(self.cardView).offset(-18.0);
-            make.bottom.equalTo(self.cardView).offset(-18.0);
+            make.bottom.lessThanOrEqualTo(self.cardView).offset(-18.0);
         }];
     }
     return self;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    [self cancelStreaming];
+    [self resetContentVisibility];
 }
 
 - (void)configureWithKeyword:(NSString *)keyword
@@ -892,24 +1090,117 @@ typedef NS_ENUM(NSInteger, YALSearchTabType) {
                      loading:(BOOL)loading
                    errorText:(NSString *)errorText {
     self.titleLabel.text = [NSString stringWithFormat:@"关于“%@”的 AI 搜索结论", keyword.length > 0 ? keyword : @"当前搜索"];
+    [self cancelStreaming];
+    [self resetContentVisibility];
 
     if (loading) {
         self.summaryLabel.text = @"AI 正在整理与你搜索最相关的内容、语义和情绪倾向，请稍候片刻。";
-        self.moodLabel.text = @"情绪分析中";
-        self.tagsLabel.text = @"关键词提炼中...";
+        self.tagsLabel.text = @"";
+        self.highlightsLabel.text = @"";
+        self.suggestionsLabel.text = @"";
+        self.guideLabel.text = @"";
+        [self updateVisibilityForLabel:self.summaryLabel];
+        [self updateVisibilityForLabel:self.tagsLabel];
+        [self updateVisibilityForLabel:self.highlightsLabel];
+        [self updateVisibilityForLabel:self.suggestionsLabel];
+        [self updateVisibilityForLabel:self.guideLabel];
         return;
     }
 
     if (result != nil) {
-        self.summaryLabel.text = result.summary.length > 0 ? result.summary : @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
-        self.moodLabel.text = result.mood.length > 0 ? [NSString stringWithFormat:@"情绪：%@", result.mood] : @"情绪：平稳";
-        self.tagsLabel.text = result.tags.count > 0 ? [NSString stringWithFormat:@"关键词：%@", [result.tags componentsJoinedByString:@" · "]] : @"关键词：暂无";
+        NSString *summaryText = result.summary.length > 0 ? result.summary : @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
+        NSString *highlightsText = result.highlights.count > 0 ? [NSString stringWithFormat:@"亮点：%@", [result.highlights componentsJoinedByString:@" · "]] : @"亮点：暂无";
+        NSString *suggestionsText = result.suggestions.length > 0 ? [NSString stringWithFormat:@"推荐搜索：%@", result.suggestions] : @"推荐搜索：暂无";
+        NSString *guideText = result.guide.length > 0 ? [NSString stringWithFormat:@"搜索提示：%@", result.guide] : @"搜索提示：可以继续从地点、情绪、人物或时间线索展开搜索。";
+        self.tagsLabel.text = result.tags.count > 0 ? [NSString stringWithFormat:@"关键词：%@", [result.tags componentsJoinedByString:@" · "]] : @"";
+        self.summaryLabel.text = @"";
+        self.highlightsLabel.text = @"";
+        self.suggestionsLabel.text = @"";
+        self.guideLabel.text = @"";
+        [self updateVisibilityForLabel:self.tagsLabel];
+        [self startStreamingWithSummaryText:summaryText highlightsText:highlightsText suggestionsText:suggestionsText guideText:guideText];
         return;
     }
 
     self.summaryLabel.text = errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。";
-    self.moodLabel.text = @"情绪：暂不可用";
-    self.tagsLabel.text = @"关键词：暂不可用";
+    self.tagsLabel.text = @"";
+    self.highlightsLabel.text = @"亮点：暂不可用";
+    self.suggestionsLabel.text = @"推荐搜索：暂不可用";
+    self.guideLabel.text = @"搜索提示：你仍然可以结合当前结果继续细化搜索。";
+    [self updateVisibilityForLabel:self.summaryLabel];
+    [self updateVisibilityForLabel:self.tagsLabel];
+    [self updateVisibilityForLabel:self.highlightsLabel];
+    [self updateVisibilityForLabel:self.suggestionsLabel];
+    [self updateVisibilityForLabel:self.guideLabel];
+}
+
+- (void)startStreamingWithSummaryText:(NSString *)summaryText
+                       highlightsText:(NSString *)highlightsText
+                      suggestionsText:(NSString *)suggestionsText
+                            guideText:(NSString *)guideText {
+    [self cancelStreaming];
+    self.summaryLabel.alpha = 0.0;
+    self.highlightsLabel.alpha = 0.0;
+    self.suggestionsLabel.alpha = 0.0;
+    self.guideLabel.alpha = 0.0;
+    [self updateVisibilityForLabel:self.summaryLabel];
+    [self updateVisibilityForLabel:self.highlightsLabel];
+    [self updateVisibilityForLabel:self.suggestionsLabel];
+    [self updateVisibilityForLabel:self.guideLabel];
+
+    NSUInteger generation = ++self.streamingGeneration;
+    [self revealLabel:self.summaryLabel withText:summaryText delay:0.00 generation:generation];
+    [self revealLabel:self.highlightsLabel withText:highlightsText delay:0.32 generation:generation];
+    [self revealLabel:self.suggestionsLabel withText:suggestionsText delay:0.64 generation:generation];
+    [self revealLabel:self.guideLabel withText:guideText delay:0.96 generation:generation];
+}
+
+- (void)revealLabel:(UILabel *)label
+           withText:(NSString *)text
+              delay:(NSTimeInterval)delay
+         generation:(NSUInteger)generation {
+    NSString *safeText = text ?: @"";
+    if (safeText.length == 0 || label == nil) {
+        label.text = @"";
+        [self updateVisibilityForLabel:label];
+        return;
+    }
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self.streamingGeneration != generation) {
+            return;
+        }
+        label.text = safeText;
+        label.hidden = NO;
+        [UIView animateWithDuration:0.22 animations:^{
+            label.alpha = 1.0;
+        }];
+    });
+}
+
+- (void)cancelStreaming {
+    self.streamingGeneration += 1;
+}
+
+- (void)resetContentVisibility {
+    self.summaryLabel.alpha = 1.0;
+    self.tagsLabel.alpha = 1.0;
+    self.highlightsLabel.alpha = 1.0;
+    self.suggestionsLabel.alpha = 1.0;
+    self.guideLabel.alpha = 1.0;
+    self.summaryLabel.hidden = NO;
+    self.tagsLabel.hidden = YES;
+    self.highlightsLabel.hidden = YES;
+    self.suggestionsLabel.hidden = YES;
+    self.guideLabel.hidden = YES;
+}
+
+- (void)updateVisibilityForLabel:(UILabel *)label {
+    if (label == nil) {
+        return;
+    }
+    NSString *text = label.text ?: @"";
+    label.hidden = (text.length == 0);
 }
 
 @end

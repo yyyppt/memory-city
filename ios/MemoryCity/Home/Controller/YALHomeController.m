@@ -457,7 +457,6 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
 - (void)messageTapped {
     YALMessageController *vc = [[YALMessageController alloc] init];
     vc.hidesBottomBarWhenPushed = YES;
-    [vc loadViewIfNeeded];
     [self.navigationController pushViewController:vc animated:YES];
 }
 

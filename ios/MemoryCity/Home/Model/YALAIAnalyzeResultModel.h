@@ -14,6 +14,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy) NSString *summary;
 @property (nonatomic, strong) NSArray<NSString *> *tags;
 @property (nonatomic, copy) NSString *mood;
+@property (nonatomic, copy) NSString *suggestions;
+@property (nonatomic, strong) NSArray<NSString *> *highlights;
+@property (nonatomic, copy) NSString *guide;
 
 - (instancetype)initWithDictionary:(NSDictionary *)dict;
 

@@ -12,6 +12,7 @@
 #import "../Model/YALPostModel.h"
 #import "../../PostDetail/Controller/YALPostDetailController.h"
 #import "../../Network/Manager/YALContentManager.h"
+#import "../../Network/Manager/YALNetworkManager.h"
 #import <Masonry/Masonry.h>
 #import <SDWebImage/SDWebImage.h>
 
@@ -92,6 +93,66 @@ static UIColor *YALSearchBodyTextColor(void) {
         }];
     }
     return [UIColor colorWithRed:0.32 green:0.28 blue:0.25 alpha:1.0];
+}
+
+static UIImage * _Nullable YALSearchImageFromDataURLString(NSString * _Nullable dataURL) {
+    if (![dataURL isKindOfClass:[NSString class]]) {
+        return nil;
+    }
+    NSString *trimmed = [dataURL stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (![trimmed hasPrefix:@"data:image"]) {
+        return nil;
+    }
+    NSRange commaRange = [trimmed rangeOfString:@","];
+    if (commaRange.location == NSNotFound || commaRange.location + 1 >= trimmed.length) {
+        return nil;
+    }
+    NSString *base64Part = [trimmed substringFromIndex:commaRange.location + 1];
+    NSData *imageData = [[NSData alloc] initWithBase64EncodedString:base64Part options:NSDataBase64DecodingIgnoreUnknownCharacters];
+    if (imageData.length == 0) {
+        return nil;
+    }
+    return [UIImage imageWithData:imageData];
+}
+
+static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlString) {
+    if (![urlString isKindOfClass:[NSString class]]) {
+        return nil;
+    }
+
+    NSString *trimmed = [urlString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimmed.length == 0) {
+        return nil;
+    }
+
+    NSURL *url = [NSURL URLWithString:trimmed];
+    if (url.scheme.length > 0) {
+        return url;
+    }
+
+    NSString *baseURLString = YALAPIRootURLString;
+    if (baseURLString.length == 0) {
+        return nil;
+    }
+
+    NSURL *baseURL = [NSURL URLWithString:baseURLString];
+    if (!baseURL) {
+        return nil;
+    }
+
+    if ([trimmed hasPrefix:@"/"]) {
+        NSURLComponents *components = [NSURLComponents componentsWithURL:baseURL resolvingAgainstBaseURL:NO];
+        if (components.path.length == 0) {
+            components.path = trimmed;
+        } else {
+            components.path = trimmed;
+        }
+        components.query = nil;
+        components.fragment = nil;
+        return components.URL;
+    }
+
+    return [NSURL URLWithString:trimmed relativeToURL:baseURL].absoluteURL;
 }
 
 @interface YALSearchResultCardCell : UITableViewCell
@@ -1042,17 +1103,30 @@ static UIColor *YALSearchBodyTextColor(void) {
     self.typeBadgeLabel.text = isUser ? @"用户" : @"内容";
     self.typeBadgeLabel.textColor = isUser ? [UIColor colorWithRed:0.18 green:0.48 blue:0.92 alpha:1.0] : [UIColor colorWithRed:0.93 green:0.44 blue:0.16 alpha:1.0];
     self.typeBadgeLabel.backgroundColor = isUser ? [[UIColor colorWithRed:0.18 green:0.48 blue:0.92 alpha:1.0] colorWithAlphaComponent:0.10] : [[UIColor colorWithRed:0.93 green:0.44 blue:0.16 alpha:1.0] colorWithAlphaComponent:0.10];
+    self.avatarView.hidden = !isUser;
 
     UIImage *coverPlaceholder = [self placeholderImageNamed:isUser ? @"person.crop.square" : @"photo.on.rectangle"];
     UIImage *avatarPlaceholder = [self placeholderImageNamed:@"person.crop.circle.fill"];
     [self loadImageOn:self.coverImageView withURLString:coverURL placeholder:coverPlaceholder];
-    [self loadImageOn:self.avatarView withURLString:avatarURL placeholder:avatarPlaceholder];
+    if (isUser) {
+        [self loadImageOn:self.avatarView withURLString:avatarURL placeholder:avatarPlaceholder];
+    } else {
+        [self.avatarView sd_cancelCurrentImageLoad];
+        self.avatarView.image = nil;
+    }
 }
 
 - (void)loadImageOn:(UIImageView *)imageView withURLString:(NSString *)urlString placeholder:(UIImage *)placeholder {
+    [imageView sd_cancelCurrentImageLoad];
     imageView.image = placeholder;
-    NSURL *url = [NSURL URLWithString:urlString ?: @""];
-    if (url && url.scheme.length > 0) {
+    UIImage *decodedImage = YALSearchImageFromDataURLString(urlString);
+    if (decodedImage) {
+        imageView.image = decodedImage;
+        return;
+    }
+
+    NSURL *url = YALSearchResolvedImageURL(urlString);
+    if (url) {
         [imageView sd_setImageWithURL:url
                      placeholderImage:placeholder
                               options:SDWebImageRetryFailed | SDWebImageScaleDownLargeImages];

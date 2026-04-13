@@ -29,6 +29,30 @@ static BOOL YALBoolFromPublicValue(id value) {
     return NO;
 }
 
+static id YALResolvedVisibilityValue(NSDictionary *dict) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+
+    NSArray<NSString *> *privateKeys = @[@"is_private", @"isPrivate", @"private", @"private_status"];
+    for (NSString *key in privateKeys) {
+        id value = dict[key];
+        if (value && value != [NSNull null]) {
+            return YALBoolFromPublicValue(value) ? @0 : @1;
+        }
+    }
+
+    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status", @"scope", @"permission"];
+    for (NSString *key in publicKeys) {
+        id value = dict[key];
+        if (value && value != [NSNull null]) {
+            return value;
+        }
+    }
+
+    return nil;
+}
+
 @interface YALMyContentCell : UITableViewCell
 
 /// 配置Cell
@@ -390,7 +414,7 @@ static BOOL YALBoolFromPublicValue(id value) {
         return YES;
     }
 
-    BOOL isPublic = YALBoolFromPublicValue(dict[@"is_public"]);
+    BOOL isPublic = YALBoolFromPublicValue(YALResolvedVisibilityValue(dict));
     return shouldShowPublicOnly ? isPublic : !isPublic;
 }
 

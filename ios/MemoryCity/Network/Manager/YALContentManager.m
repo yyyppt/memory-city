@@ -283,11 +283,21 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     }
     parameters[@"latitude"] = @(latitude);
     parameters[@"longitude"] = @(longitude);
-    // 兼容不同后端字段命名，避免服务端未识别 is_public 时把私密内容落成公开。
-    parameters[@"is_public"] = @(isPublic);
-    parameters[@"isPublic"] = @(isPublic);
-    parameters[@"visible"] = @(isPublic);
-    parameters[@"public_status"] = @(isPublic ? 1 : 0);
+    // Go 后端的 is_public 是 bool，主字段必须传 true/false。
+    NSNumber *publicBoolValue = @(isPublic);
+    NSNumber *privateBoolValue = @(!isPublic);
+    NSNumber *publicStatusValue = @(isPublic ? 1 : 0);
+    parameters[@"is_public"] = publicBoolValue;
+    parameters[@"isPublic"] = publicBoolValue;
+    parameters[@"visible"] = publicBoolValue;
+    parameters[@"public_status"] = publicStatusValue;
+    parameters[@"is_private"] = privateBoolValue;
+    parameters[@"private"] = privateBoolValue;
+    NSLog(@"🧭 发布可见性请求参数: is_public=%@, isPublic=%@, public_status=%@, is_private=%@",
+          publicBoolValue.boolValue ? @"true" : @"false",
+          publicBoolValue.boolValue ? @"true" : @"false",
+          publicStatusValue,
+          privateBoolValue.boolValue ? @"true" : @"false");
 
     if (locationName) {
         parameters[@"location_name"] = locationName;

@@ -41,17 +41,14 @@ static BOOL YALPostModelResolvedPublicFlag(NSDictionary *dict) {
         return NO;
     }
 
-    NSArray<NSString *> *keys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
-    for (NSString *key in keys) {
-        id value = dict[key];
-        if (!value || value == [NSNull null]) {
-            continue;
-        }
-        return YALPostModelBoolValue(value, NO);
+    id value = dict[@"is_public"];
+    if (!value || value == [NSNull null]) {
+        value = dict[@"isPublic"];
     }
-
-    // 隐私字段缺失时按私密处理，避免把本不该出现在公开列表的内容展示出来。
-    return NO;
+    if (!value || value == [NSNull null]) {
+        return NO;
+    }
+    return YALPostModelBoolValue(value, NO);
 }
 
 static double YALPostModelCoordinateValue(id value) {

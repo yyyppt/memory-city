@@ -46,6 +46,45 @@
 
 @implementation YALMapController
 
+static CLLocationDegrees YALClamp(CLLocationDegrees value, CLLocationDegrees min, CLLocationDegrees max) {
+    return MIN(MAX(value, min), max);
+}
+
+static BOOL YALCoordinateIsUsable(CLLocationCoordinate2D coordinate) {
+    return CLLocationCoordinate2DIsValid(coordinate) &&
+           fabs(coordinate.latitude) <= 90.0 &&
+           fabs(coordinate.longitude) <= 180.0;
+}
+
+- (MKCoordinateRegion)sanitizedRegionForCenter:(CLLocationCoordinate2D)center
+                                          span:(MKCoordinateSpan)span
+                               fallbackMeters:(CLLocationDistance)fallbackMeters {
+    if (!YALCoordinateIsUsable(center)) {
+        return MKCoordinateRegionForMapRect(MKMapRectWorld);
+    }
+
+    CLLocationDegrees latDelta = span.latitudeDelta;
+    CLLocationDegrees lonDelta = span.longitudeDelta;
+    if (!isfinite(latDelta) || latDelta <= 0.0 || !isfinite(lonDelta) || lonDelta <= 0.0) {
+        return MKCoordinateRegionMakeWithDistance(center, fallbackMeters, fallbackMeters);
+    }
+
+    latDelta = YALClamp(latDelta, 0.005, 170.0);
+    lonDelta = YALClamp(lonDelta, 0.005, 170.0);
+    return MKCoordinateRegionMake(center, MKCoordinateSpanMake(latDelta, lonDelta));
+}
+
+- (void)applySafeRegionWithCenter:(CLLocationCoordinate2D)center
+                             span:(MKCoordinateSpan)span
+                  fallbackMeters:(CLLocationDistance)fallbackMeters
+                         animated:(BOOL)animated {
+    if (!YALCoordinateIsUsable(center)) {
+        return;
+    }
+    MKCoordinateRegion region = [self sanitizedRegionForCenter:center span:span fallbackMeters:fallbackMeters];
+    [self.mapView setRegion:region animated:animated];
+}
+
 - (UIColor *)accentColor {
     return [UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0];
 }
@@ -468,7 +507,11 @@
         return;
     }
     if (points.count == 1) {
-        MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(points.firstObject.coordinate, 1800.0, 1800.0);
+        CLLocationCoordinate2D coordinate = points.firstObject.coordinate;
+        if (!YALCoordinateIsUsable(coordinate)) {
+            return;
+        }
+        MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(coordinate, 1800.0, 1800.0);
         [self.mapView setRegion:region animated:YES];
         return;
     }
@@ -478,17 +521,24 @@
     CLLocationDegrees minLon = DBL_MAX;
     CLLocationDegrees maxLon = -DBL_MAX;
     for (YALMemoryPoint *point in points) {
+        if (!YALCoordinateIsUsable(point.coordinate)) {
+            continue;
+        }
         minLat = MIN(minLat, point.coordinate.latitude);
         maxLat = MAX(maxLat, point.coordinate.latitude);
         minLon = MIN(minLon, point.coordinate.longitude);
         maxLon = MAX(maxLon, point.coordinate.longitude);
     }
 
+    if (minLat == DBL_MAX || minLon == DBL_MAX) {
+        return;
+    }
+
     MKCoordinateSpan span = MKCoordinateSpanMake(MAX((maxLat - minLat) * 1.5, 0.25),
                                                  MAX((maxLon - minLon) * 1.5, 0.25));
     CLLocationCoordinate2D center = CLLocationCoordinate2DMake((minLat + maxLat) * 0.5,
                                                                (minLon + maxLon) * 0.5);
-    [self.mapView setRegion:MKCoordinateRegionMake(center, span) animated:YES];
+    [self applySafeRegionWithCenter:center span:span fallbackMeters:3000.0 animated:YES];
 }
 
 - (void)reloadMapAnnotationsWithPosts:(NSArray<YALPostModel *> *)posts {
@@ -926,6 +976,9 @@
         }
 
         CLLocationCoordinate2D coordinate = firstItem.placemark.coordinate;
+        if (!YALCoordinateIsUsable(coordinate)) {
+            return;
+        }
         MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(coordinate, 1200, 1200);
         [strongSelf.mapView setRegion:region animated:YES];
     }];
@@ -983,8 +1036,11 @@
 
     CLLocation *currentLocation = self.locationManager.location ?: self.mapView.userLocation.location;
     if (currentLocation) {
-        MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(currentLocation.coordinate, 800, 800);
-        [self.mapView setRegion:region animated:YES];
+        CLLocationCoordinate2D coordinate = currentLocation.coordinate;
+        if (YALCoordinateIsUsable(coordinate)) {
+            MKCoordinateRegion region = MKCoordinateRegionMakeWithDistance(coordinate, 800, 800);
+            [self.mapView setRegion:region animated:YES];
+        }
     }
 }
 

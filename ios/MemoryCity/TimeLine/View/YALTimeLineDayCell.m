@@ -216,6 +216,7 @@ static UIColor *YALTimeLineDaySecondaryAccentTextColor(void) {
         [_subtitleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
             make.left.right.equalTo(_titleLabel);
             make.top.equalTo(_titleLabel.mas_bottom).offset(6);
+            make.bottom.lessThanOrEqualTo(_metaLabel.mas_top).offset(-8);
         }];
         [_metaLabel mas_makeConstraints:^(MASConstraintMaker *make) {
             make.left.right.equalTo(_titleLabel);

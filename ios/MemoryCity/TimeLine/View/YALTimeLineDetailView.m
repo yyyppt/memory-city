@@ -366,7 +366,7 @@ static NSString *YALAbsoluteImageURLString(NSString *raw) {
         make.centerY.equalTo(_actionBar);
     }];
     [_commentButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.right.equalTo(_actionBar).offset(-14);
+        make.right.equalTo(_actionBar).offset(-22);
         make.top.bottom.equalTo(_actionBar);
         make.width.mas_equalTo(92);
     }];

@@ -506,7 +506,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
     width = [UIScreen mainScreen].bounds.size.width;
   }
 
-  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 138.0)];
+  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 142.0)];
   header.backgroundColor = [UIColor clearColor];
 
   UILabel *introLabel = [[UILabel alloc] initWithFrame:CGRectZero];
@@ -517,7 +517,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 
   [introLabel mas_makeConstraints:^(MASConstraintMaker *make) {
     make.left.equalTo(header.mas_left).offset(16.0);
-    make.top.equalTo(header.mas_top).offset(14.0);
+    make.top.equalTo(header.mas_top).offset(22.0);
   }];
 
   NSArray<NSDictionary *> *items = @[
@@ -549,14 +549,14 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
   for (NSDictionary *item in items) {
     UIView *card = [[UIView alloc] initWithFrame:CGRectZero];
     card.backgroundColor = item[@"bgColor"];
-    card.layer.cornerRadius = 14.0;
+    card.layer.cornerRadius = 16.0;
     card.layer.masksToBounds = YES;
     card.layer.borderWidth = 1.0;
     card.layer.borderColor = [self softBorderColor].CGColor;
 
     UIView *iconBadge = [[UIView alloc] initWithFrame:CGRectZero];
-    iconBadge.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.62];
-    iconBadge.layer.cornerRadius = 17.0;
+    iconBadge.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
+    iconBadge.layer.cornerRadius = 15.0;
 
     UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectZero];
     if (@available(iOS 13.0, *)) {
@@ -565,44 +565,59 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
     iconView.tintColor = item[@"iconColor"];
     iconView.contentMode = UIViewContentModeScaleAspectFit;
 
-    UILabel *countLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    countLabel.text = item[@"count"];
-    countLabel.textAlignment = NSTextAlignmentCenter;
-    countLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
-    countLabel.textColor = [UIColor colorWithRed:0.28 green:0.22 blue:0.16 alpha:1.0];
-
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     titleLabel.text = item[@"title"];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    titleLabel.textAlignment = NSTextAlignmentLeft;
+    titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
     titleLabel.textColor = [UIColor colorWithRed:0.42 green:0.34 blue:0.25 alpha:1.0];
+
+    UILabel *countLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    countLabel.text = item[@"count"];
+    countLabel.textAlignment = NSTextAlignmentLeft;
+    countLabel.font = [UIFont systemFontOfSize:24 weight:UIFontWeightBold];
+    countLabel.textColor = [UIColor colorWithRed:0.28 green:0.22 blue:0.16 alpha:1.0];
+
+    UILabel *unitLabel = [[UILabel alloc] initWithFrame:CGRectZero];
+    unitLabel.text = @"累计";
+    unitLabel.textAlignment = NSTextAlignmentLeft;
+    unitLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    unitLabel.textColor = [UIColor colorWithRed:0.55 green:0.45 blue:0.34 alpha:1.0];
 
     [iconBadge addSubview:iconView];
     [card addSubview:iconBadge];
-    [card addSubview:countLabel];
     [card addSubview:titleLabel];
+    [card addSubview:countLabel];
+    [card addSubview:unitLabel];
     [header addSubview:card];
     [cards addObject:card];
 
     [iconBadge mas_makeConstraints:^(MASConstraintMaker *make) {
       make.top.equalTo(card.mas_top).offset(12.0);
-      make.centerX.equalTo(card.mas_centerX);
-      make.width.height.mas_equalTo(34.0);
+      make.right.equalTo(card.mas_right).offset(-12.0);
+      make.width.height.mas_equalTo(30.0);
     }];
 
     [iconView mas_makeConstraints:^(MASConstraintMaker *make) {
       make.center.equalTo(iconBadge);
-      make.width.height.mas_equalTo(19.0);
-    }];
-
-    [countLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.left.right.equalTo(card);
-      make.top.equalTo(iconBadge.mas_bottom).offset(6.0);
+      make.width.height.mas_equalTo(16.0);
     }];
 
     [titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.left.right.equalTo(card);
-      make.top.equalTo(countLabel.mas_bottom).offset(2.0);
+      make.top.equalTo(card.mas_top).offset(14.0);
+      make.left.equalTo(card.mas_left).offset(12.0);
+      make.right.lessThanOrEqualTo(iconBadge.mas_left).offset(-8.0);
+    }];
+
+    [countLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+      make.left.equalTo(titleLabel);
+      make.right.equalTo(card.mas_right).offset(-12.0);
+      make.top.equalTo(titleLabel.mas_bottom).offset(14.0);
+    }];
+
+    [unitLabel mas_makeConstraints:^(MASConstraintMaker *make) {
+      make.left.equalTo(titleLabel);
+      make.top.equalTo(countLabel.mas_bottom).offset(4.0);
+      make.right.equalTo(card.mas_right).offset(-12.0);
     }];
   }
 
@@ -612,7 +627,7 @@ static NSString * const kYALMessageSnapshotKeyPrefix = @"YALMessageInteractionSn
 
   [firstCard mas_makeConstraints:^(MASConstraintMaker *make) {
     make.left.equalTo(header.mas_left).offset(16.0);
-    make.top.equalTo(introLabel.mas_bottom).offset(12.0);
+    make.top.equalTo(introLabel.mas_bottom).offset(14.0);
     make.bottom.equalTo(header.mas_bottom).offset(-16.0);
   }];
   [secondCard mas_makeConstraints:^(MASConstraintMaker *make) {

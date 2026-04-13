@@ -67,7 +67,11 @@ static BOOL YALPostManagerBoolValue(id value, BOOL fallback) {
         if ([lower isEqualToString:@"0"] ||
             [lower isEqualToString:@"false"] ||
             [lower isEqualToString:@"no"] ||
+            [lower isEqualToString:@"2"] ||
             [lower isEqualToString:@"private"] ||
+            [lower isEqualToString:@"only_self"] ||
+            [lower isEqualToString:@"self"] ||
+            [lower isEqualToString:@"personal"] ||
             [lower isEqualToString:@"私密"] ||
             [lower isEqualToString:@"仅自己可见"]) {
             return NO;
@@ -80,20 +84,35 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
     if (![dict isKindOfClass:[NSDictionary class]]) {
         return NO;
     }
-
-    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
-    for (NSString *key in publicKeys) {
-        id value = dict[key];
-        if (!value || value == [NSNull null]) {
-            continue;
-        }
-        return YALPostManagerBoolValue(value, NO);
+    id publicValue = dict[@"is_public"];
+    if (!publicValue || publicValue == [NSNull null]) {
+        publicValue = dict[@"isPublic"];
     }
-
-    return NO;
+    if (!publicValue || publicValue == [NSNull null]) {
+        return NO;
+    }
+    return YALPostManagerBoolValue(publicValue, NO);
 }
 
 @implementation YALPostManager
+
+- (NSArray<YALPostModel *> *)filteredPublicPostsFromPosts:(NSArray<YALPostModel *> *)posts {
+    if (![posts isKindOfClass:[NSArray class]] || posts.count == 0) {
+        return @[];
+    }
+    NSMutableArray<YALPostModel *> *filtered = [NSMutableArray array];
+    for (YALPostModel *model in posts) {
+        if (![model isKindOfClass:[YALPostModel class]]) {
+            continue;
+        }
+        if (!model.isPublic) {
+            NSLog(@"🔒 首页缓存过滤掉私密内容ID: %@", model.contentId);
+            continue;
+        }
+        [filtered addObject:model];
+    }
+    return [filtered copy];
+}
                      
 + (instancetype)shareManager {
     static YALPostManager *postManager;
@@ -117,7 +136,7 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
 
 - (void)getPostsWithCache:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
     [[YALPostCacheStore sharedStore] fetchHomeFeedPostsWithCompletion:^(NSArray<YALPostModel *> *posts) {
-        NSArray<YALPostModel *> *cachedPosts = posts ?: @[];
+        NSArray<YALPostModel *> *cachedPosts = [self filteredPublicPostsFromPosts:(posts ?: @[])];
         if (cachedPosts.count > 0) {
             NSLog(@"💾 首页命中 Core Data 缓存：%lu 条", (unsigned long)cachedPosts.count);
         }
@@ -218,11 +237,18 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
                 continue;
             }
             NSDictionary *dic = (NSDictionary *)item;
+            NSLog(@"🧾 首页原始可见性 content_id=%@ is_public=%@ isPublic=%@",
+                  dic[@"content_id"],
+                  dic[@"is_public"],
+                  dic[@"isPublic"]);
             if (!YALPostManagerShouldShowPublicContent(dic)) {
                 NSLog(@"🔒 首页原始数据过滤掉非公开内容ID: %@", dic[@"content_id"]);
                 continue;
             }
             YALPostModel *model = [[YALPostModel alloc] initWithDictionary:dic];
+            NSLog(@"🏠 首页模型可见性 content_id=%@ model.isPublic=%@",
+                  model.contentId,
+                  model.isPublic ? @"YES" : @"NO");
             if (!model.isPublic) {
                 NSLog(@"🔒 跳过私密内容ID: %@", model.contentId);
                 continue;

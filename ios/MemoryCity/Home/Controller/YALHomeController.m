@@ -38,6 +38,24 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
 
 @implementation YALHomeController
 
+- (NSArray<YALPostModel *> *)publicOnlyPostsFromPosts:(NSArray<YALPostModel *> *)posts {
+    if (![posts isKindOfClass:[NSArray class]] || posts.count == 0) {
+        return @[];
+    }
+    NSMutableArray<YALPostModel *> *filtered = [NSMutableArray array];
+    for (YALPostModel *model in posts) {
+        if (![model isKindOfClass:[YALPostModel class]]) {
+            continue;
+        }
+        if (!model.isPublic) {
+            NSLog(@"🔒 首页控制器再次过滤私密内容ID: %@", model.contentId);
+            continue;
+        }
+        [filtered addObject:model];
+    }
+    return [filtered copy];
+}
+
 - (UIColor *)pageBackgroundColor {
     if (@available(iOS 13.0, *)) {
         return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
@@ -279,8 +297,9 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
     [[YALPostManager shareManager] getPostsWithCache:^(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error) {
         if (!ws) return;
 
-        if (posts && posts.count > 0) {
-            ws.data = [posts mutableCopy];
+        if (posts) {
+            NSArray<YALPostModel *> *publicPosts = [ws publicOnlyPostsFromPosts:posts];
+            ws.data = [publicPosts mutableCopy];
         } else if (!fromCache) {
             // 拉取失败时保底显示一条占位数据，避免页面完全空白
             YALPostModel *placeholder = [[YALPostModel alloc] init];
@@ -302,6 +321,15 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
             }
         }
     }];
+}
+
+- (void)removePrivatePostsFromCurrentData {
+    NSArray<YALPostModel *> *publicPosts = [self publicOnlyPostsFromPosts:self.data];
+    self.data = [publicPosts mutableCopy];
+    [self.waterfallHeightCache removeAllObjects];
+    self.cachedWaterfallItemWidth = 0;
+    [self prepareWaterfallMetricsIfNeeded];
+    [self.collectionView reloadData];
 }
 
 - (void)setupCollectionView {

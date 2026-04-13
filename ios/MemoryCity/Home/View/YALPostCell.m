@@ -31,6 +31,8 @@
 
 @end
 
+static CGFloat const kYALPostCellVerticalChromeHeight = 66.0;
+
 @implementation YALPostCell
 
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -147,7 +149,7 @@
         make.top.equalTo(self.contentView.mas_top).offset(9.0);
         make.left.equalTo(self.contentView.mas_left).offset(9.0);
         make.right.equalTo(self.contentView.mas_right).offset(-9.0);
-        self.imageHeightConstraint = make.height.mas_equalTo(120.0);
+        self.imageHeightConstraint = make.height.mas_equalTo(120.0).priorityHigh();
     }];
 
     [self.titleLabel mas_makeConstraints:^(MASConstraintMaker *make) {
@@ -314,6 +316,12 @@
     } else {
         // 单列模式使用统一高度，保证所有卡片整齐对齐。
         imageHeight = (self.fixedImageHeight > 0) ? self.fixedImageHeight : 222.0;
+    }
+
+    CGFloat availableHeight = CGRectGetHeight(self.contentView.bounds);
+    if (availableHeight > kYALPostCellVerticalChromeHeight) {
+        CGFloat maxImageHeight = MAX(120.0, floor(availableHeight - kYALPostCellVerticalChromeHeight));
+        imageHeight = MIN(imageHeight, maxImageHeight);
     }
     
     self.imageHeightConstraint.offset = imageHeight;

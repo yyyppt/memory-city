@@ -12,6 +12,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface YALHomeController : UIViewController <UICollectionViewDataSource, UICollectionViewDelegateFlowLayout, YALWaterfallLayoutDelegate, UISearchBarDelegate>
 
+- (void)loadPosts;
+- (void)removePrivatePostsFromCurrentData;
+
 @end
 
 NS_ASSUME_NONNULL_END

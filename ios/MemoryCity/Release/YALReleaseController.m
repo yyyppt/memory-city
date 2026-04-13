@@ -133,6 +133,8 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 @property (nonatomic, strong, nullable) NSDate *selectedDate;
 @property (nonatomic, strong) CLGeocoder *geocoder;
 @property (nonatomic, copy, nullable) NSString *resolvedCityName;
+@property (nonatomic, assign) UIEdgeInsets baseScrollIndicatorInsets;
+@property (nonatomic, assign) UIEdgeInsets baseScrollContentInsets;
 
 @end
 
@@ -277,6 +279,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     [self updateTitleForSelectedLocation];
     [self updateLocationUI];
     [self resolveLocationDetailsIfNeeded];
+    [self registerForKeyboardNotifications];
 
     // 点击空白收起键盘
     UITapGestureRecognizer *tap =
@@ -291,6 +294,10 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     [self updatePhotoCollectionHeight];
 }
 
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
 #pragma mark - UI
 
 - (void)buildUI {
@@ -301,6 +308,8 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   [self.scrollView mas_makeConstraints:^(MASConstraintMaker *make) {
     make.edges.equalTo(self.view);
   }];
+  self.baseScrollContentInsets = self.scrollView.contentInset;
+  self.baseScrollIndicatorInsets = self.scrollView.verticalScrollIndicatorInsets;
 
   self.contentView = [[UIView alloc] init];
   self.contentView.backgroundColor = [UIColor clearColor];
@@ -523,8 +532,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     make.bottom.equalTo(card.mas_bottom).offset(-18);
   }];
 
-  self.isPublic = YES;
-  [self updateVisibilitySegmentAnimated:NO];
+  [self setVisibilityPublic:YES animated:NO source:@"initial"];
   [self updatePhotoSelectionUI];
   [self updateLocationUI];
 }
@@ -552,6 +560,14 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     self.textView.textColor = [UIColor placeholderTextColor];
   }
   [self updateLocationUI];
+}
+
+- (void)setVisibilityPublic:(BOOL)isPublic animated:(BOOL)animated source:(NSString *)source {
+  self.isPublic = isPublic;
+  self.publicButton.selected = isPublic;
+  self.privateButton.selected = !isPublic;
+  NSLog(@"👁️ 可见性切换[%@]: %@", source ?: @"unknown", isPublic ? @"公开" : @"私密");
+  [self updateVisibilitySegmentAnimated:animated];
 }
 
 - (void)updatePhotoSelectionUI {
@@ -666,7 +682,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   NSString *locationName = [self currentLocationDisplayName];
   double latitude = self.hasPresetCoordinate ? self.presetCoordinate.latitude : 0.0;
   double longitude = self.hasPresetCoordinate ? self.presetCoordinate.longitude : 0.0;
-  BOOL isPublic = self.isPublic;
+  BOOL isPublic = self.publicButton.selected ? YES : (self.privateButton.selected ? NO : self.isPublic);
 
   // 打印发布参数
   NSLog(@"🚀 开始发布内容：");
@@ -677,7 +693,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   NSLog(@"😊 情绪: %@", mood);
   NSLog(@"📍 地点: %@", locationName);
   NSLog(@"🌍 经纬度: %f, %f", latitude, longitude);
-  NSLog(@"🔓 公开: %@", isPublic ? @"是" : @"否");
+  NSLog(@"🔓 发布可见性: %@", isPublic ? @"公开" : @"私密");
 
   // 图片处理：如果有选择的图片，转换为Base64
   NSMutableArray *images = [NSMutableArray array];
@@ -728,7 +744,7 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
           UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"发布成功" message:[NSString stringWithFormat:@"%@\n内容ID: %@\n\n发布内容已保存到服务器", message, contentId] preferredStyle:UIAlertControllerStyleAlert];
           [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [self resetPublishForm];
-            // 发布成功后跳转主页并刷新
+            // 发布成功后跳转主页。仅公开内容主动刷新首页，私密内容只清理首页现有数据里的私密项。
             dispatch_async(dispatch_get_main_queue(), ^{
               UIViewController *rootVC = self.view.window.rootViewController;
               if ([rootVC isKindOfClass:[UITabBarController class]]) {
@@ -739,8 +755,10 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
                   homeNav = (UINavigationController *)tab.viewControllers.firstObject;
                 }
                 UIViewController *homeVC = homeNav.viewControllers.firstObject ?: nil;
-                if (homeVC && [homeVC respondsToSelector:@selector(loadPosts)]) {
+                if (isPublic && homeVC && [homeVC respondsToSelector:@selector(loadPosts)]) {
                   [homeVC performSelector:@selector(loadPosts)];
+                } else if (!isPublic && homeVC && [homeVC respondsToSelector:@selector(removePrivatePostsFromCurrentData)]) {
+                  [homeVC performSelector:@selector(removePrivatePostsFromCurrentData)];
                 }
                 if (tab.viewControllers.count > 1 && [tab.viewControllers[1] isKindOfClass:[UINavigationController class]]) {
                   UINavigationController *memoryNav = (UINavigationController *)tab.viewControllers[1];
@@ -775,14 +793,12 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   self.editTitleText = @"";
   self.editBody = @"";
   self.selectedDate = nil;
-  self.isPublic = YES;
+  [self setVisibilityPublic:YES animated:NO source:@"reset"];
   self.hasPresetCoordinate = NO;
   self.presetCoordinate = kCLLocationCoordinate2DInvalid;
   self.presetLocationName = nil;
   self.resolvedCityName = nil;
   [self.selectedImages removeAllObjects];
-  [self updateVisibilitySegmentAnimated:NO];
-
   self.titleField.text = @"";
   self.dateLabel.text = @"选择日期";
   self.textView.text = self.bodyPlaceholderText;
@@ -856,6 +872,73 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 
 #pragma mark - Keyboard
 
+- (void)registerForKeyboardNotifications {
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  [center addObserver:self
+             selector:@selector(handleKeyboardWillShow:)
+                 name:UIKeyboardWillShowNotification
+               object:nil];
+  [center addObserver:self
+             selector:@selector(handleKeyboardWillHide:)
+                 name:UIKeyboardWillHideNotification
+               object:nil];
+}
+
+- (UIView *)currentFirstResponderInView:(UIView *)view {
+  if (view.isFirstResponder) {
+    return view;
+  }
+  for (UIView *subview in view.subviews) {
+    UIView *firstResponder = [self currentFirstResponderInView:subview];
+    if (firstResponder) {
+      return firstResponder;
+    }
+  }
+  return nil;
+}
+
+- (void)handleKeyboardWillShow:(NSNotification *)notification {
+  NSDictionary *userInfo = notification.userInfo ?: @{};
+  CGRect keyboardEndFrame = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+  NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+  UIViewAnimationOptions options = ([userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue] << 16);
+  CGRect keyboardFrameInView = [self.view convertRect:keyboardEndFrame fromView:nil];
+  CGFloat keyboardHeight = MAX(CGRectGetHeight(self.view.bounds) - CGRectGetMinY(keyboardFrameInView), 0.0);
+  CGFloat bottomInset = keyboardHeight + 16.0;
+
+  UIEdgeInsets contentInsets = self.baseScrollContentInsets;
+  contentInsets.bottom = bottomInset;
+  UIEdgeInsets indicatorInsets = self.baseScrollIndicatorInsets;
+  indicatorInsets.bottom = bottomInset;
+
+  [UIView animateWithDuration:duration delay:0 options:options animations:^{
+    self.scrollView.contentInset = contentInsets;
+    self.scrollView.verticalScrollIndicatorInsets = indicatorInsets;
+  } completion:nil];
+
+  UIView *activeView = [self currentFirstResponderInView:self.view];
+  if (!activeView) {
+    return;
+  }
+
+  CGRect targetRect = [self.scrollView convertRect:activeView.bounds fromView:activeView];
+  targetRect = CGRectInset(targetRect, 0, -24.0);
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [self.scrollView scrollRectToVisible:targetRect animated:YES];
+  });
+}
+
+- (void)handleKeyboardWillHide:(NSNotification *)notification {
+  NSDictionary *userInfo = notification.userInfo ?: @{};
+  NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+  UIViewAnimationOptions options = ([userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue] << 16);
+
+  [UIView animateWithDuration:duration delay:0 options:options animations:^{
+    self.scrollView.contentInset = self.baseScrollContentInsets;
+    self.scrollView.verticalScrollIndicatorInsets = self.baseScrollIndicatorInsets;
+  } completion:nil];
+}
+
 - (void)dismissKeyboard {
   [self.view endEditing:YES];
 }
@@ -867,6 +950,9 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
     textView.text = @"";
     textView.textColor = [UIColor labelColor];
   }
+  CGRect targetRect = [self.scrollView convertRect:textView.bounds fromView:textView];
+  targetRect = CGRectInset(targetRect, 0, -24.0);
+  [self.scrollView scrollRectToVisible:targetRect animated:YES];
 }
 
 - (void)textViewDidEndEditing:(UITextView *)textView {
@@ -895,8 +981,8 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
 #pragma mark - Date & Image
 
 - (void)visibilityButtonTapped:(UIButton *)sender {
-  self.isPublic = (sender.tag == 100);
-  [self updateVisibilitySegmentAnimated:YES];
+  BOOL shouldPublic = (sender == self.publicButton) || (sender.tag == 100);
+  [self setVisibilityPublic:shouldPublic animated:YES source:@"tap"];
 }
 
 - (void)updateVisibilitySegmentAnimated:(BOOL)animated {

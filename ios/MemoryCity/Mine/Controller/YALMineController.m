@@ -39,6 +39,30 @@ static BOOL YALMineBoolFromPublicValue(id value) {
     return NO;
 }
 
+static id YALMineResolvedVisibilityValue(NSDictionary *dict) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+
+    NSArray<NSString *> *privateKeys = @[@"is_private", @"isPrivate", @"private", @"private_status"];
+    for (NSString *key in privateKeys) {
+        id value = dict[key];
+        if (value && value != [NSNull null]) {
+            return YALMineBoolFromPublicValue(value) ? @0 : @1;
+        }
+    }
+
+    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status", @"scope", @"permission"];
+    for (NSString *key in publicKeys) {
+        id value = dict[key];
+        if (value && value != [NSNull null]) {
+            return value;
+        }
+    }
+
+    return nil;
+}
+
 
 
 
@@ -411,13 +435,7 @@ static BOOL YALMineBoolFromPublicValue(id value) {
                     continue;
                 }
                 NSDictionary *dict = (NSDictionary *)item;
-                id publicValue = dict[@"is_public"];
-                if (!publicValue) {
-                    publicValue = dict[@"isPublic"];
-                }
-                if (!publicValue) {
-                    publicValue = dict[@"visibility"];
-                }
+                id publicValue = YALMineResolvedVisibilityValue(dict);
                 BOOL isPublic = YALMineBoolFromPublicValue(publicValue);
                 if (isPublic) {
                     publicCount += 1;

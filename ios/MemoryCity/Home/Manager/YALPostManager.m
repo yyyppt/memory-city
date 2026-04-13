@@ -94,6 +94,12 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
     return YALPostManagerBoolValue(publicValue, NO);
 }
 
+@interface YALPostManager ()
+
+@property (nonatomic, assign) NSInteger lastDisplayedHomeFeedPage;
+
+@end
+
 @implementation YALPostManager
 
 - (NSArray<YALPostModel *> *)filteredPublicPostsFromPosts:(NSArray<YALPostModel *> *)posts {
@@ -139,18 +145,32 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
         NSArray<YALPostModel *> *cachedPosts = [self filteredPublicPostsFromPosts:(posts ?: @[])];
         if (cachedPosts.count > 0) {
             NSLog(@"💾 首页命中 Core Data 缓存：%lu 条", (unsigned long)cachedPosts.count);
+            if (completion) {
+                completion(cachedPosts, YES, nil);
+            }
         }
 
-        [self requestLatestPostsWithCachedPosts:cachedPosts completion:completion];
+        [self requestLatestPostsWithCachedPosts:cachedPosts page:1 randomizePage:NO completion:completion];
     }];
 }
 
+- (void)refreshPostsWithRandomSample:(void(^)(NSArray<YALPostModel *> * _Nullable posts, NSError * _Nullable error))completion {
+    [self fetchAllPublicPostsForRefreshWithCompletion:completion];
+}
+
 - (void)requestLatestPostsWithCachedPosts:(NSArray<YALPostModel *> *)cachedPosts
+                                     page:(NSInteger)page
+                            randomizePage:(BOOL)randomizePage
                                completion:(void(^)(NSArray<YALPostModel *> * _Nullable posts, BOOL fromCache, NSError * _Nullable error))completion {
     YALNetworkManager *manager = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/content/list", YALAPIBaseURLString];
+    NSInteger const pageSize = 15;
+    NSInteger requestedPage = MAX(page, 1);
 
-    NSDictionary *parameters = @{@"limit": @10};
+    NSDictionary *parameters = @{
+        @"page": @(requestedPage),
+        @"size": @(pageSize)
+    };
 
     NSLog(@"📡 首页获取内容列表请求：%@", url);
     NSLog(@"📦 请求参数：%@", parameters);
@@ -215,6 +235,23 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
             data = responseDict[@"data"];
         }
 
+        NSInteger totalCount = [data[@"total"] respondsToSelector:@selector(integerValue)] ? [data[@"total"] integerValue] : 0;
+        NSInteger totalPages = totalCount > 0 ? MAX((totalCount + pageSize - 1) / pageSize, 1) : 1;
+        if (randomizePage && requestedPage == 1 && totalPages > 1) {
+            NSInteger excludedPage = MAX(self.lastDisplayedHomeFeedPage, 1);
+            NSInteger randomPage = [self randomHomeFeedPageWithTotalPages:totalPages excludingPage:excludedPage];
+            NSLog(@"🎲 首页刷新随机页: total=%ld totalPages=%ld selectedPage=%ld excludedPage=%ld",
+                  (long)totalCount,
+                  (long)totalPages,
+                  (long)randomPage,
+                  (long)excludedPage);
+            [self requestLatestPostsWithCachedPosts:cachedPosts
+                                              page:randomPage
+                                      randomizePage:NO
+                                         completion:completion];
+            return;
+        }
+
         NSArray *list = nil;
         if ([data[@"list"] isKindOfClass:[NSArray class]]) {
             list = data[@"list"];
@@ -260,6 +297,7 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
         }
 
         [self resolveCollectCountsFromDetailForPosts:posts completion:^(NSArray<YALPostModel *> *resolvedPosts) {
+            self.lastDisplayedHomeFeedPage = requestedPage;
             [[YALPostCacheStore sharedStore] replaceHomeFeedPosts:resolvedPosts completion:^(NSError * _Nullable cacheError) {
                 if (cacheError) {
                     NSLog(@"⚠️ 首页缓存更新失败: %@", cacheError);
@@ -280,6 +318,113 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
             }
         }
     }];
+}
+
+- (NSInteger)randomHomeFeedPageWithTotalPages:(NSInteger)totalPages excludingPage:(NSInteger)excludedPage {
+    if (totalPages <= 1) {
+        return 1;
+    }
+
+    NSMutableArray<NSNumber *> *candidates = [NSMutableArray array];
+    for (NSInteger page = 1; page <= totalPages; page++) {
+        if (page == excludedPage) {
+            continue;
+        }
+        [candidates addObject:@(page)];
+    }
+    if (candidates.count == 0) {
+        return 1;
+    }
+
+    u_int32_t index = arc4random_uniform((u_int32_t)candidates.count);
+    return candidates[index].integerValue;
+}
+
+- (void)fetchAllPublicPostsForRefreshWithCompletion:(void(^)(NSArray<YALPostModel *> * _Nullable posts, NSError * _Nullable error))completion {
+    YALNetworkManager *manager = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/content/list", YALAPIBaseURLString];
+    NSInteger const pageSize = 30;
+    NSInteger const maxPages = 20;
+    __block NSInteger page = 1;
+    __block NSInteger totalPages = 1;
+    __block NSMutableArray<YALPostModel *> *aggregatedPosts = [NSMutableArray array];
+
+    __weak typeof(self) weakSelf = self;
+    __block void (^fetchNextPage)(void) = ^{
+        NSDictionary *parameters = @{
+            @"page": @(page),
+            @"size": @(pageSize)
+        };
+        NSLog(@"🎲 首页刷新全量抓取请求：%@", parameters);
+        [manager GET:url parameters:parameters headers:nil progress:nil success:^(__unused NSURLSessionDataTask *task, id responseObject) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+
+            if (![responseObject isKindOfClass:[NSDictionary class]]) {
+                if (completion) {
+                    NSError *error = [NSError errorWithDomain:@"YALPostManager"
+                                                         code:-1
+                                                     userInfo:@{NSLocalizedDescriptionKey : @"Invalid response object"}];
+                    completion(nil, error);
+                }
+                return;
+            }
+
+            NSDictionary *responseDict = (NSDictionary *)responseObject;
+            NSInteger code = [responseDict[@"code"] integerValue];
+            NSString *msg = [responseDict[@"msg"] isKindOfClass:[NSString class]] ? responseDict[@"msg"] : @"";
+            if (code != 200) {
+                if (completion) {
+                    NSError *error = [NSError errorWithDomain:@"YALPostManager"
+                                                         code:code
+                                                     userInfo:@{NSLocalizedDescriptionKey: msg.length > 0 ? msg : @"首页刷新失败"}];
+                    completion(nil, error);
+                }
+                return;
+            }
+
+            NSDictionary *data = [responseDict[@"data"] isKindOfClass:[NSDictionary class]] ? responseDict[@"data"] : nil;
+            NSArray *list = [data[@"list"] isKindOfClass:[NSArray class]] ? data[@"list"] : @[];
+            NSInteger totalCount = [data[@"total"] respondsToSelector:@selector(integerValue)] ? [data[@"total"] integerValue] : list.count;
+            totalPages = MAX((totalCount + pageSize - 1) / pageSize, 1);
+
+            for (id item in list) {
+                if (![item isKindOfClass:[NSDictionary class]]) {
+                    continue;
+                }
+                NSDictionary *dic = (NSDictionary *)item;
+                if (!YALPostManagerShouldShowPublicContent(dic)) {
+                    continue;
+                }
+                YALPostModel *model = [[YALPostModel alloc] initWithDictionary:dic];
+                if (!model.isPublic) {
+                    continue;
+                }
+                [aggregatedPosts addObject:model];
+            }
+
+            BOOL reachedLastPage = (page >= totalPages || list.count < pageSize || page >= maxPages);
+            if (reachedLastPage) {
+                [strongSelf resolveCollectCountsFromDetailForPosts:[aggregatedPosts copy] completion:^(NSArray<YALPostModel *> *resolvedPosts) {
+                    if (completion) {
+                        completion(resolvedPosts, nil);
+                    }
+                }];
+                return;
+            }
+
+            page += 1;
+            fetchNextPage();
+        } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
+            if (completion) {
+                completion(nil, error);
+            }
+        }];
+    };
+
+    fetchNextPage();
 }
 
 - (void)resolveCollectCountsFromDetailForPosts:(NSArray<YALPostModel *> *)posts

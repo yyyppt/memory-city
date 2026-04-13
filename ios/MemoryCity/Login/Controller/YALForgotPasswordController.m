@@ -31,6 +31,7 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
     [super viewDidLoad];
     self.title = @"找回密码";
     self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    self.navigationController.navigationBar.tintColor = [UIColor colorWithRed:1.0 green:0.78 blue:0.34 alpha:1.0];
     [self buildUI];
     [self installKeyboardDismissGesture];
 }
@@ -54,7 +55,7 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
     [self.view addSubview:hintLabel];
 
     UIView *cardView = [[UIView alloc] init];
-    cardView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    cardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.985 blue:0.955 alpha:1.0];
     cardView.layer.cornerRadius = 18.0;
     cardView.layer.masksToBounds = YES;
     [self.view addSubview:cardView];
@@ -77,19 +78,19 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 
     self.sendCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.sendCodeButton setTitle:@"获取验证码" forState:UIControlStateNormal];
-    [self.sendCodeButton setTitleColor:[UIColor colorWithRed:0.90 green:0.40 blue:0.12 alpha:1.0] forState:UIControlStateNormal];
+    [self.sendCodeButton setTitleColor:[UIColor colorWithRed:0.76 green:0.50 blue:0.08 alpha:1.0] forState:UIControlStateNormal];
     self.sendCodeButton.titleLabel.font = [UIFont systemFontOfSize:14.0 weight:UIFontWeightSemibold];
     self.sendCodeButton.layer.cornerRadius = 8.0;
     self.sendCodeButton.layer.masksToBounds = YES;
-    self.sendCodeButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.94 blue:0.84 alpha:1.0];
+    self.sendCodeButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.95 blue:0.82 alpha:1.0];
     [self.sendCodeButton addTarget:self action:@selector(sendCodeButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [cardView addSubview:self.sendCodeButton];
 
     self.nextButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [self.nextButton setTitle:@"下一步" forState:UIControlStateNormal];
-    [self.nextButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [self.nextButton setTitleColor:[UIColor colorWithRed:0.42 green:0.30 blue:0.05 alpha:1.0] forState:UIControlStateNormal];
     self.nextButton.titleLabel.font = [UIFont systemFontOfSize:17.0 weight:UIFontWeightSemibold];
-    self.nextButton.backgroundColor = [UIColor colorWithRed:0.98 green:0.52 blue:0.18 alpha:1.0];
+    self.nextButton.backgroundColor = [UIColor colorWithRed:1.0 green:0.78 blue:0.34 alpha:1.0];
     self.nextButton.layer.cornerRadius = 25.0;
     self.nextButton.layer.masksToBounds = YES;
     [self.nextButton addTarget:self action:@selector(nextButtonTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -153,9 +154,11 @@ static const NSInteger kYALResetCodeCountdownSeconds = 60;
 - (UITextField *)makeTextFieldWithPlaceholder:(NSString *)placeholder {
     UITextField *field = [[UITextField alloc] init];
     field.placeholder = placeholder;
-    field.backgroundColor = [UIColor systemBackgroundColor];
-    field.layer.cornerRadius = 12.0;
+    field.backgroundColor = [UIColor colorWithRed:1.0 green:0.98 blue:0.92 alpha:1.0];
+    field.layer.cornerRadius = 14.0;
     field.layer.masksToBounds = YES;
+    field.layer.borderWidth = 1.0;
+    field.layer.borderColor = [UIColor colorWithRed:1.0 green:0.88 blue:0.66 alpha:1.0].CGColor;
     field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 14.0, 1.0)];
     field.leftViewMode = UITextFieldViewModeAlways;
     field.clearButtonMode = UITextFieldViewModeWhileEditing;

@@ -656,6 +656,7 @@ static UIColor *YALAuthorProfileCardColor(void) {
 
 - (void)renderPublicWorksPreview:(NSArray<YALPostModel *> *)works {
     self.publicWorks = [works copy];
+    self.publishedValueLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX((NSInteger)works.count, 0)];
     for (UIView *arranged in [self.worksRowsStack.arrangedSubviews copy]) {
         [self.worksRowsStack removeArrangedSubview:arranged];
         [arranged removeFromSuperview];
@@ -709,6 +710,27 @@ static UIColor *YALAuthorProfileCardColor(void) {
     [self.navigationController pushViewController:detail animated:YES];
 }
 
+- (BOOL)isViewingOwnAuthorProfile {
+    NSInteger currentUserId = [YALAuthManager sharedManager].currentUser.userId;
+    return (currentUserId > 0 && currentUserId == self.userId.integerValue);
+}
+
+- (BOOL)shouldTreatContentDictAsPublic:(NSDictionary *)dict {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return NO;
+    }
+
+    NSArray<NSString *> *keys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if (!value || value == [NSNull null]) {
+            continue;
+        }
+        return [self boolValueFromObject:value fallback:NO];
+    }
+    return NO;
+}
+
 - (void)fetchPublicWorksPreview {
     if (self.userId.integerValue <= 0) {
         return;
@@ -732,6 +754,74 @@ static UIColor *YALAuthorProfileCardColor(void) {
             return;
         }
 
+        void (^handlePublicModels)(NSArray<YALPostModel *> *) = ^(NSArray<YALPostModel *> *models) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) {
+                return;
+            }
+
+            for (id item in models) {
+                if (![item isKindOfClass:[YALPostModel class]]) {
+                    continue;
+                }
+                YALPostModel *model = (YALPostModel *)item;
+                if (!model.isPublic) {
+                    continue;
+                }
+                if (model.authorUserId.integerValue != strongSelf.userId.integerValue) {
+                    continue;
+                }
+                [matchedWorks addObject:model];
+            }
+
+            if (models.count < pageSize) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [strongSelf renderPublicWorksPreview:[matchedWorks copy]];
+                });
+                return;
+            }
+
+            page += 1;
+            fetchNextPage();
+        };
+
+        if ([self isViewingOwnAuthorProfile]) {
+            [[YALContentManager sharedManager] getMyContentListWithPage:page
+                                                               pageSize:pageSize
+                                                             completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) {
+                    return;
+                }
+                (void)message;
+                (void)error;
+                if (!success || ![contentList isKindOfClass:[NSArray class]]) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [strongSelf renderPublicWorksPreview:[matchedWorks copy]];
+                    });
+                    return;
+                }
+
+                NSMutableArray<YALPostModel *> *models = [NSMutableArray array];
+                for (id item in contentList) {
+                    if (![item isKindOfClass:[NSDictionary class]]) {
+                        continue;
+                    }
+                    NSDictionary *dict = (NSDictionary *)item;
+                    if (![strongSelf shouldTreatContentDictAsPublic:dict]) {
+                        continue;
+                    }
+                    YALPostModel *model = [[YALPostModel alloc] initWithDictionary:dict];
+                    if (!model.authorUserId && strongSelf.userId.integerValue > 0) {
+                        model.authorUserId = strongSelf.userId;
+                    }
+                    [models addObject:model];
+                }
+                handlePublicModels([models copy]);
+            }];
+            return;
+        }
+
         [[YALContentManager sharedManager] getAllContentListWithPage:page
                                                             pageSize:pageSize
                                                           completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
@@ -748,29 +838,7 @@ static UIColor *YALAuthorProfileCardColor(void) {
                 return;
             }
 
-            for (id item in contentList) {
-                if (![item isKindOfClass:[YALPostModel class]]) {
-                    continue;
-                }
-                YALPostModel *model = (YALPostModel *)item;
-                if (!model.isPublic) {
-                    continue;
-                }
-                if (model.authorUserId.integerValue != strongSelf.userId.integerValue) {
-                    continue;
-                }
-                [matchedWorks addObject:model];
-            }
-
-            if (contentList.count < pageSize) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [strongSelf renderPublicWorksPreview:[matchedWorks copy]];
-                });
-                return;
-            }
-
-            page += 1;
-            fetchNextPage();
+            handlePublicModels((NSArray<YALPostModel *> *)contentList);
         }];
     };
 

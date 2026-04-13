@@ -20,6 +20,7 @@ static CGFloat const kYALWaterfallTextAreaHeight = 84.0; // 与 YALPostCell 内�
 static CGFloat const kYALSingleColumnItemHeight = 336.0;
 static CGFloat const kYALHorizontalInset = 14.0;
 static CGFloat const kYALItemSpacing = 12.0;
+static NSInteger const kYALHomeDisplayCount = 15;
 static NSString * const kYALPostDetailLikedStatusCachePrefix = @"YALPostDetailLikedStatus";
 static NSString * const kYALPostDetailCollectedStatusCachePrefix = @"YALPostDetailCollectedStatus";
 static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailInteractionCache";
@@ -54,6 +55,26 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
         [filtered addObject:model];
     }
     return [filtered copy];
+}
+
+- (NSArray<YALPostModel *> *)shuffledPostsFromPosts:(NSArray<YALPostModel *> *)posts {
+    if (![posts isKindOfClass:[NSArray class]] || posts.count < 2) {
+        return posts ?: @[];
+    }
+    NSMutableArray<YALPostModel *> *shuffled = [posts mutableCopy];
+    for (NSInteger i = shuffled.count - 1; i > 0; i--) {
+        u_int32_t j = arc4random_uniform((u_int32_t)(i + 1));
+        [shuffled exchangeObjectAtIndex:i withObjectAtIndex:j];
+    }
+    return [shuffled copy];
+}
+
+- (NSArray<YALPostModel *> *)limitedPostsFromPosts:(NSArray<YALPostModel *> *)posts {
+    if (![posts isKindOfClass:[NSArray class]] || posts.count == 0) {
+        return @[];
+    }
+    NSInteger limit = MIN((NSInteger)posts.count, kYALHomeDisplayCount);
+    return [posts subarrayWithRange:NSMakeRange(0, limit)];
 }
 
 - (UIColor *)pageBackgroundColor {
@@ -284,7 +305,36 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
 }
 
 - (void)refreshPosts {
-    [self loadPosts];
+    __weak typeof(self) weakSelf = self;
+    [[YALPostManager shareManager] refreshPostsWithRandomSample:^(NSArray<YALPostModel *> * _Nullable posts, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        if (posts) {
+            NSArray<YALPostModel *> *publicPosts = [strongSelf publicOnlyPostsFromPosts:posts];
+            NSArray<YALPostModel *> *displayPosts = [strongSelf shuffledPostsFromPosts:publicPosts];
+            strongSelf.data = [[strongSelf limitedPostsFromPosts:displayPosts] mutableCopy];
+        } else {
+            YALPostModel *placeholder = [[YALPostModel alloc] init];
+            placeholder.image = [UIImage systemImageNamed:@"photo"] ?: [[UIImage alloc] init];
+            placeholder.imageWidth = 300.0;
+            placeholder.imageHeight = 400.0;
+            placeholder.title = @"刷新失败";
+            placeholder.desc = (error.localizedDescription.length > 0) ? error.localizedDescription : @"请稍后再试。";
+            strongSelf.data = [@[placeholder] mutableCopy];
+        }
+
+        [strongSelf syncCachedInteractionStateForVisibleList];
+        [strongSelf.waterfallHeightCache removeAllObjects];
+        strongSelf.cachedWaterfallItemWidth = 0;
+        [strongSelf prepareWaterfallMetricsIfNeeded];
+        [strongSelf.collectionView reloadData];
+        if (@available(iOS 10.0, *)) {
+            if (strongSelf.collectionView.refreshControl.isRefreshing) {
+                [strongSelf.collectionView.refreshControl endRefreshing];
+            }
+        }
+    }];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -299,7 +349,7 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
 
         if (posts) {
             NSArray<YALPostModel *> *publicPosts = [ws publicOnlyPostsFromPosts:posts];
-            ws.data = [publicPosts mutableCopy];
+            ws.data = [[ws limitedPostsFromPosts:publicPosts] mutableCopy];
         } else if (!fromCache) {
             // 拉取失败时保底显示一条占位数据，避免页面完全空白
             YALPostModel *placeholder = [[YALPostModel alloc] init];

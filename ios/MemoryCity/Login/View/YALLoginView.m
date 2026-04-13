@@ -123,8 +123,7 @@
     _registerButton = [[UIButton alloc] init];
     [_registerButton setTitle:@"注册" forState:UIControlStateNormal];
     [_registerButton setTitleColor:[UIColor colorWithRed:1.0 green:0.6 blue:0.2 alpha:1.0] forState:UIControlStateNormal];
-    _registerButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
-    _registerButton.contentEdgeInsets = UIEdgeInsetsMake(10, 16, 10, 16);
+    _registerButton.titleLabel.font = [UIFont systemFontOfSize:13];
     [_registerButton addTarget:self action:@selector(pressRegister) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_registerButton];
 
@@ -158,6 +157,13 @@
         make.left.right.height.equalTo(_accountField);
     }];
 
+    [_registerButton mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(_passwordField.mas_bottom).offset(8);
+        make.left.equalTo(self.mas_left).offset(40);
+        make.width.mas_equalTo(80);
+        make.height.mas_equalTo(30);
+    }];
+
     [_forgetButton mas_makeConstraints:^(MASConstraintMaker *make) {
         make.top.equalTo(_passwordField.mas_bottom).offset(8);
         make.right.equalTo(self.mas_right).offset(-40);
@@ -169,13 +175,6 @@
         make.top.equalTo(_forgetButton.mas_bottom).offset(8);
         make.left.right.equalTo(_accountField);
         make.height.mas_equalTo(55);
-    }];
-
-    [_registerButton mas_makeConstraints:^(MASConstraintMaker *make) {
-        make.top.equalTo(self.mas_safeAreaLayoutGuideTop).offset(6);
-        make.right.equalTo(self.mas_right).offset(-16);
-        make.width.mas_greaterThanOrEqualTo(84);
-        make.height.mas_equalTo(44);
     }];
 }
 

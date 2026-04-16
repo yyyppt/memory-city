@@ -65,7 +65,6 @@
     // 防止重复点击
     self.view.userInteractionEnabled = NO;
 
-    NSLog(@"保存资料：昵称=%@ bio=%@", nickname, bio);
     [[YALAuthManager sharedManager] updateUserInfoWithNickname:nickname
                                                          avatar:avatar
                                                             bio:bio
@@ -73,7 +72,6 @@
         self.view.userInteractionEnabled = YES;
         if (!user || error) {
             NSString *msg = error.localizedDescription.length > 0 ? error.localizedDescription : @"保存失败";
-            NSLog(@"❌ 保存昵称失败：%@", msg);
             [view showErrorMessage:msg forField:@"nickname"];
             return;
         }
@@ -130,4 +128,3 @@ didFinishPickingMediaWithInfo:(NSDictionary<NSString *,id> *)info {
 */
 
 @end
-

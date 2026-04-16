@@ -41,7 +41,6 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         NSError *error = nil;
         NSArray<NSManagedObject *> *records = [context executeFetchRequest:request error:&error];
         if (error) {
-            NSLog(@"❌ Fetch cached home feed failed: %@", error);
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(@[]);
             });
@@ -71,7 +70,6 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         NSError *error = nil;
         NSArray<NSManagedObject *> *existingRecords = [context executeFetchRequest:fetchRequest error:&error];
         if (error) {
-            NSLog(@"❌ Query existing cached home feed failed: %@", error);
             if (completion) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     completion(error);
@@ -95,8 +93,8 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         }
 
         NSError *saveError = nil;
-        if ([context hasChanges] && ![context save:&saveError]) {
-            NSLog(@"❌ Save cached home feed failed: %@", saveError);
+        if ([context hasChanges]) {
+            [context save:&saveError];
         }
 
         if (completion) {
@@ -131,8 +129,6 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         NSDictionary *payload = nil;
         if (!error && records.count > 0) {
             payload = [self dictionaryFromJSONString:[records.firstObject valueForKey:@"payloadJSON"]];
-        } else if (error) {
-            NSLog(@"❌ Fetch cached detail failed: %@", error);
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -168,8 +164,8 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         [record setValue:[NSDate date] forKey:@"updatedAt"];
 
         NSError *saveError = nil;
-        if ([context hasChanges] && ![context save:&saveError]) {
-            NSLog(@"❌ Save cached detail failed: %@", saveError);
+        if ([context hasChanges]) {
+            [context save:&saveError];
         }
 
         if (completion) {
@@ -195,9 +191,7 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         NSError *error = nil;
         NSArray<NSManagedObject *> *records = [context executeFetchRequest:request error:&error];
         NSMutableArray<YALPostModel *> *posts = [NSMutableArray array];
-        if (error) {
-            NSLog(@"❌ Fetch cached favorites failed: %@", error);
-        } else {
+        if (!error) {
             for (NSManagedObject *record in records) {
                 YALPostModel *model = [self postModelFromRecord:record];
                 if (model) {
@@ -223,7 +217,6 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         NSError *error = nil;
         NSArray<NSManagedObject *> *existingRecords = [context executeFetchRequest:fetchRequest error:&error];
         if (error) {
-            NSLog(@"❌ Query cached favorites failed: %@", error);
             if (completion) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     completion(error);
@@ -249,8 +242,8 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         }
 
         NSError *saveError = nil;
-        if ([context hasChanges] && ![context save:&saveError]) {
-            NSLog(@"❌ Save cached favorites failed: %@", saveError);
+        if ([context hasChanges]) {
+            [context save:&saveError];
         }
 
         if (completion) {
@@ -280,8 +273,8 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
         }
 
         NSError *saveError = nil;
-        if ([context hasChanges] && ![context save:&saveError]) {
-            NSLog(@"❌ Remove cached favorite failed: %@", saveError);
+        if ([context hasChanges]) {
+            [context save:&saveError];
         }
 
         if (completion) {
@@ -498,7 +491,6 @@ static NSString * const kYALFavoriteCacheScopePrefix = @"favorites";
     NSError *error = nil;
     NSArray<NSManagedObject *> *records = [context executeFetchRequest:request error:&error];
     if (error) {
-        NSLog(@"❌ Query cached record failed: %@", error);
         return nil;
     }
     return records.firstObject;

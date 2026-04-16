@@ -238,7 +238,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     parameters[@"mood"] = mood;
     // 处理图片上传
     if (images && [images isKindOfClass:[NSArray class]] && images.count > 0) {
-        NSLog(@"📸 上传 %lu 张图片", (unsigned long)images.count);
         // 后端可能把传入字符串当“URL去拉取”，如果你传的是 base64（如 /9j/4AAQ...）会触发错误：
         //   Get "/9j/4AAQ..."
         // 因此把“看起来像 base64”的字符串补成 data URL，通常后端会据此走 base64 解码分支。
@@ -270,16 +269,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         // 如果是Base64图片，记录大小
         if (fixedImages.count > 0 && [fixedImages.firstObject isKindOfClass:[NSString class]]) {
             NSString *firstImage = fixedImages.firstObject;
-            if ([firstImage containsString:@"base64"] || firstImage.length > 100) {
-                NSLog(@"⚠️ 检测到Base64图片，长度: %lu 字符", (unsigned long)firstImage.length);
-                if (firstImage.length > 10000) {
-                    NSLog(@"⚠️ 图片较大，建议使用OSS上传");
-                }
-            }
+            (void)firstImage;
         }
     } else {
         parameters[@"images"] = @[];
-        NSLog(@"📸 没有图片需要上传");
     }
     parameters[@"latitude"] = @(latitude);
     parameters[@"longitude"] = @(longitude);
@@ -293,11 +286,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     parameters[@"public_status"] = publicStatusValue;
     parameters[@"is_private"] = privateBoolValue;
     parameters[@"private"] = privateBoolValue;
-    NSLog(@"🧭 发布可见性请求参数: is_public=%@, isPublic=%@, public_status=%@, is_private=%@",
-          publicBoolValue.boolValue ? @"true" : @"false",
-          publicBoolValue.boolValue ? @"true" : @"false",
-          publicStatusValue,
-          privateBoolValue.boolValue ? @"true" : @"false");
 
     if (locationName) {
         parameters[@"location_name"] = locationName;
@@ -321,58 +309,39 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         YALAuthUserModel *currentUser = [[YALAuthManager sharedManager] currentUser];
         if (currentUser && currentUser.userId > 0) {
             finalUserId = @(currentUser.userId);
-            NSLog(@"⚠️ userId异常，使用当前登录用户ID: %ld", (long)currentUser.userId);
         } else {
             // 如果没有登录用户，使用默认值1
-            NSLog(@"⚠️ userId异常，使用默认值1");
             finalUserId = @(1);
         }
     }
 
     // 确保user_id是NSNumber类型且值大于0
     if (![finalUserId isKindOfClass:[NSNumber class]] || [finalUserId integerValue] <= 0) {
-        NSLog(@"❌ user_id格式错误，使用默认值1");
         finalUserId = @(1);
     }
 
     parameters[@"user_id"] = finalUserId;
-    NSLog(@"🔥 最终 user_id = %@, 类型 = %@, 值 = %ld", finalUserId, [finalUserId class], (long)[finalUserId integerValue]);
-    NSLog(@"📦 最终发送参数: %@", parameters);
-
-
 
     // 获取认证headers
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
-
-    NSLog(@"📡 网络请求详情：");
-    NSLog(@"🔗 URL: %@", url);
-    NSLog(@"📦 参数: %@", parameters);
-    NSLog(@"🔑 Headers: %@", headers);
 
     [network POST:url
        parameters:parameters
           headers:headers
          progress:nil
           success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 网络请求成功，收到响应：");
-        NSLog(@"📥 响应数据: %@", responseObject);
-
         if ([responseObject isKindOfClass:[NSDictionary class]]) {
             NSDictionary *response = (NSDictionary *)responseObject;
             NSInteger code = [response[@"code"] integerValue];
             NSString *msg = [response[@"msg"] isKindOfClass:[NSString class]] ? response[@"msg"] : @"";
             NSDictionary *data = [response[@"data"] isKindOfClass:[NSDictionary class]] ? response[@"data"] : nil;
-            NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
-            NSLog(@"📁 响应数据: %@", data);
 
             if (code == 200) {
                 NSNumber *contentId = data[@"content_id"];
-                NSLog(@"🎉 发布成功，内容ID: %@", contentId);
                 if (completion) {
                     completion(YES, msg, contentId, nil);
                 }
             } else {
-                NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"YALContentManager"
                                                          code:code
@@ -381,7 +350,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                 }
             }
         } else {
-            NSLog(@"❌ 无效的响应格式: %@", responseObject);
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALContentManager"
                                                      code:-1
@@ -390,7 +358,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 网络请求失败: %@", error);
         if (completion) {
             completion(NO, @"网络请求失败", nil, error);
         }
@@ -421,9 +388,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             if (code == 200) {
                 if (data && contentId.integerValue > 0) {
                     [[YALPostCacheStore sharedStore] cacheContentDetail:data contentId:contentId completion:^(NSError * _Nullable error) {
-                        if (error) {
-                            NSLog(@"⚠️ 详情缓存写入失败: %@", error);
-                        }
+                        (void)error;
                     }];
                 }
                 if (completion) {
@@ -467,18 +432,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     };
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
-    NSLog(@"🔎 组合搜索请求: url=%@ params=%@", url, parameters);
-
     [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"🔎 组合搜索原始响应: %@", responseObject);
         NSInteger code = YALResponseCode(responseObject);
         NSString *msg = YALResponseMessage(responseObject);
         NSDictionary *data = YALResponseData(responseObject);
-        NSLog(@"🔎 组合搜索解析状态: code=%ld msg=%@ dataClass=%@ data=%@",
-              (long)code,
-              msg ?: @"",
-              NSStringFromClass([data class]),
-              data);
 
         if (code != 200) {
             NSError *error = [NSError errorWithDomain:@"YALContentManager"
@@ -613,9 +570,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 
         NSArray *rawContentList = YALSearchListFromResponse(responseObject, data, @[@"content_list", @"contentList", @"contents"]);
         rawContentList = YALFlattenSearchWrappedList(rawContentList, @[@"content", @"contents", @"content_list", @"list"]);
-        NSLog(@"🔎 组合搜索 content_list: count=%lu first=%@",
-              (unsigned long)rawContentList.count,
-              rawContentList.firstObject);
         NSMutableArray<YALSearchContentModel *> *contentModels = [NSMutableArray arrayWithCapacity:rawContentList.count];
         for (id item in rawContentList) {
             if (![item isKindOfClass:[NSDictionary class]]) {
@@ -629,9 +583,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 
         NSArray *rawUserList = YALSearchListFromResponse(responseObject, data, @[@"user_list", @"userList", @"users"]);
         rawUserList = YALFlattenSearchWrappedList(rawUserList, @[@"user", @"users", @"user_list", @"list"]);
-        NSLog(@"🔎 组合搜索 user_list: count=%lu first=%@",
-              (unsigned long)rawUserList.count,
-              rawUserList.firstObject);
         NSMutableArray<YALSearchUserModel *> *userModels = [NSMutableArray arrayWithCapacity:rawUserList.count];
         for (id item in rawUserList) {
             if (![item isKindOfClass:[NSDictionary class]]) {
@@ -639,17 +590,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
             [userModels addObject:[[YALSearchUserModel alloc] initWithDictionary:item]];
         }
-        NSLog(@"🔎 组合搜索模型结果: contentModels=%lu userModels=%lu firstContentTitle=%@ firstUserNickname=%@",
-              (unsigned long)contentModels.count,
-              (unsigned long)userModels.count,
-              contentModels.firstObject.title,
-              userModels.firstObject.nickname);
-
         if (completion) {
             completion(YES, [contentModels copy], [userModels copy], msg, nil);
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"🔎 组合搜索网络失败: %@", error);
         if (completion) {
             completion(NO, nil, nil, @"网络请求失败", error);
         }
@@ -726,9 +670,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     __block NSInteger candidateIndex = 0;
     __block void (^sendRequest)(void) = ^{
         NSDictionary *parameters = parameterCandidates[candidateIndex];
-        NSLog(@"👍 点赞请求参数[%ld]: %@", (long)candidateIndex, parameters);
         [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-            NSLog(@"👍 点赞响应[%ld]: %@", (long)candidateIndex, responseObject);
             if (YALShouldRetryAlternatePayload(responseObject) && candidateIndex + 1 < parameterCandidates.count) {
                 candidateIndex += 1;
                 sendRequest();
@@ -767,8 +709,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
     [network GET:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"💬 评论列表请求: url=%@ params=%@", url, parameters);
-        NSLog(@"💬 评论列表响应: %@", responseObject);
         NSArray *comments = nil;
         if ([responseObject isKindOfClass:[NSArray class]]) {
             comments = (NSArray *)responseObject;
@@ -853,9 +793,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     __block NSInteger candidateIndex = 0;
     __block void (^sendRequest)(void) = ^{
         NSDictionary *parameters = parameterCandidates[candidateIndex];
-        NSLog(@"💬 评论请求参数[%ld]: url=%@ body=%@", (long)candidateIndex, url, parameters);
         [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-            NSLog(@"💬 评论响应[%ld]: %@", (long)candidateIndex, responseObject);
             NSInteger code = YALResponseCode(responseObject);
             NSDictionary *data = YALResponseData(responseObject);
             NSString *msg = YALResponseMessage(responseObject);
@@ -954,9 +892,7 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
         NSString *url = candidate[@"url"];
         id parametersObject = candidate[@"parameters"];
         NSDictionary *parameters = [parametersObject isKindOfClass:[NSDictionary class]] ? parametersObject : nil;
-        NSLog(@"⭐️ 收藏请求参数[%ld]: url=%@ body=%@", (long)candidateIndex, url, parameters ?: @{});
         [network POST:url parameters:parameters headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-            NSLog(@"⭐️ 收藏响应[%ld]: %@", (long)candidateIndex, responseObject);
             if (YALShouldRetryAlternatePayload(responseObject) && candidateIndex + 1 < requestCandidates.count) {
                 candidateIndex += 1;
                 sendRequest();
@@ -1000,19 +936,11 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     // 获取认证headers（需要token）
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
-    NSLog(@"📡 获取我的内容列表请求详情：");
-    NSLog(@"🔗 URL: %@", url);
-    NSLog(@"📦 参数: %@", parameters);
-    NSLog(@"🔑 Headers: %@", headers);
-
     [network GET:url
       parameters:parameters
          headers:headers
         progress:nil
          success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 获取我的内容列表成功，收到响应：");
-        NSLog(@"📥 响应数据: %@", responseObject);
-
         if ([responseObject isKindOfClass:[NSDictionary class]]) {
             NSDictionary *response = (NSDictionary *)responseObject;
             NSInteger code = [response[@"code"] integerValue];
@@ -1031,8 +959,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
             self.lastMyContentCollectCount = [collectCountObj respondsToSelector:@selector(integerValue)] ? @([collectCountObj integerValue]) : nil;
 
-            NSLog(@"📊 响应状态: 代码=%ld, 消息=%@", (long)code, msg);
-
             if (code == 200) {
                 // 解析数据列表
                 NSArray *listData = [contentListContainer[@"list"] isKindOfClass:[NSArray class]] ? contentListContainer[@"list"] : @[];
@@ -1045,14 +971,10 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                         [contentList addObject:itemDict];
                     }
                 }
-
-                NSLog(@"📋 解析成功，共 %lu 条内容", (unsigned long)contentList.count);
-
                 if (completion) {
                     completion(YES, [contentList copy], msg, nil);
                 }
             } else {
-                NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
                 self.lastMyContentCollectCount = nil;
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"YALContentManager"
@@ -1062,7 +984,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                 }
             }
         } else {
-            NSLog(@"❌ 无效的响应格式: %@", responseObject);
             self.lastMyContentCollectCount = nil;
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALContentManager"
@@ -1072,7 +993,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 获取我的内容列表失败: %@", error);
         self.lastMyContentCollectCount = nil;
         if (completion) {
             completion(NO, nil, @"网络请求失败", error);
@@ -1094,18 +1014,11 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
 
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
-    NSLog(@"📡 获取全部内容列表请求详情：");
-    NSLog(@"🔗 URL: %@", url);
-    NSLog(@"📦 参数: %@", parameters);
-    NSLog(@"🔑 Headers: %@", headers);
-
     [network GET:url
       parameters:parameters
          headers:headers
         progress:nil
          success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 获取全部内容列表成功，收到响应：%@", responseObject);
-
         if (![responseObject isKindOfClass:[NSDictionary class]]) {
             NSError *error = [NSError errorWithDomain:@"YALContentManager"
                                                  code:-1
@@ -1151,7 +1064,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             }
             NSDictionary *itemDict = (NSDictionary *)item;
             if (!YALContentListShouldShowPublicContent(itemDict)) {
-                NSLog(@"🔒 /content/list 跳过非公开内容: %@", itemDict[@"content_id"]);
                 continue;
             }
             YALPostModel *model = [[YALPostModel alloc] initWithDictionary:itemDict];
@@ -1162,7 +1074,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             completion(YES, [contentList copy], msg, nil);
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 获取全部内容列表失败: %@", error);
         if (completion) {
             completion(NO, nil, @"网络请求失败", error);
         }
@@ -1174,17 +1085,11 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     NSString *url = [NSString stringWithFormat:@"%@/interact/collect/my", YALAPIBaseURLString];
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 
-    NSLog(@"📡 获取我的收藏列表请求详情：");
-    NSLog(@"🔗 URL: %@", url);
-    NSLog(@"🔑 Headers: %@", headers);
-
     [network GET:url
       parameters:nil
          headers:headers
         progress:nil
          success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 获取我的收藏列表成功，收到响应：%@", responseObject);
-
         NSArray *rawList = nil;
         NSString *message = @"";
 
@@ -1267,7 +1172,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             completion(YES, [contentList copy], message, nil);
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 获取我的收藏列表失败: %@", error);
         if (completion) {
             completion(NO, nil, @"网络请求失败", error);
         }
@@ -1278,7 +1182,6 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
                 completion:(void (^)(BOOL success, NSString *message, NSError * _Nullable error))completion {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/content/delete?content_id=%@", YALAPIBaseURLString, contentId ?: @(0)];
-    NSLog(@"🚨 DELETE URL = %@", url);
     NSDictionary *parameters = nil;
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];
 

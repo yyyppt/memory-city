@@ -486,9 +486,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
             [[YALPostCacheStore sharedStore] removeFavoritePostWithContentId:favorite.contentId
                                                                       userId:@([YALAuthManager sharedManager].currentUser.userId)
                                                                   completion:^(NSError * _Nullable error) {
-                if (error) {
-                    NSLog(@"⚠️ 收藏缓存删除失败: %@", error);
-                }
+                (void)error;
             }];
             [strongSelf updateEmptyState];
             [strongSelf showMessage:@"已取消收藏" type:0];
@@ -512,9 +510,7 @@ static NSString * const kYALCollectedStatusCachePrefix = @"YALPostDetailCollecte
     [[YALPostCacheStore sharedStore] replaceFavoritePosts:self.favoritesData
                                                    userId:@([YALAuthManager sharedManager].currentUser.userId)
                                                completion:^(NSError * _Nullable error) {
-        if (error) {
-            NSLog(@"⚠️ 收藏缓存持久化失败: %@", error);
-        }
+        (void)error;
     }];
 }
 

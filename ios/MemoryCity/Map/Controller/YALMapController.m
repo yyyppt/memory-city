@@ -359,7 +359,6 @@ static BOOL YALCoordinateIsUsable(CLLocationCoordinate2D coordinate) {
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 if (!strongSelf) { return; }
                 if (posts.count == 0 && error) {
-                    NSLog(@"❌ 地图加载首页内容失败: %@", error);
                     return;
                 }
                 [strongSelf reloadMapAnnotationsWithPosts:posts ?: @[]];
@@ -378,7 +377,6 @@ static BOOL YALCoordinateIsUsable(CLLocationCoordinate2D coordinate) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) { return; }
             if (!success) {
-                NSLog(@"❌ 地图加载我的作品失败: %@ %@", message, error);
                 return;
             }
             NSMutableArray<YALPostModel *> *posts = [NSMutableArray array];
@@ -475,7 +473,6 @@ static BOOL YALCoordinateIsUsable(CLLocationCoordinate2D coordinate) {
             if (!strongSelf) { return; }
             [strongSelf.pendingGeocodeKeys removeObject:key];
             if (error || placemarks.count == 0) {
-                NSLog(@"⚠️ 地图地理编码失败: %@ error=%@", query, error);
                 return;
             }
 
@@ -1099,29 +1096,13 @@ static BOOL YALCoordinateIsUsable(CLLocationCoordinate2D coordinate) {
 - (void)handleLocationSelectionAtCoordinate:(CLLocationCoordinate2D)coordinate {
     __weak typeof(self) weakSelf = self;
     CLLocation *location = [[CLLocation alloc] initWithLatitude:coordinate.latitude longitude:coordinate.longitude];
-    NSLog(@"📍 地图页开始反向解析坐标：%.4f, %.4f", coordinate.latitude, coordinate.longitude);
     [self.geocoder reverseGeocodeLocation:location completionHandler:^(NSArray<CLPlacemark *> * _Nullable placemarks, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) { return; }
 
-            if (error) {
-                NSLog(@"❌ 地图页反向地理解析失败: %@", error);
-            } else {
-                NSLog(@"✅ 地图页反向地理解析成功，placemarks: %@", placemarks);
-            }
-
             CLPlacemark *placemark = placemarks.firstObject;
-            if (placemark) {
-                NSLog(@"📍 地图页首个 placemark: %@", placemark);
-                NSLog(@"📍 placemark.name = %@", placemark.name);
-                NSLog(@"📍 placemark.locality = %@", placemark.locality);
-                NSLog(@"📍 placemark.subLocality = %@", placemark.subLocality);
-                NSLog(@"📍 placemark.administrativeArea = %@", placemark.administrativeArea);
-                NSLog(@"📍 placemark.thoroughfare = %@", placemark.thoroughfare);
-            }
             NSString *name = [strongSelf displayNameForPlacemark:placemark coordinate:coordinate];
-            NSLog(@"📍 地图页最终回传地点名: %@", name);
             NSString *message = [NSString stringWithFormat:@"%@\n\n经纬度：%.4f, %.4f", name, coordinate.latitude, coordinate.longitude];
             if (error && name.length == 0) {
                 message = [NSString stringWithFormat:@"经纬度：%.4f, %.4f", coordinate.latitude, coordinate.longitude];

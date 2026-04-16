@@ -1619,14 +1619,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
         return;
     }
 
-    NSLog(@"📄 详情接口回填原始数据: title=%@ location_name=%@ locationName=%@ latitude=%@ longitude=%@ raw=%@",
-          content[@"title"],
-          content[@"location_name"],
-          content[@"locationName"],
-          content[@"latitude"],
-          content[@"longitude"],
-          content);
-
     NSString *titleText = [content[@"title"] isKindOfClass:[NSString class]] ? content[@"title"] : self.post.title;
     NSString *descText = [content[@"content"] isKindOfClass:[NSString class]] ? content[@"content"] : self.post.desc;
     if (titleText.length == 0) {
@@ -1644,7 +1636,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     locationText = [locationText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     self.locationLabel.text = locationText;
     self.locationLabel.hidden = (locationText.length == 0);
-    NSLog(@"📄 详情地址渲染: resolvedLocation=%@ hidden=%@", self.locationLabel.text ?: @"", self.locationLabel.hidden ? @"YES" : @"NO");
 
     NSDictionary *authorInfo = [content[@"user"] isKindOfClass:[NSDictionary class]] ? content[@"user"] : nil;
     if (!authorInfo) {
@@ -1687,7 +1678,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     if (self.authorBio.length == 0) {
         self.authorBio = [self firstNonEmptyStringFromDictionary:authorInfo keys:@[@"bio", @"user_bio", @"signature", @"intro"]];
     }
-    NSLog(@"📥 详情页解析作者信息: user_id=%@ nickname=%@", self.authorUserId, self.authorNickname ?: @"");
 
     id likeObj = content[@"like_count"];
     if ([likeObj respondsToSelector:@selector(integerValue)]) {
@@ -1806,8 +1796,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
         }
         if (success) {
             [strongSelf applyDetailData:content];
-        } else {
-            NSLog(@"❌ 详情获取失败: %@", error.localizedDescription);
         }
     }];
 }
@@ -1851,8 +1839,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             if (containsPending) {
                 strongSelf.pendingInsertedComment = nil;
             }
-        } else {
-            NSLog(@"❌ 评论获取失败: %@", error.localizedDescription);
         }
     }];
 }
@@ -2255,13 +2241,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
     }];
 
     if (self.post) {
-        NSLog(@"📄 进入详情页初始模型: contentId=%@ title=%@ locationName=%@ latitude=%.6f longitude=%.6f post=%@",
-              self.post.contentId,
-              self.post.title ?: @"",
-              self.post.locationName ?: @"",
-              self.post.latitude,
-              self.post.longitude,
-              self.post);
         self.authorUserId = self.post.authorUserId;
         self.authorNickname = self.post.authorNickname;
         self.authorAvatar = self.post.authorAvatar;
@@ -2723,7 +2702,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
                                                                               action:nil];
     NSNumber *targetUserId = self.authorUserId;
     if (targetUserId.integerValue > 0) {
-        NSLog(@"👤 ownerTapped 直进用户页: user_id=%@", targetUserId);
         YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
         controller.userId = targetUserId;
         controller.prefilledNickname = self.authorNickname;
@@ -2753,7 +2731,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
                 [strongSelf applyDetailData:content];
             }
             if (strongSelf.authorUserId.integerValue > 0) {
-                NSLog(@"👤 ownerTapped 详情回填后进用户页: user_id=%@", strongSelf.authorUserId);
                 YALAuthorProfileController *controller = [[YALAuthorProfileController alloc] init];
                 controller.userId = strongSelf.authorUserId;
                 controller.prefilledNickname = strongSelf.authorNickname;
@@ -2864,7 +2841,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             [strongSelf persistInteractionCache];
             [strongSelf syncPostInteractionStateAndNotify];
         } else {
-            NSLog(@"❌ 点赞失败: %@", error.localizedDescription);
             strongSelf.isLiked = previousLiked;
             strongSelf.likeCount = previousLikeCount;
             strongSelf.likeCountLabel.text = [NSString stringWithFormat:@"%ld", (long)strongSelf.likeCount];
@@ -2936,7 +2912,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             [strongSelf persistInteractionCache];
             [strongSelf syncPostInteractionStateAndNotify];
         } else {
-            NSLog(@"❌ 收藏失败: %@", error.localizedDescription);
             strongSelf.isCollected = previousCollected;
             strongSelf.favoriteCount = previousFavoriteCount;
             strongSelf.favoriteCountLabel.text = [NSString stringWithFormat:@"%ld", (long)MAX(strongSelf.favoriteCount, 0)];
@@ -3096,8 +3071,6 @@ static const void *kYALToggleVisibleCountKey = &kYALToggleVisibleCountKey;
             [strongSelf updateBottomBarForEditing:YES animated:NO];
             [strongSelf.inputTextView resignFirstResponder];
             [strongSelf loadComments];
-        } else {
-            NSLog(@"❌ 评论发布失败: %@", error.localizedDescription);
         }
     }];
 }

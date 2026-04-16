@@ -1,7 +1,0 @@
-set:
-  OSSEndpoint: "oss-cn-chengdu-internal.aliyuncs.com"
-  OSSAccessKeyID: ${OSS_ACCESS_KEY_ID}
-  OSSAccessKeySecret: ${OSS_ACCESS_KEY_SECRET}
-  OSSBucketName: "shiguang--oss"
-  AIAPIKey: ${AI_API_KEY}
-  OSSEndpoint_IOS: "oss-cn-chengdu.aliyuncs.com"

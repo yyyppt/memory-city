@@ -12,10 +12,66 @@
 NSString * const YALAPIBaseURLString = @"http://8.137.158.7:9000/api";
 NSString * const YALAPIRootURLString = @"http://8.137.158.7:9000/api";
 
+@interface YALStreamSessionDelegate : NSObject <NSURLSessionDataDelegate>
+
+@property (nonatomic, copy, nullable) void (^responseHandler)(NSHTTPURLResponse *response);
+@property (nonatomic, copy, nullable) void (^dataHandler)(NSData *chunk);
+@property (nonatomic, copy, nullable) void (^completionHandler)(NSHTTPURLResponse * _Nullable response, NSError * _Nullable error);
+@property (nonatomic, strong, nullable) NSHTTPURLResponse *response;
+
+@end
+
+@implementation YALStreamSessionDelegate
+
+- (void)URLSession:(NSURLSession *)session
+          dataTask:(NSURLSessionDataTask *)dataTask
+didReceiveResponse:(NSURLResponse *)response
+ completionHandler:(void (^)(NSURLSessionResponseDisposition disposition))completionHandler {
+    (void)dataTask;
+    if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+        self.response = (NSHTTPURLResponse *)response;
+        if (self.responseHandler) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.responseHandler(self.response);
+            });
+        }
+    }
+    if (completionHandler) {
+        completionHandler(NSURLSessionResponseAllow);
+    }
+}
+
+- (void)URLSession:(NSURLSession *)session dataTask:(NSURLSessionDataTask *)dataTask didReceiveData:(NSData *)data {
+    (void)session;
+    (void)dataTask;
+    if (data.length == 0 || !self.dataHandler) {
+        return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.dataHandler(data);
+    });
+}
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
+    (void)task;
+    void (^completion)(NSHTTPURLResponse * _Nullable response, NSError * _Nullable error) = self.completionHandler;
+    NSHTTPURLResponse *response = self.response;
+    [session finishTasksAndInvalidate];
+    if (!completion) {
+        return;
+    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        completion(response, error);
+    });
+}
+
+@end
+
 @interface YALNetworkManager ()
 
 @property (nonatomic, assign) BOOL isRefreshingToken;
 @property (nonatomic, strong) NSMutableArray *pendingRefreshBlocks;
+@property (nonatomic, strong) NSMapTable<NSURLSessionTask *, id> *streamDelegates;
 
 @end
 
@@ -40,6 +96,7 @@ NSString * const YALAPIRootURLString = @"http://8.137.158.7:9000/api";
         self.sessionManager.requestSerializer.HTTPShouldHandleCookies = YES;
         [NSHTTPCookieStorage sharedHTTPCookieStorage].cookieAcceptPolicy = NSHTTPCookieAcceptPolicyAlways;
         self.pendingRefreshBlocks = [NSMutableArray array];
+        self.streamDelegates = [NSMapTable weakToStrongObjectsMapTable];
     }
     return self;
 }
@@ -108,6 +165,60 @@ NSString * const YALAPIRootURLString = @"http://8.137.158.7:9000/api";
                 retryOnAuthFailure:YES
                            success:success
                            failure:failure];
+}
+
+- (NSURLSessionDataTask *)streamPOST:(NSString *_Nonnull)URLString
+                          parameters:(nullable id)parameters
+                             headers:(nullable NSDictionary<NSString *,NSString *> *)headers
+                     responseHandler:(nullable void (^)(NSHTTPURLResponse * _Nonnull response))responseHandler
+                         dataHandler:(nullable void (^)(NSData * _Nonnull chunk))dataHandler
+                          completion:(nullable void (^)(NSHTTPURLResponse * _Nullable response, NSError * _Nullable error))completion {
+    NSError *requestError = nil;
+    NSMutableURLRequest *request = [self requestWithMethod:@"POST"
+                                                 URLString:URLString
+                                                parameters:parameters
+                                                   headers:[self mergedHeadersForURLString:URLString headers:headers]
+                                                     error:&requestError];
+    if (requestError || !request) {
+        if (completion) {
+            NSError *error = requestError ?: [NSError errorWithDomain:@"YALNetworkManager"
+                                                                 code:-1
+                                                             userInfo:@{NSLocalizedDescriptionKey: @"请求创建失败"}];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, error);
+            });
+        }
+        return nil;
+    }
+
+    YALStreamSessionDelegate *delegate = [[YALStreamSessionDelegate alloc] init];
+    delegate.responseHandler = responseHandler;
+    delegate.dataHandler = dataHandler;
+    __weak typeof(self) weakSelf = self;
+    __block NSURLSessionDataTask *task = nil;
+    delegate.completionHandler = ^(NSHTTPURLResponse * _Nullable response, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf && task) {
+            @synchronized (strongSelf.streamDelegates) {
+                [strongSelf.streamDelegates removeObjectForKey:task];
+            }
+        }
+        if (completion) {
+            completion(response, error);
+        }
+    };
+
+    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
+    configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    configuration.timeoutIntervalForRequest = self.sessionManager.requestSerializer.timeoutInterval;
+    configuration.timeoutIntervalForResource = MAX(configuration.timeoutIntervalForRequest, 60.0);
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:configuration delegate:delegate delegateQueue:nil];
+    task = [session dataTaskWithRequest:request];
+    @synchronized (self.streamDelegates) {
+        [self.streamDelegates setObject:delegate forKey:task];
+    }
+    [task resume];
+    return task;
 }
 
 - (void)performRequestWithMethod:(NSString *)method

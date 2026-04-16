@@ -40,5 +40,12 @@ FOUNDATION_EXPORT NSString * const YALAPIRootURLString;
        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull task, id _Nullable responseObject))success
        failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError * _Nonnull error))failure;
 
+- (NSURLSessionDataTask * _Nullable)streamPOST:(NSString *_Nonnull)URLString
+                                    parameters:(nullable id)parameters
+                                       headers:(nullable NSDictionary<NSString *, NSString *> *)headers
+                             responseHandler:(nullable void (^)(NSHTTPURLResponse * _Nonnull response))responseHandler
+                                   dataHandler:(nullable void (^)(NSData * _Nonnull chunk))dataHandler
+                                    completion:(nullable void (^)(NSHTTPURLResponse * _Nullable response, NSError * _Nullable error))completion;
+
 
 @end

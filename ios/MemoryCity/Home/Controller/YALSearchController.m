@@ -139,6 +139,7 @@ static UIColor *YALSearchBodyTextColor(void) {
 @property (nonatomic, assign) NSUInteger contentRequestToken;
 @property (nonatomic, assign) NSUInteger userRequestToken;
 @property (nonatomic, assign) NSUInteger aiRequestToken;
+@property (nonatomic, strong, nullable) NSURLSessionDataTask *aiStreamTask;
 
 @end
 
@@ -180,6 +181,8 @@ static UIColor *YALSearchBodyTextColor(void) {
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     if (self.isMovingFromParentViewController || self.isBeingDismissed) {
+        [self.aiStreamTask cancel];
+        self.aiStreamTask = nil;
         self.tabBarController.tabBar.hidden = NO;
     }
 }
@@ -335,6 +338,8 @@ static UIColor *YALSearchBodyTextColor(void) {
 }
 
 - (void)performSearchWithKeyword:(NSString *)keyword {
+    [self.aiStreamTask cancel];
+    self.aiStreamTask = nil;
     self.isResultPage = YES;
     self.keyword = keyword;
     self.searchBar.text = keyword;
@@ -402,6 +407,8 @@ static UIColor *YALSearchBodyTextColor(void) {
 }
 
 - (void)requestAIForSearchResults {
+    [self.aiStreamTask cancel];
+    self.aiStreamTask = nil;
     NSString *resultText = [self aiAnalysisPromptFromCurrentResults];
     if (resultText.length == 0) {
         self.isAILoading = NO;
@@ -420,20 +427,30 @@ static UIColor *YALSearchBodyTextColor(void) {
     [self.tableView reloadData];
 
     __weak typeof(self) weakSelf = self;
-    [[YALContentManager sharedManager] analyzeText:resultText
-                                        completion:^(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error) {
+    self.aiStreamTask = [[YALContentManager sharedManager] analyzeText:resultText
+                                                              onUpdate:^(YALAIAnalyzeResultModel *result) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || requestToken != self.aiRequestToken) {
+            return;
+        }
+        self.aiResult = result;
+        [self updateEmptyState];
+        [self.tableView reloadData];
+    } completion:^(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || requestToken != self.aiRequestToken) {
             return;
         }
 
+        self.aiStreamTask = nil;
         self.isAILoading = NO;
         if (success) {
             self.aiResult = result;
         } else {
-            self.aiResult = nil;
+            self.aiResult = result;
             self.aiErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"AI 分析暂时不可用");
         }
+        [self updateEmptyState];
         [self.tableView reloadData];
     }];
 }
@@ -1084,9 +1101,6 @@ static UIColor *YALSearchBodyTextColor(void) {
 @property (nonatomic, strong) UILabel *guideLabel;
 @property (nonatomic, strong) UIView *topAccentBar;
 @property (nonatomic, strong) UIView *glowBubble;
-@property (nonatomic, assign) NSUInteger streamingGeneration;
-@property (nonatomic, assign) NSTimeInterval streamingCharacterInterval;
-@property (nonatomic, assign) NSUInteger streamedCharacterCount;
 
 @end
 
@@ -1173,7 +1187,6 @@ static UIColor *YALSearchBodyTextColor(void) {
         self.contentStack.alignment = UIStackViewAlignmentFill;
         self.contentStack.distribution = UIStackViewDistributionFill;
         [self.cardView addSubview:self.contentStack];
-        self.streamingCharacterInterval = 0.06;
 
         [self.cardView mas_makeConstraints:^(MASConstraintMaker *make) {
             make.top.equalTo(self.contentView).offset(10.0);
@@ -1215,7 +1228,6 @@ static UIColor *YALSearchBodyTextColor(void) {
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    [self cancelStreaming];
     [self resetContentVisibility];
 }
 
@@ -1224,10 +1236,9 @@ static UIColor *YALSearchBodyTextColor(void) {
                      loading:(BOOL)loading
                    errorText:(NSString *)errorText {
     self.titleLabel.text = [NSString stringWithFormat:@"关于“%@”的 AI 搜索结论", keyword.length > 0 ? keyword : @"当前搜索"];
-    [self cancelStreaming];
     [self resetContentVisibility];
 
-    if (loading) {
+    if (loading && result == nil) {
         self.summaryLabel.text = @"AI 正在补充地点介绍并整理站内相关内容，请稍候片刻。";
         self.tagsLabel.text = @"";
         self.highlightsLabel.text = @"";
@@ -1256,7 +1267,6 @@ static UIColor *YALSearchBodyTextColor(void) {
         [self updateVisibilityForLabel:self.highlightsLabel];
         [self updateVisibilityForLabel:self.suggestionsLabel];
         [self updateVisibilityForLabel:self.guideLabel];
-        [self startStreaming];
         return;
     }
 
@@ -1270,117 +1280,6 @@ static UIColor *YALSearchBodyTextColor(void) {
     [self updateVisibilityForLabel:self.highlightsLabel];
     [self updateVisibilityForLabel:self.suggestionsLabel];
     [self updateVisibilityForLabel:self.guideLabel];
-}
-
-- (void)startStreaming {
-    [self cancelStreaming];
-    self.streamedCharacterCount = 0;
-    NSUInteger generation = ++self.streamingGeneration;
-    [self streamLabel:self.summaryLabel delay:0.00 generation:generation];
-    [self streamLabel:self.highlightsLabel delay:0.28 generation:generation];
-    [self streamLabel:self.suggestionsLabel delay:0.56 generation:generation];
-    [self streamLabel:self.guideLabel delay:0.84 generation:generation];
-}
-
-- (void)streamLabel:(UILabel *)label
-              delay:(NSTimeInterval)delay
-         generation:(NSUInteger)generation {
-    if (label == nil || label.hidden) {
-        return;
-    }
-
-    NSString *fullText = label.text ?: @"";
-    if (fullText.length == 0) {
-        return;
-    }
-
-    label.alpha = 1.0;
-    label.text = @"";
-    [self layoutIfNeeded];
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (self.streamingGeneration != generation) {
-            return;
-        }
-        [self appendCharactersForLabel:label
-                              fromText:fullText
-                                 index:0
-                            generation:generation];
-    });
-}
-
-- (void)appendCharactersForLabel:(UILabel *)label
-                        fromText:(NSString *)fullText
-                           index:(NSUInteger)index
-                      generation:(NSUInteger)generation {
-    if (self.streamingGeneration != generation || label == nil || fullText.length == 0) {
-        return;
-    }
-
-    __block NSUInteger currentCharacterIndex = 0;
-    __block NSString *nextText = nil;
-    __block BOOL appended = NO;
-    [fullText enumerateSubstringsInRange:NSMakeRange(0, fullText.length)
-                                 options:NSStringEnumerationByComposedCharacterSequences
-                              usingBlock:^(NSString * _Nullable substring, NSRange substringRange, NSRange enclosingRange, BOOL * _Nonnull stop) {
-        (void)substringRange;
-        (void)enclosingRange;
-        if (currentCharacterIndex == index) {
-            nextText = [fullText substringToIndex:NSMaxRange(substringRange)];
-            appended = YES;
-            *stop = YES;
-            return;
-        }
-        currentCharacterIndex += 1;
-    }];
-
-    if (!appended) {
-        label.text = fullText;
-        [self refreshContainingTableViewLayout];
-        return;
-    }
-
-    label.text = nextText;
-    self.streamedCharacterCount += 1;
-    [self setNeedsLayout];
-    [self layoutIfNeeded];
-    if (self.streamedCharacterCount % 2 == 0 || index == 0) {
-        [self refreshContainingTableViewLayout];
-    }
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(self.streamingCharacterInterval * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        if (self.streamingGeneration != generation) {
-            return;
-        }
-        [self appendCharactersForLabel:label
-                              fromText:fullText
-                                 index:index + 1
-                            generation:generation];
-    });
-}
-
-- (void)cancelStreaming {
-    self.streamingGeneration += 1;
-}
-
-- (UITableView *)containingTableView {
-    UIView *view = self.superview;
-    while (view != nil && ![view isKindOfClass:[UITableView class]]) {
-        view = view.superview;
-    }
-    return (UITableView *)view;
-}
-
-- (void)refreshContainingTableViewLayout {
-    UITableView *tableView = [self containingTableView];
-    if (tableView == nil) {
-        return;
-    }
-
-    [UIView performWithoutAnimation:^{
-        [tableView beginUpdates];
-        [tableView endUpdates];
-    }];
 }
 
 - (void)resetContentVisibility {

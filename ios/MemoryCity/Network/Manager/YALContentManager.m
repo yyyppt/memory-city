@@ -202,6 +202,221 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
     return nil;
 }
 
+static NSString *YALAIStreamTrimmedString(id value) {
+    if (![value isKindOfClass:[NSString class]]) {
+        return @"";
+    }
+    return [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+static id YALAIJSONObjectFromString(NSString *text) {
+    NSData *data = [text dataUsingEncoding:NSUTF8StringEncoding];
+    if (data.length == 0) {
+        return nil;
+    }
+    return [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+}
+
+static NSArray<NSString *> *YALAIStreamStringArray(id value) {
+    NSMutableArray<NSString *> *items = [NSMutableArray array];
+    if ([value isKindOfClass:[NSArray class]]) {
+        for (id item in (NSArray *)value) {
+            NSString *text = YALAIStreamTrimmedString(item);
+            if (text.length > 0) {
+                [items addObject:text];
+            }
+        }
+        return [items copy];
+    }
+
+    NSString *text = YALAIStreamTrimmedString(value);
+    if (text.length == 0) {
+        return @[];
+    }
+    NSArray<NSString *> *components = [text componentsSeparatedByCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@",，\n"]];
+    for (NSString *component in components) {
+        NSString *trimmed = YALAIStreamTrimmedString(component);
+        if (trimmed.length > 0) {
+            [items addObject:trimmed];
+        }
+    }
+    return [items copy];
+}
+
+static void YALAIAppendUniqueStrings(NSMutableArray<NSString *> *target, NSArray<NSString *> *values) {
+    for (NSString *value in values) {
+        if (value.length == 0 || [target containsObject:value]) {
+            continue;
+        }
+        [target addObject:value];
+    }
+}
+
+static BOOL YALAIApplyStreamPayloadToModel(YALAIAnalyzeResultModel *model, NSDictionary *payload) {
+    if (![payload isKindOfClass:[NSDictionary class]] || model == nil) {
+        return NO;
+    }
+
+    NSDictionary *nestedPayload = nil;
+    if ([payload[@"data"] isKindOfClass:[NSDictionary class]]) {
+        nestedPayload = payload[@"data"];
+    } else if ([payload[@"result"] isKindOfClass:[NSDictionary class]]) {
+        nestedPayload = payload[@"result"];
+    }
+    if (nestedPayload != nil && nestedPayload != payload) {
+        return YALAIApplyStreamPayloadToModel(model, nestedPayload);
+    }
+
+    BOOL didUpdate = NO;
+    NSString *summary = YALAIStreamTrimmedString(payload[@"summary"]);
+    if (summary.length > 0) {
+        model.summary = summary;
+        didUpdate = YES;
+    }
+
+    NSString *suggestions = YALAIStreamTrimmedString(payload[@"suggestions"]);
+    if (suggestions.length > 0) {
+        model.suggestions = suggestions;
+        didUpdate = YES;
+    }
+
+    NSString *guide = YALAIStreamTrimmedString(payload[@"guide"]);
+    if (guide.length > 0) {
+        model.guide = guide;
+        didUpdate = YES;
+    }
+
+    NSString *mood = YALAIStreamTrimmedString(payload[@"mood"]);
+    if (mood.length > 0) {
+        model.mood = mood;
+        didUpdate = YES;
+    }
+
+    NSArray<NSString *> *tags = YALAIStreamStringArray(payload[@"tags"]);
+    if (tags.count > 0) {
+        model.tags = tags;
+        didUpdate = YES;
+    }
+
+    NSArray<NSString *> *highlights = YALAIStreamStringArray(payload[@"highlights"]);
+    if (highlights.count > 0) {
+        model.highlights = highlights;
+        didUpdate = YES;
+    }
+
+    NSString *summaryDelta = YALAIStreamTrimmedString(payload[@"summary_delta"]);
+    if (summaryDelta.length > 0) {
+        NSString *currentSummary = model.summary ?: @"";
+        model.summary = currentSummary.length > 0 ? [currentSummary stringByAppendingString:summaryDelta] : summaryDelta;
+        didUpdate = YES;
+    }
+
+    NSString *suggestionsDelta = YALAIStreamTrimmedString(payload[@"suggestions_delta"]);
+    if (suggestionsDelta.length > 0) {
+        NSString *currentSuggestions = model.suggestions ?: @"";
+        model.suggestions = currentSuggestions.length > 0 ? [currentSuggestions stringByAppendingString:suggestionsDelta] : suggestionsDelta;
+        didUpdate = YES;
+    }
+
+    NSString *guideDelta = YALAIStreamTrimmedString(payload[@"guide_delta"]);
+    if (guideDelta.length > 0) {
+        NSString *currentGuide = model.guide ?: @"";
+        model.guide = currentGuide.length > 0 ? [currentGuide stringByAppendingString:guideDelta] : guideDelta;
+        didUpdate = YES;
+    }
+
+    NSString *moodDelta = YALAIStreamTrimmedString(payload[@"mood_delta"]);
+    if (moodDelta.length > 0) {
+        NSString *currentMood = model.mood ?: @"";
+        model.mood = currentMood.length > 0 ? [currentMood stringByAppendingString:moodDelta] : moodDelta;
+        didUpdate = YES;
+    }
+
+    NSArray<NSString *> *tagsDelta = YALAIStreamStringArray(payload[@"tags_delta"]);
+    if (tagsDelta.count > 0) {
+        NSMutableArray<NSString *> *mergedTags = [NSMutableArray arrayWithArray:model.tags ?: @[]];
+        YALAIAppendUniqueStrings(mergedTags, tagsDelta);
+        model.tags = [mergedTags copy];
+        didUpdate = YES;
+    }
+
+    NSArray<NSString *> *highlightsDelta = YALAIStreamStringArray(payload[@"highlights_delta"]);
+    if (highlightsDelta.count > 0) {
+        NSMutableArray<NSString *> *mergedHighlights = [NSMutableArray arrayWithArray:model.highlights ?: @[]];
+        YALAIAppendUniqueStrings(mergedHighlights, highlightsDelta);
+        model.highlights = [mergedHighlights copy];
+        didUpdate = YES;
+    }
+
+    NSString *field = YALAIStreamTrimmedString(payload[@"field"]);
+    if (field.length == 0) {
+        field = YALAIStreamTrimmedString(payload[@"type"]);
+    }
+    if (field.length == 0) {
+        field = YALAIStreamTrimmedString(payload[@"target"]);
+    }
+    NSString *deltaText = YALAIStreamTrimmedString(payload[@"delta"]);
+    if (deltaText.length == 0) {
+        deltaText = YALAIStreamTrimmedString(payload[@"content"]);
+    }
+    if (deltaText.length == 0) {
+        deltaText = YALAIStreamTrimmedString(payload[@"text"]);
+    }
+
+    if (field.length > 0 && deltaText.length > 0) {
+        if ([field isEqualToString:@"summary"]) {
+            NSString *currentSummary = model.summary ?: @"";
+            model.summary = currentSummary.length > 0 ? [currentSummary stringByAppendingString:deltaText] : deltaText;
+            didUpdate = YES;
+        } else if ([field isEqualToString:@"suggestions"]) {
+            NSString *currentSuggestions = model.suggestions ?: @"";
+            model.suggestions = currentSuggestions.length > 0 ? [currentSuggestions stringByAppendingString:deltaText] : deltaText;
+            didUpdate = YES;
+        } else if ([field isEqualToString:@"guide"]) {
+            NSString *currentGuide = model.guide ?: @"";
+            model.guide = currentGuide.length > 0 ? [currentGuide stringByAppendingString:deltaText] : deltaText;
+            didUpdate = YES;
+        } else if ([field isEqualToString:@"mood"]) {
+            NSString *currentMood = model.mood ?: @"";
+            model.mood = currentMood.length > 0 ? [currentMood stringByAppendingString:deltaText] : deltaText;
+            didUpdate = YES;
+        } else if ([field isEqualToString:@"highlights"]) {
+            NSMutableArray<NSString *> *mergedHighlights = [NSMutableArray arrayWithArray:model.highlights ?: @[]];
+            YALAIAppendUniqueStrings(mergedHighlights, YALAIStreamStringArray(deltaText));
+            model.highlights = [mergedHighlights copy];
+            didUpdate = YES;
+        } else if ([field isEqualToString:@"tags"]) {
+            NSMutableArray<NSString *> *mergedTags = [NSMutableArray arrayWithArray:model.tags ?: @[]];
+            YALAIAppendUniqueStrings(mergedTags, YALAIStreamStringArray(deltaText));
+            model.tags = [mergedTags copy];
+            didUpdate = YES;
+        } else if (![field isEqualToString:@"start"] &&
+                   ![field isEqualToString:@"done"] &&
+                   ![field isEqualToString:@"end"] &&
+                   ![field isEqualToString:@"finish"]) {
+            NSString *currentSummary = model.summary ?: @"";
+            model.summary = currentSummary.length > 0 ? [currentSummary stringByAppendingString:deltaText] : deltaText;
+            didUpdate = YES;
+        }
+    }
+
+    if (!didUpdate) {
+        NSString *contentText = YALAIStreamTrimmedString(payload[@"content"]);
+        NSString *typeText = YALAIStreamTrimmedString(payload[@"type"]).lowercaseString;
+        if (contentText.length > 0 &&
+            ![typeText isEqualToString:@"start"] &&
+            ![typeText isEqualToString:@"done"] &&
+            ![typeText isEqualToString:@"end"] &&
+            ![typeText isEqualToString:@"finish"]) {
+            NSString *currentSummary = model.summary ?: @"";
+            model.summary = currentSummary.length > 0 ? [currentSummary stringByAppendingString:contentText] : contentText;
+            didUpdate = YES;
+        }
+    }
+
+    return didUpdate;
+}
+
 @implementation YALContentManager
 
 + (instancetype)sharedManager {
@@ -706,6 +921,183 @@ static NSNumber *YALNumberFromLikeFlag(id value) {
             completion(NO, nil, @"网络请求失败", error);
         }
     }];
+}
+
+- (NSURLSessionDataTask *)analyzeText:(NSString *)text
+                             onUpdate:(void (^ _Nullable)(YALAIAnalyzeResultModel *result))onUpdate
+                           completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion {
+    YALNetworkManager *network = [YALNetworkManager shareManager];
+    NSString *url = [NSString stringWithFormat:@"%@/ai/analyze", YALAPIBaseURLString];
+    NSDictionary *parameters = @{@"text": text ?: @""};
+    NSMutableDictionary *headers = [NSMutableDictionary dictionaryWithDictionary:[[YALAuthManager sharedManager] getAuthHeadersWithToken] ?: @{}];
+    headers[@"Accept"] = @"text/event-stream, application/json";
+    headers[@"Cache-Control"] = @"no-cache";
+
+    __block NSMutableString *buffer = [NSMutableString string];
+    __block NSMutableArray<NSString *> *eventLines = [NSMutableArray array];
+    __block NSMutableData *fullResponseData = [NSMutableData data];
+    __block YALAIAnalyzeResultModel *streamModel = [[YALAIAnalyzeResultModel alloc] initWithDictionary:@{}];
+    __block BOOL didEmitUpdate = NO;
+
+    void (^emitPlainText)(NSString *) = ^(NSString *rawText) {
+        NSString *textChunk = rawText ?: @"";
+        if (textChunk.length == 0) {
+            return;
+        }
+        NSString *currentSummary = streamModel.summary ?: @"";
+        streamModel.summary = currentSummary.length > 0 ? [currentSummary stringByAppendingString:textChunk] : textChunk;
+        didEmitUpdate = YES;
+        if (onUpdate) {
+            onUpdate(streamModel);
+        }
+    };
+
+    void (^emitPayloadString)(NSString *) = ^(NSString *rawString) {
+        NSString *trimmed = [rawString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (trimmed.length == 0 || [trimmed isEqualToString:@"[DONE]"]) {
+            return;
+        }
+
+        id jsonObject = YALAIJSONObjectFromString(trimmed);
+        if ([jsonObject isKindOfClass:[NSDictionary class]]) {
+            if (YALAIApplyStreamPayloadToModel(streamModel, (NSDictionary *)jsonObject)) {
+                didEmitUpdate = YES;
+                if (onUpdate) {
+                    onUpdate(streamModel);
+                }
+            }
+            return;
+        }
+
+        emitPlainText(rawString);
+    };
+
+    void (^flushBufferedLines)(void) = ^{
+        if (eventLines.count == 0) {
+            return;
+        }
+        NSString *eventPayload = [eventLines componentsJoinedByString:@"\n"];
+        [eventLines removeAllObjects];
+        emitPayloadString(eventPayload);
+    };
+
+    NSURLSessionDataTask *task = [network streamPOST:url
+                                          parameters:parameters
+                                             headers:[headers copy]
+                                     responseHandler:nil
+                                         dataHandler:^(NSData * _Nonnull chunk) {
+        if (chunk.length == 0) {
+            return;
+        }
+
+        [fullResponseData appendData:chunk];
+        NSString *chunkText = [[NSString alloc] initWithData:chunk encoding:NSUTF8StringEncoding];
+        if (chunkText.length == 0) {
+            return;
+        }
+
+        [buffer appendString:chunkText];
+        NSRange newlineRange = [buffer rangeOfString:@"\n"];
+        while (newlineRange.location != NSNotFound) {
+            NSString *line = [buffer substringToIndex:newlineRange.location];
+            [buffer deleteCharactersInRange:NSMakeRange(0, newlineRange.location + newlineRange.length)];
+            NSString *cleanLine = [line stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+            if (cleanLine.length == 0) {
+                flushBufferedLines();
+            } else if ([cleanLine hasPrefix:@"data:"]) {
+                NSString *payloadLine = [cleanLine substringFromIndex:5];
+                if ([payloadLine hasPrefix:@" "]) {
+                    payloadLine = [payloadLine substringFromIndex:1];
+                }
+                [eventLines addObject:payloadLine ?: @""];
+            } else if ([cleanLine hasPrefix:@"event:"] || [cleanLine hasPrefix:@":"]) {
+                // ignore SSE metadata/comment lines
+            } else {
+                flushBufferedLines();
+                emitPayloadString(cleanLine);
+            }
+            newlineRange = [buffer rangeOfString:@"\n"];
+        }
+    } completion:^(NSHTTPURLResponse * _Nullable response, NSError * _Nullable error) {
+        flushBufferedLines();
+        if (buffer.length > 0) {
+            emitPayloadString([buffer copy]);
+            [buffer setString:@""];
+        }
+
+        if (error) {
+            if (completion) {
+                completion(NO, didEmitUpdate ? streamModel : nil, @"网络请求失败", error);
+            }
+            return;
+        }
+
+        NSInteger statusCode = [response isKindOfClass:[NSHTTPURLResponse class]] ? response.statusCode : 200;
+        NSString *fullText = [[NSString alloc] initWithData:fullResponseData encoding:NSUTF8StringEncoding] ?: @"";
+        NSString *message = @"success";
+
+        if (statusCode < 200 || statusCode >= 300) {
+            NSString *responseMessage = @"AI 分析失败";
+            id object = YALAIJSONObjectFromString(fullText);
+            if ([object isKindOfClass:[NSDictionary class]]) {
+                responseMessage = YALResponseMessage(object);
+                if (responseMessage.length == 0) {
+                    responseMessage = @"AI 分析失败";
+                }
+            }
+            NSError *statusError = [NSError errorWithDomain:@"YALContentManager"
+                                                       code:statusCode
+                                                   userInfo:@{NSLocalizedDescriptionKey: responseMessage}];
+            if (completion) {
+                completion(NO, didEmitUpdate ? streamModel : nil, responseMessage, statusError);
+            }
+            return;
+        }
+
+        if (!didEmitUpdate && fullText.length > 0) {
+            id object = YALAIJSONObjectFromString(fullText);
+            if ([object isKindOfClass:[NSDictionary class]]) {
+                NSDictionary *responseObject = (NSDictionary *)object;
+                if ([responseObject[@"summary"] isKindOfClass:[NSString class]] ||
+                    [responseObject[@"tags"] isKindOfClass:[NSArray class]] ||
+                    [responseObject[@"mood"] isKindOfClass:[NSString class]] ||
+                    [responseObject[@"suggestions"] isKindOfClass:[NSString class]] ||
+                    [responseObject[@"highlights"] isKindOfClass:[NSArray class]] ||
+                    [responseObject[@"guide"] isKindOfClass:[NSString class]]) {
+                    streamModel = [[YALAIAnalyzeResultModel alloc] initWithDictionary:responseObject];
+                    didEmitUpdate = YES;
+                } else {
+                    NSInteger code = YALResponseCode(responseObject);
+                    message = YALResponseMessage(responseObject);
+                    NSDictionary *data = YALResponseData(responseObject);
+                    if (code == 200 && [data isKindOfClass:[NSDictionary class]]) {
+                        streamModel = [[YALAIAnalyzeResultModel alloc] initWithDictionary:data];
+                        didEmitUpdate = YES;
+                    }
+                }
+            } else if (fullText.length > 0 &&
+                       [fullText rangeOfString:@"data:"].location == NSNotFound) {
+                streamModel.summary = fullText;
+                didEmitUpdate = YES;
+            }
+        }
+
+        if (!didEmitUpdate) {
+            NSError *parseError = [NSError errorWithDomain:@"YALContentManager"
+                                                      code:-1
+                                                  userInfo:@{NSLocalizedDescriptionKey: @"AI 分析失败"}];
+            if (completion) {
+                completion(NO, nil, @"AI 分析失败", parseError);
+            }
+            return;
+        }
+
+        if (completion) {
+            completion(YES, streamModel, message, nil);
+        }
+    }];
+
+    return task;
 }
 
 - (void)toggleLikeContentWithId:(NSNumber *)contentId

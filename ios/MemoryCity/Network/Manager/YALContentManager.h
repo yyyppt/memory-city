@@ -113,6 +113,10 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)analyzeText:(NSString *)text
          completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion;
 
+- (NSURLSessionDataTask * _Nullable)analyzeText:(NSString *)text
+                                       onUpdate:(void (^ _Nullable)(YALAIAnalyzeResultModel *result))onUpdate
+                                     completion:(void (^)(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error))completion;
+
 /// 删除内容（仅作者可删除）
 /// @param contentId 内容ID
 /// @param completion 完成回调

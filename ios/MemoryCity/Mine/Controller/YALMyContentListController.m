@@ -343,9 +343,7 @@ static id YALResolvedVisibilityValue(NSDictionary *dict) {
     self.isLoading = YES;
     [self.loadingIndicator startAnimating];
     BOOL isFirstPageRequest = (self.currentPage == 1);
-    
-    NSLog(@"📡 开始加载第 %ld 页数据", (long)self.currentPage);
-    
+
     [[YALContentManager sharedManager] getMyContentListWithPage:self.currentPage
                                                        pageSize:10
                                                      completion:^(BOOL success, NSArray * _Nullable contentList, NSString * _Nullable message, NSError * _Nullable error) {
@@ -358,8 +356,6 @@ static id YALResolvedVisibilityValue(NSDictionary *dict) {
             }
             
             if (success) {
-                NSLog(@"✅ 成功加载 %lu 条内容", (unsigned long)contentList.count);
-                
                 if (self.currentPage == 1) {
                     [self.contentList removeAllObjects];
                 }
@@ -396,7 +392,6 @@ static id YALResolvedVisibilityValue(NSDictionary *dict) {
                     [self showMessage:@"暂无发布内容" type:0];
                 }
             } else {
-                NSLog(@"❌ 加载失败: %@, 错误: %@", message, error);
                 [self showMessage:message ?: @"加载失败" type:1];
                 
                 if (self.contentList.count == 0) {

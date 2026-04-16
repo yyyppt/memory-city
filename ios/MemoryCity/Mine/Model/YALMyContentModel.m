@@ -54,7 +54,6 @@
             NSInteger picId = [self.contentId integerValue] % 100 + 1;
             NSString *imageUrl = [NSString stringWithFormat:@"https://picsum.photos/300/400?image=%ld", (long)picId];
             self.images = @[imageUrl];
-            NSLog(@"🖼️ 我的内容ID %@ 使用模拟图片URL: %@", self.contentId, imageUrl);
         }
     }
     return self;

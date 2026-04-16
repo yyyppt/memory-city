@@ -111,7 +111,6 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
         self.content = [dict[@"content"] isKindOfClass:[NSString class]] ? dict[@"content"] : @"";
         self.desc = self.content; // 保持向后兼容
         self.city = [dict[@"city"] isKindOfClass:[NSString class]] ? dict[@"city"] : @"";
-        NSLog(@"地点地点：%@", self.city);
         self.year = [dict[@"year"] isKindOfClass:[NSString class]] ? dict[@"year"] : @"";
         self.mood = [dict[@"mood"] isKindOfClass:[NSString class]] ? dict[@"mood"] : @"";
         self.createTime = [dict[@"create_time"] isKindOfClass:[NSString class]] ? dict[@"create_time"] : @"";
@@ -253,7 +252,6 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
             // 根据内容ID生成不同的图片，确保同一内容显示相同图片
             NSInteger picId = [self.contentId integerValue] % 100 + 1;
             self.imageURLString = [NSString stringWithFormat:@"https://picsum.photos/300/400?image=%ld", (long)picId];
-            NSLog(@"🖼️ 内容ID %@ 使用模拟图片URL: %@", self.contentId, self.imageURLString);
         }
 
         // 设置默认图片
@@ -267,8 +265,6 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
         self.imageWidth = 300.0;
         self.imageHeight = 400.0;
 
-        NSLog(@"📸 最终图片配置 - URL: %@, 尺寸: %.0fx%.0f",
-              self.imageURLString, self.imageWidth, self.imageHeight);
     }
     return self;
 }

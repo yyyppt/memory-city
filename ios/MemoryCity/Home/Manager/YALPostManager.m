@@ -112,7 +112,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
             continue;
         }
         if (!model.isPublic) {
-            NSLog(@"🔒 首页缓存过滤掉私密内容ID: %@", model.contentId);
             continue;
         }
         [filtered addObject:model];
@@ -144,7 +143,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
     [[YALPostCacheStore sharedStore] fetchHomeFeedPostsWithCompletion:^(NSArray<YALPostModel *> *posts) {
         NSArray<YALPostModel *> *cachedPosts = [self filteredPublicPostsFromPosts:(posts ?: @[])];
         if (cachedPosts.count > 0) {
-            NSLog(@"💾 首页命中 Core Data 缓存：%lu 条", (unsigned long)cachedPosts.count);
             if (completion) {
                 completion(cachedPosts, YES, nil);
             }
@@ -172,42 +170,8 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
         @"size": @(pageSize)
     };
 
-    NSLog(@"📡 首页获取内容列表请求：%@", url);
-    NSLog(@"📦 请求参数：%@", parameters);
-
     [manager GET:url parameters:parameters headers:nil progress:nil success:^(NSURLSessionDataTask *task, id responseObject) {
-        NSLog(@"✅ 首页获取内容列表成功，收到响应：");
-
-        // 打印完整的响应数据，方便调试
-        if ([responseObject isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *responseDict = (NSDictionary *)responseObject;
-            NSLog(@"📥 完整响应数据：%@", responseDict);
-
-            // 打印data部分
-        if ([responseDict[@"data"] isKindOfClass:[NSDictionary class]]) {
-                NSDictionary *data = responseDict[@"data"];
-                NSLog(@"📁 数据部分：%@", data);
-
-                // 打印list中的第一条数据，查看字段结构
-        if ([data[@"list"] isKindOfClass:[NSArray class]]) {
-                    NSArray *list = data[@"list"];
-                    if (list.count > 0) {
-                        NSLog(@"🔍 第一条数据字段：%@", list[0]);
-                        // 特别检查图片字段
-                        if ([list[0] isKindOfClass:[NSDictionary class]]) {
-                            NSDictionary *firstItem = list[0];
-                            NSLog(@"🖼️ 图片相关字段：");
-                            NSLog(@"   images: %@", firstItem[@"images"]);
-                            NSLog(@"   Images: %@", firstItem[@"Images"]);
-                            NSLog(@"   image_urls: %@", firstItem[@"image_urls"]);
-        }
-                    }
-                }
-            }
-        }
-
         if (![responseObject isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"❌ 无效的响应格式");
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALPostManager" code:-1 userInfo:@{NSLocalizedDescriptionKey : @"Invalid response object"}];
                 completion(nil, NO, error);
@@ -220,7 +184,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
         NSString *msg = [responseDict[@"msg"] isKindOfClass:[NSString class]] ? responseDict[@"msg"] : @"";
 
         if (code != 200) {
-            NSLog(@"⚠️ 服务器返回错误: 代码=%ld, 消息=%@", (long)code, msg);
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALPostManager"
                                                      code:code
@@ -240,11 +203,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
         if (randomizePage && requestedPage == 1 && totalPages > 1) {
             NSInteger excludedPage = MAX(self.lastDisplayedHomeFeedPage, 1);
             NSInteger randomPage = [self randomHomeFeedPageWithTotalPages:totalPages excludingPage:excludedPage];
-            NSLog(@"🎲 首页刷新随机页: total=%ld totalPages=%ld selectedPage=%ld excludedPage=%ld",
-                  (long)totalCount,
-                  (long)totalPages,
-                  (long)randomPage,
-                  (long)excludedPage);
             [self requestLatestPostsWithCachedPosts:cachedPosts
                                               page:randomPage
                                       randomizePage:NO
@@ -258,15 +216,12 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
         }
 
         if (!list) {
-            NSLog(@"⚠️ 缺少数据列表");
-        if (completion) {
+            if (completion) {
                 NSError *error = [NSError errorWithDomain:@"YALPostManager" code:-2 userInfo:@{NSLocalizedDescriptionKey : @"Missing data.list"}];
                 completion(nil, NO, error);
             }
             return;
         }
-        
-        NSLog(@"📋 解析到 %lu 条内容", (unsigned long)list.count);
 
         NSMutableArray<YALPostModel *> *posts = [NSMutableArray arrayWithCapacity:list.count];
         for (id item in list) {
@@ -274,34 +229,20 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
                 continue;
             }
             NSDictionary *dic = (NSDictionary *)item;
-            NSLog(@"🧾 首页原始可见性 content_id=%@ is_public=%@ isPublic=%@",
-                  dic[@"content_id"],
-                  dic[@"is_public"],
-                  dic[@"isPublic"]);
             if (!YALPostManagerShouldShowPublicContent(dic)) {
-                NSLog(@"🔒 首页原始数据过滤掉非公开内容ID: %@", dic[@"content_id"]);
                 continue;
             }
             YALPostModel *model = [[YALPostModel alloc] initWithDictionary:dic];
-            NSLog(@"🏠 首页模型可见性 content_id=%@ model.isPublic=%@",
-                  model.contentId,
-                  model.isPublic ? @"YES" : @"NO");
             if (!model.isPublic) {
-                NSLog(@"🔒 跳过私密内容ID: %@", model.contentId);
                 continue;
             }
             [posts addObject:model];
-
-            // 打印每条数据的图片信息
-            NSLog(@"📸 内容ID %@ 的图片URL: %@", model.contentId, model.imageURLString);
         }
 
         [self resolveCollectCountsFromDetailForPosts:posts completion:^(NSArray<YALPostModel *> *resolvedPosts) {
             self.lastDisplayedHomeFeedPage = requestedPage;
             [[YALPostCacheStore sharedStore] replaceHomeFeedPosts:resolvedPosts completion:^(NSError * _Nullable cacheError) {
-                if (cacheError) {
-                    NSLog(@"⚠️ 首页缓存更新失败: %@", cacheError);
-                }
+                (void)cacheError;
             }];
 
             if (completion) {
@@ -309,7 +250,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
             }
         }];
     } failure:^(NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 首页获取内容列表失败: %@", error);
         if (completion) {
             if (cachedPosts.count > 0) {
                 completion(cachedPosts, YES, error);
@@ -355,7 +295,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
             @"page": @(page),
             @"size": @(pageSize)
         };
-        NSLog(@"🎲 首页刷新全量抓取请求：%@", parameters);
         [manager GET:url parameters:parameters headers:nil progress:nil success:^(__unused NSURLSessionDataTask *task, id responseObject) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) {

@@ -37,11 +37,8 @@ static NSString * const kYALCachedPostEntityName = @"YALCachedPost";
         description.shouldInferMappingModelAutomatically = YES;
 
         [_persistentContainer loadPersistentStoresWithCompletionHandler:^(NSPersistentStoreDescription * _Nonnull storeDescription, NSError * _Nullable error) {
-            if (error) {
-                NSLog(@"❌ Core Data store load failed: %@", error);
-            } else {
-                NSLog(@"✅ Core Data store ready: %@", storeDescription.URL.path);
-            }
+            (void)storeDescription;
+            (void)error;
         }];
 
         _persistentContainer.viewContext.mergePolicy = NSMergeByPropertyObjectTrumpMergePolicy;
@@ -74,9 +71,7 @@ static NSString * const kYALCachedPostEntityName = @"YALCachedPost";
 
     [context performBlock:^{
         NSError *error = nil;
-        if (![context save:&error]) {
-            NSLog(@"❌ Core Data viewContext save failed: %@", error);
-        }
+        [context save:&error];
     }];
 }
 

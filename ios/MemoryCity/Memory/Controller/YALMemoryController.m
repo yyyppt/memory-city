@@ -10,21 +10,16 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
         return @"";
     }
     NSString *s = raw;
-    NSLog(@"📅 原始日期字符串: %@", s);
     // 兼容 "2024-03-30T12:00:00Z"
     if ([s containsString:@"T"] && s.length >= 10) {
         s = [s substringToIndex:10];
-        NSLog(@"📅 处理ISO格式日期: %@ -> %@", raw, s);
     } else if (s.length >= 10) {
         s = [s substringToIndex:10];
-        NSLog(@"📅 截取日期部分: %@ -> %@", raw, s);
     }
     // 确保格式为 "yyyy.MM.dd"
     if ([s containsString:@"-"]) {
         s = [s stringByReplacingOccurrencesOfString:@"-" withString:@"."];
-        NSLog(@"📅 转换日期格式: %@ -> %@", raw, s);
     }
-    NSLog(@"📅 最终规范化日期: %@", s);
     return s;
 }
 
@@ -77,7 +72,6 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
         if (!ss) return;
 
         if (!success || ![list isKindOfClass:[NSArray class]]) {
-            NSLog(@"❌ 获取我的内容失败：%@ %@", message, error);
             // 失败时保持空态，但仍允许显示当前年份（不可点）
             ss.timelineGrouped = @{};
             ss.firstPublishYear = ss.calendarYearNow;
@@ -314,25 +308,6 @@ static NSString *YALNormalizeDateKeyFromRaw(NSString * _Nullable raw) {
 
 - (void)memoryView:(YALMemoryView *)view didSelectMonth:(YALMemoryMonthModel *)month {
     (void)view;
-    NSString *key = [NSString stringWithFormat:@"%04ld-%02ld", (long)month.year, (long)month.month];
-    NSArray *monthList = [self.timelineGrouped[key] isKindOfClass:[NSArray class]] ? self.timelineGrouped[key] : @[];
-    NSLog(@"🧠 Memory点击月份: %@, 共%lu条", key, (unsigned long)monthList.count);
-    [monthList enumerateObjectsUsingBlock:^(id  _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-        (void)stop;
-        if (![obj isKindOfClass:[NSDictionary class]]) {
-            NSLog(@"  [%lu] %@", (unsigned long)idx, obj);
-            return;
-        }
-        NSDictionary *d = (NSDictionary *)obj;
-        NSLog(@"  [%lu] title=%@, year=%@, create_time=%@, date=%@, images=%@",
-              (unsigned long)idx,
-              d[@"title"] ?: @"",
-              d[@"year"] ?: @"",
-              d[@"create_time"] ?: @"",
-              d[@"date"] ?: @"",
-              d[@"images"] ?: @[]);
-    }];
-
     YALTimeLineController *vc = [[YALTimeLineController alloc] init];
     vc.displayYear = month.year;
     vc.displayMonth = month.month;

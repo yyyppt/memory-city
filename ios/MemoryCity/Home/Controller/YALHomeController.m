@@ -49,7 +49,6 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
             continue;
         }
         if (!model.isPublic) {
-            NSLog(@"🔒 首页控制器再次过滤私密内容ID: %@", model.contentId);
             continue;
         }
         [filtered addObject:model];

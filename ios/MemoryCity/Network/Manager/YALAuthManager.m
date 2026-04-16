@@ -492,9 +492,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
 
   if ([userIdObj respondsToSelector:@selector(integerValue)]) {
       user.userId = [userIdObj integerValue];
-      NSLog(@"✅ 成功解析用户 ID: %ld", (long)user.userId);
-  } else {
-      NSLog(@"⚠️ 无法在数据源中找到有效的用户 ID");
   }
   NSDictionary *nestedUser = [data[@"user"] isKindOfClass:[NSDictionary class]] ? data[@"user"] : nil;
 //  if (nestedUser) {
@@ -548,7 +545,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     // ✅ 关键修复：登录成功后必须保存 currentUser（否则 userId 为空/脏数据）
     if (isLogin) {
         self.currentUser = user;
-        NSLog(@"✅ 登录成功，保存 userId = %ld", (long)user.userId);
     }
 
     return YES;
@@ -632,14 +628,11 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/user/info", YALAPIBaseURLString];
 
-    NSLog(@"📡 拉取用户信息请求(GET): %@", url);
-
     [network GET:url
        parameters:nil
           headers:headers
          progress:nil
           success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 拉取用户信息响应: %@", responseObject);
         YALAuthUserModel *user = nil;
         NSError *error = nil;
         BOOL ok = [self handleAuthResponse:responseObject successData:&user error:&error isLogin:NO];
@@ -657,7 +650,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 拉取用户信息失败(网络层): %@", error);
         if (completion) {
             completion(nil, error);
         }
@@ -711,10 +703,7 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         id paramsObj = candidate[@"parameters"];
         NSDictionary *parameters = [paramsObj isKindOfClass:[NSDictionary class]] ? paramsObj : nil;
 
-        NSLog(@"📡 拉取指定用户主页请求(%@)[%ld]: %@ params=%@", method, (long)candidateIndex, requestURL, parameters ?: @[]);
-
         void (^handleSuccess)(id) = ^(id responseObject) {
-            NSLog(@"✅ 拉取指定用户主页响应[%ld]: %@", (long)candidateIndex, responseObject);
             if (![responseObject isKindOfClass:[NSDictionary class]]) {
                 if (completion) {
                     NSError *e = [NSError errorWithDomain:@"YALAuthManager"
@@ -762,7 +751,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         };
 
         void (^handleFailure)(NSError *) = ^(NSError *error) {
-            NSLog(@"❌ 拉取指定用户主页失败(网络层)[%ld]: %@", (long)candidateIndex, error);
             if (candidateIndex + 1 < requestCandidates.count) {
                 candidateIndex += 1;
                 sendRequest();
@@ -913,13 +901,10 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         parameters[@"bio"] = trimmedBio;
     }
 
-    NSLog(@"📡 更新用户资料请求: url=%@ params=%@", url, parameters);
-
     [network PUT:url
         parameters:parameters
            headers:headers
             success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 更新用户资料响应: %@", responseObject);
         if (![responseObject isKindOfClass:[NSDictionary class]]) {
             if (completion) {
                 NSError *e = [NSError errorWithDomain:@"YALAuthManager"
@@ -961,7 +946,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 更新用户资料失败(网络层): %@", error);
         if (completion) {
             completion(nil, error);
         }
@@ -1013,13 +997,10 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
     parameters[@"nickname"] = trimmedNickname;
     parameters[@"avatar"] = avatar;
 
-    NSLog(@"📡 更新用户信息请求: url=%@ params=%@", url, parameters);
-
     [network PUT:url
         parameters:parameters
            headers:headers
             success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 更新用户信息响应: %@", responseObject);
         if (![responseObject isKindOfClass:[NSDictionary class]]) {
             if (completion) {
                 NSError *e = [NSError errorWithDomain:@"YALAuthManager"
@@ -1059,7 +1040,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 更新用户信息失败(网络层): %@", error);
         if (completion) {
             completion(nil, error);
         }
@@ -1123,14 +1103,10 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         parameters[@"bio"] = trimmedBio;
     }
 
-    NSLog(@"📡 一次更新用户资料请求: url=%@ params=%@", url, parameters);
-
     [network PUT:url
         parameters:parameters
            headers:headers
             success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"✅ 一次更新用户资料响应: %@", responseObject);
-
         if (![responseObject isKindOfClass:[NSDictionary class]]) {
             if (completion) {
                 NSError *e = [NSError errorWithDomain:@"YALAuthManager"
@@ -1174,7 +1150,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 一次更新用户资料失败(网络层): %@", error);
         if (completion) {
             completion(nil, error);
         }
@@ -1224,13 +1199,10 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
         @"repeat_passwd": repeatP
     };
 
-    NSLog(@"📡 修改密码请求: url=%@ params=%@", url, parameters);
-
     [network PUT:url
         parameters:parameters
            headers:headers
             success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@" 修改密码响应: %@", responseObject);
         if (![responseObject isKindOfClass:[NSDictionary class]]) {
             if (completion) {
                 NSError *e = [NSError errorWithDomain:@"YALAuthManager"
@@ -1258,7 +1230,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
             }
         }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@" 修改密码失败(网络层): %@", error);
         if (completion) {
             completion(NO, @"网络错误", error);
         }
@@ -1288,7 +1259,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
                                    headers:nil
                                   progress:nil
                                    success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"📩 忘记密码发送验证码响应: %@", responseObject);
         NSDictionary *response = [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
         NSString *message = [self messageFromAuthResponse:response fallback:@"验证码已发送，5分钟内有效"];
         if ([self isForgotPasswordCodeSentResponse:response]) {
@@ -1302,11 +1272,8 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
                                          userInfo:@{NSLocalizedDescriptionKey: fallback}];
         if (completion) { completion(NO, fallback, error); }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 忘记密码发送验证码失败: %@", error);
         NSString *rawResponse = YALRawResponseStringFromError(error);
-        if (rawResponse.length > 0) {
-            NSLog(@"📩 忘记密码发送验证码原始响应: %@", rawResponse);
-        }
+        (void)rawResponse;
         NSDictionary *response = YALResponseDictionaryFromError(error);
         if ([self isForgotPasswordCodeSentResponse:response]) {
             NSString *message = [self messageFromAuthResponse:response fallback:@"验证码已发送，5分钟内有效"];
@@ -1366,7 +1333,6 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
                                   headers:nil
                                  progress:nil
                                   success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
-        NSLog(@"📩 忘记密码修改密码响应: %@", responseObject);
         NSDictionary *response = [responseObject isKindOfClass:[NSDictionary class]] ? (NSDictionary *)responseObject : nil;
         NSString *message = [self messageFromAuthResponse:response fallback:@"密码修改成功"];
         if ([self isForgotPasswordUpdateSuccessResponse:response]) {
@@ -1380,11 +1346,8 @@ static BOOL YALKeychainWriteString(NSString *account, NSString *value) {
                                          userInfo:@{NSLocalizedDescriptionKey: fallback}];
         if (completion) { completion(NO, fallback, error); }
     } failure:^(__unused NSURLSessionDataTask *task, NSError *error) {
-        NSLog(@"❌ 忘记密码修改密码失败: %@", error);
         NSString *rawResponse = YALRawResponseStringFromError(error);
-        if (rawResponse.length > 0) {
-            NSLog(@"📩 忘记密码修改密码原始响应: %@", rawResponse);
-        }
+        (void)rawResponse;
         NSDictionary *response = YALResponseDictionaryFromError(error);
         if ([self isForgotPasswordUpdateSuccessResponse:response]) {
             NSString *message = [self messageFromAuthResponse:response fallback:@"密码修改成功"];

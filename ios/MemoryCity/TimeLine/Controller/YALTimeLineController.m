@@ -181,7 +181,6 @@
         if (!ss) return;
 
         if (!success || ![list isKindOfClass:[NSArray class]]) {
-            NSLog(@"❌ 获取我的内容失败：%@ %@", message, error);
             ss.emptyMonthContainer.hidden = NO;
             ss.entries = @[];
             [ss.tableView reloadData];

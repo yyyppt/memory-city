@@ -55,12 +55,10 @@ static NSInteger YALExtractCode(id responseObject) {
     YALNetworkManager *network = [YALNetworkManager shareManager];
     NSString *url = [NSString stringWithFormat:@"%@/timeline/my", YALAPIBaseURLString];
     NSMutableDictionary *params = [NSMutableDictionary dictionary];
-    NSLog(@"日期：%@", params[@"year"]);
     if (year && [year respondsToSelector:@selector(integerValue)] && year.integerValue > 0) {
         params[@"year"] = @([year integerValue]);
     }
     NSDictionary *headers = [[YALAuthManager sharedManager] authHeadersForLoginRequiredRequest];
-    NSLog(@"几个呢：%d", params.count);
     [network GET:url parameters:(params.count > 0 ? params : nil) headers:headers progress:nil success:^(__unused NSURLSessionDataTask *task, id  _Nullable responseObject) {
         NSInteger code = YALExtractCode(responseObject);
         NSString *msg = YALExtractMsg(responseObject);

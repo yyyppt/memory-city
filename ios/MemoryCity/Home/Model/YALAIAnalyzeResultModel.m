@@ -46,18 +46,18 @@ static NSArray<NSString *> *YALAIAnalyzeStringArray(id value) {
         _summary = YALAIAnalyzeTrimmedString(dict[@"summary"]);
         _mood = YALAIAnalyzeTrimmedString(dict[@"mood"]);
 
-        NSMutableArray<NSString *> *resultTags = [NSMutableArray array];
-        NSArray *rawTags = [dict[@"tags"] isKindOfClass:[NSArray class]] ? dict[@"tags"] : @[];
-        for (id item in rawTags) {
-            NSString *tag = YALAIAnalyzeTrimmedString(item);
-            if (tag.length > 0) {
-                [resultTags addObject:tag];
-            }
-        }
-        _tags = [resultTags copy];
+        _tags = YALAIAnalyzeStringArray(dict[@"tags"]);
         _suggestions = YALAIAnalyzeTrimmedString(dict[@"suggestions"]);
         _highlights = YALAIAnalyzeStringArray(dict[@"highlights"]);
         _guide = YALAIAnalyzeTrimmedString(dict[@"guide"]);
+        NSLog(@"[AI ResultModel] init summary=%@ tags=%@ highlights=%@ suggestions=%@ guide=%@ mood=%@ raw=%@",
+              _summary ?: @"",
+              [_tags componentsJoinedByString:@" | "] ?: @"",
+              [_highlights componentsJoinedByString:@" | "] ?: @"",
+              _suggestions ?: @"",
+              _guide ?: @"",
+              _mood ?: @"",
+              dict ?: @{});
     }
     return self;
 }

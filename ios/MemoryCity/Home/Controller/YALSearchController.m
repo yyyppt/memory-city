@@ -155,6 +155,18 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
     return [NSURL URLWithString:trimmed relativeToURL:baseURL].absoluteURL;
 }
 
+static BOOL YALSearchHasUsableAIResult(YALAIAnalyzeResultModel * _Nullable result) {
+    if (![result isKindOfClass:[YALAIAnalyzeResultModel class]]) {
+        return NO;
+    }
+    return result.summary.length > 0 ||
+           result.tags.count > 0 ||
+           result.highlights.count > 0 ||
+           result.suggestions.length > 0 ||
+           result.guide.length > 0 ||
+           result.mood.length > 0;
+}
+
 @interface YALSearchResultCardCell : UITableViewCell
 
 - (void)configureWithTitle:(NSString *)title
@@ -471,10 +483,12 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
     [self.aiStreamTask cancel];
     self.aiStreamTask = nil;
     NSString *resultText = [self aiAnalysisPromptFromCurrentResults];
+    NSLog(@"[AI SearchVC] requestAI begin keyword=%@ prompt=%@", self.keyword ?: @"", resultText ?: @"");
     if (resultText.length == 0) {
         self.isAILoading = NO;
         self.aiResult = nil;
         self.aiErrorText = @"";
+        NSLog(@"[AI SearchVC] requestAI aborted emptyPrompt");
         [self updateEmptyState];
         [self.tableView reloadData];
         return;
@@ -492,14 +506,25 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
                                                               onUpdate:^(YALAIAnalyzeResultModel *result) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || requestToken != self.aiRequestToken) {
+            NSLog(@"[AI SearchVC] onUpdate ignored staleRequest token=%lu current=%lu",
+                  (unsigned long)requestToken,
+                  (unsigned long)self.aiRequestToken);
             return;
         }
+        NSLog(@"[AI SearchVC] onUpdate summary=%@ highlights=%@ suggestions=%@ guide=%@",
+              result.summary ?: @"",
+              [result.highlights componentsJoinedByString:@" | "] ?: @"",
+              result.suggestions ?: @"",
+              result.guide ?: @"");
         self.aiResult = result;
         [self updateEmptyState];
         [self.tableView reloadData];
     } completion:^(BOOL success, YALAIAnalyzeResultModel * _Nullable result, NSString * _Nullable message, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || requestToken != self.aiRequestToken) {
+            NSLog(@"[AI SearchVC] completion ignored staleRequest token=%lu current=%lu",
+                  (unsigned long)requestToken,
+                  (unsigned long)self.aiRequestToken);
             return;
         }
 
@@ -507,10 +532,22 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
         self.isAILoading = NO;
         if (success) {
             self.aiResult = result;
+            self.aiErrorText = @"";
         } else {
             self.aiResult = result;
-            self.aiErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"AI 分析暂时不可用");
+            if (YALSearchHasUsableAIResult(result)) {
+                self.aiErrorText = @"";
+            } else {
+                self.aiErrorText = error.localizedDescription.length > 0 ? error.localizedDescription : (message.length > 0 ? message : @"AI 分析暂时不可用");
+            }
         }
+        NSLog(@"[AI SearchVC] completion success=%d message=%@ error=%@ resultSummary=%@ aiErrorText=%@ usable=%d",
+              success,
+              message ?: @"",
+              error.localizedDescription ?: @"",
+              result.summary ?: @"",
+              self.aiErrorText ?: @"",
+              YALSearchHasUsableAIResult(result));
         [self updateEmptyState];
         [self.tableView reloadData];
     }];
@@ -1309,10 +1346,19 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
                       result:(YALAIAnalyzeResultModel *)result
                      loading:(BOOL)loading
                    errorText:(NSString *)errorText {
+    NSLog(@"[AI SearchCell] render keyword=%@ loading=%d hasResult=%d errorText=%@ resultSummary=%@ resultHighlights=%@ resultGuide=%@",
+          keyword ?: @"",
+          loading,
+          result != nil,
+          errorText ?: @"",
+          result.summary ?: @"",
+          [result.highlights componentsJoinedByString:@" | "] ?: @"",
+          result.guide ?: @"");
     self.titleLabel.text = [NSString stringWithFormat:@"关于“%@”的 AI 搜索结论", keyword.length > 0 ? keyword : @"当前搜索"];
     [self resetContentVisibility];
 
     if (loading && result == nil) {
+        NSLog(@"[AI SearchCell] render state=loading");
         self.summaryLabel.text = @"AI 正在补充地点介绍并整理站内相关内容，请稍候片刻。";
         self.tagsLabel.text = @"";
         self.highlightsLabel.text = @"";
@@ -1327,6 +1373,8 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
     }
 
     if (result != nil) {
+        NSLog(@"[AI SearchCell] render state=result summary=%@",
+              result.summary ?: @"");
         NSString *summaryText = result.summary.length > 0 ? result.summary : @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
         NSString *highlightsText = result.highlights.count > 0 ? [NSString stringWithFormat:@"亮点：%@", [result.highlights componentsJoinedByString:@" · "]] : @"亮点：暂无";
         NSString *suggestionsText = result.suggestions.length > 0 ? [NSString stringWithFormat:@"推荐搜索：%@", result.suggestions] : @"";
@@ -1344,6 +1392,7 @@ static NSURL * _Nullable YALSearchResolvedImageURL(NSString * _Nullable urlStrin
         return;
     }
 
+    NSLog(@"[AI SearchCell] render state=error finalText=%@", errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。");
     self.summaryLabel.text = errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。";
     self.tagsLabel.text = @"";
     self.highlightsLabel.text = @"亮点：暂不可用";

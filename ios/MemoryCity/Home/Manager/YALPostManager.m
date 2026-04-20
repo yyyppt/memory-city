@@ -86,9 +86,6 @@ static BOOL YALPostManagerShouldShowPublicContent(NSDictionary *dict) {
     }
     id publicValue = dict[@"is_public"];
     if (!publicValue || publicValue == [NSNull null]) {
-        publicValue = dict[@"isPublic"];
-    }
-    if (!publicValue || publicValue == [NSNull null]) {
         return NO;
     }
     return YALPostManagerBoolValue(publicValue, NO);

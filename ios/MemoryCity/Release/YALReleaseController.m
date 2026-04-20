@@ -682,6 +682,10 @@ static NSString * const kYALReleasePhotoCellIdentifier = @"YALReleasePhotoCell";
   double latitude = self.hasPresetCoordinate ? self.presetCoordinate.latitude : 0.0;
   double longitude = self.hasPresetCoordinate ? self.presetCoordinate.longitude : 0.0;
   BOOL isPublic = self.publicButton.selected ? YES : (self.privateButton.selected ? NO : self.isPublic);
+  NSLog(@"[Publish VC] visibility publicSelected=%d privateSelected=%d finalIsPublic=%d",
+        self.publicButton.selected,
+        self.privateButton.selected,
+        isPublic);
 
   // 图片处理：如果有选择的图片，转换为Base64
   NSMutableArray *images = [NSMutableArray array];

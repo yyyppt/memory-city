@@ -167,6 +167,211 @@ static BOOL YALSearchHasUsableAIResult(YALAIAnalyzeResultModel * _Nullable resul
            result.mood.length > 0;
 }
 
+static NSString *YALSearchAITrimmedString(id value) {
+    if (![value isKindOfClass:[NSString class]]) {
+        return @"";
+    }
+    return [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+static NSString *YALSearchAIUnescapedJSONStringFragment(NSString *text) {
+    if (![text isKindOfClass:[NSString class]] || text.length == 0) {
+        return @"";
+    }
+
+    NSMutableString *result = [NSMutableString string];
+    BOOL escaping = NO;
+    for (NSUInteger i = 0; i < text.length; i++) {
+        unichar ch = [text characterAtIndex:i];
+        if (escaping) {
+            switch (ch) {
+                case 'n':
+                    [result appendString:@"\n"];
+                    break;
+                case 'r':
+                    [result appendString:@"\r"];
+                    break;
+                case 't':
+                    [result appendString:@"\t"];
+                    break;
+                case '"':
+                    [result appendString:@"\""];
+                    break;
+                case '\\':
+                    [result appendString:@"\\"];
+                    break;
+                case '/':
+                    [result appendString:@"/"];
+                    break;
+                default:
+                    [result appendFormat:@"%C", ch];
+                    break;
+            }
+            escaping = NO;
+            continue;
+        }
+
+        if (ch == '\\') {
+            escaping = YES;
+            continue;
+        }
+
+        [result appendFormat:@"%C", ch];
+    }
+
+    return [result copy];
+}
+
+static NSString *YALSearchAIExtractValueForJSONKey(NSString *text, NSString *key) {
+    NSString *trimmed = YALSearchAITrimmedString(text);
+    if (trimmed.length == 0 || key.length == 0) {
+        return @"";
+    }
+
+    NSString *pattern = [NSString stringWithFormat:@"\"%@\"", key];
+    NSRange keyRange = [trimmed rangeOfString:pattern];
+    if (keyRange.location == NSNotFound) {
+        return @"";
+    }
+
+    NSUInteger searchStart = keyRange.location + keyRange.length;
+    if (searchStart >= trimmed.length) {
+        return @"";
+    }
+
+    NSRange colonRange = [trimmed rangeOfString:@":" options:0 range:NSMakeRange(searchStart, trimmed.length - searchStart)];
+    if (colonRange.location == NSNotFound) {
+        return @"";
+    }
+
+    NSUInteger valueStart = colonRange.location + 1;
+    while (valueStart < trimmed.length) {
+        unichar ch = [trimmed characterAtIndex:valueStart];
+        if ([[NSCharacterSet whitespaceAndNewlineCharacterSet] characterIsMember:ch]) {
+            valueStart += 1;
+            continue;
+        }
+        break;
+    }
+
+    if (valueStart >= trimmed.length || [trimmed characterAtIndex:valueStart] != '"') {
+        return @"";
+    }
+
+    valueStart += 1;
+    NSMutableString *buffer = [NSMutableString string];
+    BOOL escaping = NO;
+    for (NSUInteger i = valueStart; i < trimmed.length; i++) {
+        unichar ch = [trimmed characterAtIndex:i];
+        if (escaping) {
+            [buffer appendFormat:@"\\%C", ch];
+            escaping = NO;
+            continue;
+        }
+        if (ch == '\\') {
+            escaping = YES;
+            continue;
+        }
+        if (ch == '"') {
+            break;
+        }
+        [buffer appendFormat:@"%C", ch];
+    }
+
+    return YALSearchAITrimmedString(YALSearchAIUnescapedJSONStringFragment(buffer));
+}
+
+static NSString *YALSearchAIExtractDisplayText(NSString *rawText) {
+    NSString *trimmed = YALSearchAITrimmedString(rawText);
+    if (trimmed.length == 0) {
+        return @"";
+    }
+
+    NSString *candidate = trimmed;
+    if ([candidate hasPrefix:@"```"]) {
+        NSRange firstNewline = [candidate rangeOfString:@"\n"];
+        NSRange closingFence = [candidate rangeOfString:@"```" options:NSBackwardsSearch];
+        if (firstNewline.location != NSNotFound &&
+            closingFence.location != NSNotFound &&
+            closingFence.location > firstNewline.location) {
+            NSRange bodyRange = NSMakeRange(firstNewline.location + 1,
+                                            closingFence.location - firstNewline.location - 1);
+            candidate = [candidate substringWithRange:bodyRange];
+            candidate = YALSearchAITrimmedString(candidate);
+        }
+    }
+
+    NSString *partialSummary = YALSearchAIExtractValueForJSONKey(candidate, @"summary");
+    if (partialSummary.length > 0) {
+        return partialSummary;
+    }
+    NSString *partialContent = YALSearchAIExtractValueForJSONKey(candidate, @"content");
+    if (partialContent.length > 0) {
+        return partialContent;
+    }
+    NSString *partialText = YALSearchAIExtractValueForJSONKey(candidate, @"text");
+    if (partialText.length > 0) {
+        return partialText;
+    }
+
+    NSData *jsonData = [candidate dataUsingEncoding:NSUTF8StringEncoding];
+    if (jsonData.length > 0) {
+        id object = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
+        if ([object isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *dict = (NSDictionary *)object;
+            NSString *summary = YALSearchAITrimmedString(dict[@"summary"]);
+            if (summary.length > 0) {
+                return summary;
+            }
+            NSString *content = YALSearchAITrimmedString(dict[@"content"]);
+            if (content.length > 0) {
+                return content;
+            }
+            NSString *text = YALSearchAITrimmedString(dict[@"text"]);
+            if (text.length > 0) {
+                return text;
+            }
+        }
+    }
+
+    return trimmed;
+}
+
+static NSString *YALSearchAICombinedDisplayText(YALAIAnalyzeResultModel *result) {
+    if (![result isKindOfClass:[YALAIAnalyzeResultModel class]]) {
+        return @"";
+    }
+
+    NSMutableArray<NSString *> *parts = [NSMutableArray array];
+
+    NSString *summaryText = YALSearchAIExtractDisplayText(result.summary);
+    if (summaryText.length > 0) {
+        [parts addObject:summaryText];
+    }
+
+    if (result.highlights.count > 0) {
+        NSString *highlightsText = [[result.highlights filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id  _Nullable evaluatedObject, NSDictionary<NSString *,id> * _Nullable bindings) {
+            return YALSearchAITrimmedString(evaluatedObject).length > 0;
+        }]] componentsJoinedByString:@"、"];
+        highlightsText = YALSearchAITrimmedString(highlightsText);
+        if (highlightsText.length > 0) {
+            [parts addObject:[NSString stringWithFormat:@"可以关注%@。", highlightsText]];
+        }
+    }
+
+    NSString *guideText = YALSearchAITrimmedString(result.guide);
+    if (guideText.length > 0) {
+        BOOL alreadyPunctuated = [guideText hasSuffix:@"。"] || [guideText hasSuffix:@"！"] || [guideText hasSuffix:@"？"];
+        [parts addObject:alreadyPunctuated ? guideText : [guideText stringByAppendingString:@"。"]];
+    }
+
+    if (parts.count == 0) {
+        return @"";
+    }
+
+    return [parts componentsJoinedByString:@" "];
+}
+
 @interface YALSearchResultCardCell : UITableViewCell
 
 - (void)configureWithTitle:(NSString *)title
@@ -1206,10 +1411,6 @@ static BOOL YALSearchHasUsableAIResult(YALAIAnalyzeResultModel * _Nullable resul
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIStackView *contentStack;
 @property (nonatomic, strong) UILabel *summaryLabel;
-@property (nonatomic, strong) UILabel *tagsLabel;
-@property (nonatomic, strong) UILabel *highlightsLabel;
-@property (nonatomic, strong) UILabel *suggestionsLabel;
-@property (nonatomic, strong) UILabel *guideLabel;
 @property (nonatomic, strong) UIView *topAccentBar;
 @property (nonatomic, strong) UIView *glowBubble;
 
@@ -1266,32 +1467,8 @@ static BOOL YALSearchHasUsableAIResult(YALAIAnalyzeResultModel * _Nullable resul
         self.summaryLabel.textColor = YALSearchBodyTextColor();
         self.summaryLabel.numberOfLines = 0;
 
-        self.tagsLabel = [[UILabel alloc] init];
-        self.tagsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
-        self.tagsLabel.textColor = [UIColor secondaryLabelColor];
-        self.tagsLabel.numberOfLines = 0;
-
-        self.highlightsLabel = [[UILabel alloc] init];
-        self.highlightsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightMedium];
-        self.highlightsLabel.textColor = YALSearchSecondaryTextColor();
-        self.highlightsLabel.numberOfLines = 0;
-
-        self.suggestionsLabel = [[UILabel alloc] init];
-        self.suggestionsLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightSemibold];
-        self.suggestionsLabel.textColor = [UIColor colorWithRed:0.86 green:0.45 blue:0.19 alpha:1.0];
-        self.suggestionsLabel.numberOfLines = 0;
-
-        self.guideLabel = [[UILabel alloc] init];
-        self.guideLabel.font = [UIFont systemFontOfSize:12.5 weight:UIFontWeightRegular];
-        self.guideLabel.textColor = YALSearchSecondaryTextColor();
-        self.guideLabel.numberOfLines = 0;
-
         self.contentStack = [[UIStackView alloc] initWithArrangedSubviews:@[
-            self.summaryLabel,
-            self.tagsLabel,
-            self.highlightsLabel,
-            self.suggestionsLabel,
-            self.guideLabel
+            self.summaryLabel
         ]];
         self.contentStack.axis = UILayoutConstraintAxisVertical;
         self.contentStack.spacing = 10.0;
@@ -1360,62 +1537,30 @@ static BOOL YALSearchHasUsableAIResult(YALAIAnalyzeResultModel * _Nullable resul
     if (loading && result == nil) {
         NSLog(@"[AI SearchCell] render state=loading");
         self.summaryLabel.text = @"AI 正在补充地点介绍并整理站内相关内容，请稍候片刻。";
-        self.tagsLabel.text = @"";
-        self.highlightsLabel.text = @"";
-        self.suggestionsLabel.text = @"";
-        self.guideLabel.text = @"";
         [self updateVisibilityForLabel:self.summaryLabel];
-        [self updateVisibilityForLabel:self.tagsLabel];
-        [self updateVisibilityForLabel:self.highlightsLabel];
-        [self updateVisibilityForLabel:self.suggestionsLabel];
-        [self updateVisibilityForLabel:self.guideLabel];
         return;
     }
 
     if (result != nil) {
         NSLog(@"[AI SearchCell] render state=result summary=%@",
               result.summary ?: @"");
-        NSString *summaryText = result.summary.length > 0 ? result.summary : @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
-        NSString *highlightsText = result.highlights.count > 0 ? [NSString stringWithFormat:@"亮点：%@", [result.highlights componentsJoinedByString:@" · "]] : @"亮点：暂无";
-        NSString *suggestionsText = result.suggestions.length > 0 ? [NSString stringWithFormat:@"推荐搜索：%@", result.suggestions] : @"";
-        NSString *guideText = result.guide.length > 0 ? [NSString stringWithFormat:@"搜索提示：%@", result.guide] : @"搜索提示：可以继续从地点、情绪、人物或时间线索展开搜索。";
-        self.tagsLabel.text = result.tags.count > 0 ? [NSString stringWithFormat:@"关键词：%@", [result.tags componentsJoinedByString:@" · "]] : @"";
+        NSString *summaryText = YALSearchAICombinedDisplayText(result);
+        if (summaryText.length == 0) {
+            summaryText = @"AI 已完成搜索理解，当前关键词已经匹配到相关内容。";
+        }
         self.summaryLabel.text = summaryText;
-        self.highlightsLabel.text = highlightsText;
-        self.suggestionsLabel.text = suggestionsText;
-        self.guideLabel.text = guideText;
         [self updateVisibilityForLabel:self.summaryLabel];
-        [self updateVisibilityForLabel:self.tagsLabel];
-        [self updateVisibilityForLabel:self.highlightsLabel];
-        [self updateVisibilityForLabel:self.suggestionsLabel];
-        [self updateVisibilityForLabel:self.guideLabel];
         return;
     }
 
     NSLog(@"[AI SearchCell] render state=error finalText=%@", errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。");
     self.summaryLabel.text = errorText.length > 0 ? errorText : @"AI 分析暂时不可用，但你仍然可以查看下方内容结果。";
-    self.tagsLabel.text = @"";
-    self.highlightsLabel.text = @"亮点：暂不可用";
-    self.suggestionsLabel.text = @"";
-    self.guideLabel.text = @"搜索提示：你仍然可以结合当前结果继续细化搜索。";
     [self updateVisibilityForLabel:self.summaryLabel];
-    [self updateVisibilityForLabel:self.tagsLabel];
-    [self updateVisibilityForLabel:self.highlightsLabel];
-    [self updateVisibilityForLabel:self.suggestionsLabel];
-    [self updateVisibilityForLabel:self.guideLabel];
 }
 
 - (void)resetContentVisibility {
     self.summaryLabel.alpha = 1.0;
-    self.tagsLabel.alpha = 1.0;
-    self.highlightsLabel.alpha = 1.0;
-    self.suggestionsLabel.alpha = 1.0;
-    self.guideLabel.alpha = 1.0;
     self.summaryLabel.hidden = NO;
-    self.tagsLabel.hidden = YES;
-    self.highlightsLabel.hidden = YES;
-    self.suggestionsLabel.hidden = YES;
-    self.guideLabel.hidden = YES;
 }
 
 - (void)updateVisibilityForLabel:(UILabel *)label {

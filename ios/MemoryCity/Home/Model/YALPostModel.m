@@ -43,9 +43,6 @@ static BOOL YALPostModelResolvedPublicFlag(NSDictionary *dict) {
 
     id value = dict[@"is_public"];
     if (!value || value == [NSNull null]) {
-        value = dict[@"isPublic"];
-    }
-    if (!value || value == [NSNull null]) {
         return NO;
     }
     return YALPostModelBoolValue(value, NO);

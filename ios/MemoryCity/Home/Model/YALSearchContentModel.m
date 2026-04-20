@@ -40,6 +40,19 @@ static NSString *YALSearchFirstString(NSDictionary *dict, NSArray<NSString *> *k
     return @"";
 }
 
+static NSDictionary * _Nullable YALSearchFirstNestedDictionary(NSDictionary *dict, NSArray<NSString *> *keys) {
+    if (![dict isKindOfClass:[NSDictionary class]]) {
+        return nil;
+    }
+    for (NSString *key in keys) {
+        id value = dict[key];
+        if ([value isKindOfClass:[NSDictionary class]]) {
+            return (NSDictionary *)value;
+        }
+    }
+    return nil;
+}
+
 static NSNumber * _Nullable YALSearchFirstNumber(NSDictionary *dict, NSArray<NSString *> *keys) {
     if (![dict isKindOfClass:[NSDictionary class]]) {
         return nil;
@@ -53,11 +66,60 @@ static NSNumber * _Nullable YALSearchFirstNumber(NSDictionary *dict, NSArray<NSS
     return nil;
 }
 
+static NSString *YALSearchFirstStringFromDictionaries(NSArray<NSDictionary *> *dicts, NSArray<NSString *> *keys) {
+    for (NSDictionary *dict in dicts) {
+        NSString *text = YALSearchFirstString(dict, keys);
+        if (text.length > 0) {
+            return text;
+        }
+    }
+    return @"";
+}
+
+static NSNumber * _Nullable YALSearchFirstNumberFromDictionaries(NSArray<NSDictionary *> *dicts, NSArray<NSString *> *keys) {
+    for (NSDictionary *dict in dicts) {
+        NSNumber *value = YALSearchFirstNumber(dict, keys);
+        if (value != nil) {
+            return value;
+        }
+    }
+    return nil;
+}
+
+static NSArray<NSString *> *YALSearchNormalizedImagesFromValue(id value) {
+    NSMutableArray<NSString *> *normalizedImages = [NSMutableArray array];
+    if ([value isKindOfClass:[NSArray class]]) {
+        for (id item in (NSArray *)value) {
+            if ([item isKindOfClass:[NSString class]]) {
+                NSString *url = YALSearchTrimmedString(item);
+                if (url.length > 0) {
+                    [normalizedImages addObject:url];
+                }
+                continue;
+            }
+
+            if ([item isKindOfClass:[NSDictionary class]]) {
+                NSString *url = YALSearchFirstString((NSDictionary *)item, @[@"url", @"image", @"image_url", @"src", @"path"]);
+                if (url.length > 0) {
+                    [normalizedImages addObject:url];
+                }
+            }
+        }
+    } else if ([value isKindOfClass:[NSString class]]) {
+        NSString *url = YALSearchTrimmedString(value);
+        if (url.length > 0) {
+            [normalizedImages addObject:url];
+        }
+    }
+    return [normalizedImages copy];
+}
+
 @implementation YALSearchContentModel
 
 - (instancetype)initWithDictionary:(NSDictionary *)dict {
     self = [super init];
     if (self) {
+        NSDictionary *contentInfo = YALSearchFirstNestedDictionary(dict, @[@"content", @"post", @"item", @"detail", @"data", @"content_info"]);
         NSDictionary *authorInfo = [dict[@"user"] isKindOfClass:[NSDictionary class]] ? dict[@"user"] : nil;
         if (!authorInfo) {
             authorInfo = [dict[@"author"] isKindOfClass:[NSDictionary class]] ? dict[@"author"] : nil;
@@ -68,58 +130,53 @@ static NSNumber * _Nullable YALSearchFirstNumber(NSDictionary *dict, NSArray<NSS
         if (!authorInfo) {
             authorInfo = [dict[@"user_info"] isKindOfClass:[NSDictionary class]] ? dict[@"user_info"] : nil;
         }
+        if (!authorInfo && contentInfo != nil) {
+            authorInfo = YALSearchFirstNestedDictionary(contentInfo, @[@"user", @"author", @"publisher", @"user_info"]);
+        }
 
-        _contentId = YALSearchNumberValue(dict[@"content_id"]);
-        _userId = YALSearchFirstNumber(dict, @[@"user_id", @"author_id", @"publisher_id", @"uid", @"userid"]);
-        if (_userId == nil) {
+        NSArray<NSDictionary *> *contentSources = contentInfo != nil ? @[dict, contentInfo] : @[dict];
+        NSArray<NSDictionary *> *authorSources = authorInfo != nil ? @[dict, contentInfo ?: @{}, authorInfo] : contentSources;
+
+        _contentId = YALSearchFirstNumberFromDictionaries(contentSources, @[@"content_id", @"id", @"post_id", @"memory_id"]);
+        _userId = YALSearchFirstNumberFromDictionaries(contentSources, @[@"user_id", @"author_id", @"publisher_id", @"uid", @"userid"]);
+        if (_userId == nil && authorInfo != nil) {
             _userId = YALSearchFirstNumber(authorInfo, @[@"user_id", @"author_id", @"id", @"uid", @"userid"]);
         }
-        _title = YALSearchTrimmedString(dict[@"title"]);
-        _content = YALSearchTrimmedString(dict[@"content"]);
-        _city = YALSearchTrimmedString(dict[@"city"]);
-        _year = YALSearchTrimmedString(dict[@"year"]);
-        _mood = YALSearchTrimmedString(dict[@"mood"]);
-        _createdAt = YALSearchTrimmedString(dict[@"created_at"]);
-        _authorNickname = YALSearchFirstString(dict, @[@"user_nickname", @"nickname", @"author_name", @"publisher_name", @"name"]);
-        if (_authorNickname.length == 0) {
-            _authorNickname = YALSearchFirstString(authorInfo, @[@"nickname", @"user_nickname", @"name", @"author_name"]);
-        }
-        _authorUsername = YALSearchFirstString(dict, @[@"username", @"user_name", @"account"]);
-        if (_authorUsername.length == 0) {
-            _authorUsername = YALSearchFirstString(authorInfo, @[@"username", @"user_name", @"account"]);
-        }
-        _authorAvatar = YALSearchFirstString(dict, @[@"user_avatar", @"avatar", @"avatar_url", @"author_avatar"]);
-        if (_authorAvatar.length == 0) {
-            _authorAvatar = YALSearchFirstString(authorInfo, @[@"avatar", @"avatar_url", @"user_avatar", @"author_avatar"]);
-        }
-        _authorBio = YALSearchFirstString(dict, @[@"user_bio", @"bio", @"author_bio", @"signature", @"intro"]);
-        if (_authorBio.length == 0) {
-            _authorBio = YALSearchFirstString(authorInfo, @[@"bio", @"user_bio", @"author_bio", @"signature", @"intro"]);
-        }
+        _title = YALSearchFirstStringFromDictionaries(contentSources, @[@"title", @"name", @"subject"]);
+        _content = YALSearchFirstStringFromDictionaries(contentSources, @[@"content", @"body", @"desc", @"description", @"text", @"detail", @"content_text", @"summary"]);
+        _city = YALSearchFirstStringFromDictionaries(contentSources, @[@"city", @"location_city", @"locationName", @"location_name"]);
+        _year = YALSearchFirstStringFromDictionaries(contentSources, @[@"year", @"publish_year", @"created_year"]);
+        _mood = YALSearchFirstStringFromDictionaries(contentSources, @[@"mood", @"emotion", @"feeling"]);
+        _createdAt = YALSearchFirstStringFromDictionaries(contentSources, @[@"created_at", @"create_time", @"createdAt", @"publish_time"]);
+        _authorNickname = YALSearchFirstStringFromDictionaries(authorSources, @[@"user_nickname", @"nickname", @"author_name", @"publisher_name", @"name"]);
+        _authorUsername = YALSearchFirstStringFromDictionaries(authorSources, @[@"username", @"user_name", @"account"]);
+        _authorAvatar = YALSearchFirstStringFromDictionaries(authorSources, @[@"user_avatar", @"avatar", @"avatar_url", @"author_avatar"]);
+        _authorBio = YALSearchFirstStringFromDictionaries(authorSources, @[@"user_bio", @"bio", @"author_bio", @"signature", @"intro", @"description"]);
 
-        NSNumber *likeCount = YALSearchNumberValue(dict[@"like_count"]);
+        NSNumber *likeCount = YALSearchFirstNumberFromDictionaries(contentSources, @[@"like_count", @"likes_count", @"liked_count", @"likeCount"]);
         _likeCount = MAX(likeCount.integerValue, 0);
 
-        NSNumber *commentCount = YALSearchNumberValue(dict[@"comment_count"]);
+        NSNumber *commentCount = YALSearchFirstNumberFromDictionaries(contentSources, @[@"comment_count", @"comments_count", @"commentCount"]);
         _commentCount = MAX(commentCount.integerValue, 0);
 
-        NSArray *rawImages = nil;
-        if ([dict[@"Images"] isKindOfClass:[NSArray class]]) {
-            rawImages = dict[@"Images"];
-        } else if ([dict[@"images"] isKindOfClass:[NSArray class]]) {
-            rawImages = dict[@"images"];
-        } else if ([dict[@"image_urls"] isKindOfClass:[NSArray class]]) {
-            rawImages = dict[@"image_urls"];
-        }
-
-        NSMutableArray<NSString *> *normalizedImages = [NSMutableArray array];
-        for (id item in rawImages) {
-            NSString *url = YALSearchTrimmedString(item);
-            if (url.length > 0) {
-                [normalizedImages addObject:url];
+        NSArray<NSString *> *images = @[];
+        for (NSDictionary *source in contentSources) {
+            NSArray<NSString *> *candidateImages = YALSearchNormalizedImagesFromValue(source[@"Images"]);
+            if (candidateImages.count == 0) {
+                candidateImages = YALSearchNormalizedImagesFromValue(source[@"images"]);
+            }
+            if (candidateImages.count == 0) {
+                candidateImages = YALSearchNormalizedImagesFromValue(source[@"image_urls"]);
+            }
+            if (candidateImages.count == 0) {
+                candidateImages = YALSearchNormalizedImagesFromValue(source[@"image"]);
+            }
+            if (candidateImages.count > 0) {
+                images = candidateImages;
+                break;
             }
         }
-        _images = [normalizedImages copy];
+        _images = images;
     }
     return self;
 }

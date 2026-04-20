@@ -31,8 +31,24 @@ static BOOL YALMineBoolFromPublicValue(id value) {
     if ([value isKindOfClass:[NSString class]]) {
         NSString *lower = [[(NSString *)value stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] lowercaseString];
         if (lower.length == 0) return NO;
-        if ([lower isEqualToString:@"1"] || [lower isEqualToString:@"true"] || [lower isEqualToString:@"yes"] || [lower isEqualToString:@"public"]) {
+        if ([lower isEqualToString:@"1"] ||
+            [lower isEqualToString:@"true"] ||
+            [lower isEqualToString:@"yes"] ||
+            [lower isEqualToString:@"public"] ||
+            [lower isEqualToString:@"公开"]) {
             return YES;
+        }
+        if ([lower isEqualToString:@"0"] ||
+            [lower isEqualToString:@"false"] ||
+            [lower isEqualToString:@"no"] ||
+            [lower isEqualToString:@"2"] ||
+            [lower isEqualToString:@"private"] ||
+            [lower isEqualToString:@"only_self"] ||
+            [lower isEqualToString:@"self"] ||
+            [lower isEqualToString:@"personal"] ||
+            [lower isEqualToString:@"私密"] ||
+            [lower isEqualToString:@"仅自己可见"]) {
+            return NO;
         }
         return NO;
     }
@@ -43,24 +59,8 @@ static id YALMineResolvedVisibilityValue(NSDictionary *dict) {
     if (![dict isKindOfClass:[NSDictionary class]]) {
         return nil;
     }
-
-    NSArray<NSString *> *privateKeys = @[@"is_private", @"isPrivate", @"private", @"private_status"];
-    for (NSString *key in privateKeys) {
-        id value = dict[key];
-        if (value && value != [NSNull null]) {
-            return YALMineBoolFromPublicValue(value) ? @0 : @1;
-        }
-    }
-
-    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status", @"scope", @"permission"];
-    for (NSString *key in publicKeys) {
-        id value = dict[key];
-        if (value && value != [NSNull null]) {
-            return value;
-        }
-    }
-
-    return nil;
+    id value = dict[@"is_public"];
+    return value;
 }
 
 

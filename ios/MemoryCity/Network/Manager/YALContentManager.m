@@ -119,7 +119,7 @@ static BOOL YALContentListBoolValue(id value, BOOL fallback) {
         if ([lower isEqualToString:@"1"] ||
             [lower isEqualToString:@"true"] ||
             [lower isEqualToString:@"yes"] ||
-            [lower isEqualToString:@"public"] ||
+            [lower isEqualToString:@"is_public"] ||
             [lower isEqualToString:@"公开"]) {
             return YES;
         }
@@ -140,17 +140,11 @@ static BOOL YALContentListShouldShowPublicContent(NSDictionary *dict) {
         return NO;
     }
 
-    NSArray<NSString *> *publicKeys = @[@"is_public", @"isPublic", @"visible", @"visibility", @"public_status"];
-    for (NSString *key in publicKeys) {
-        id value = dict[key];
-        if (!value || value == [NSNull null]) {
-            continue;
-        }
-        return YALContentListBoolValue(value, NO);
+    id value = dict[@"is_public"];
+    if (!value || value == [NSNull null]) {
+        return NO;
     }
-
-    // 公开流里拿不到明确公开标记时，按不展示处理。
-    return NO;
+    return YALContentListBoolValue(value, NO);
 }
 
 static BOOL YALIsValidSearchContentModel(YALSearchContentModel *model) {
@@ -1187,16 +1181,12 @@ static NSString *YALAIExtractTextFromSSETranscript(NSString *fullText) {
     }
     parameters[@"latitude"] = @(latitude);
     parameters[@"longitude"] = @(longitude);
-    // Go 后端的 is_public 是 bool，主字段必须传 true/false。
+    // 后端当前只认 is_public。
     NSNumber *publicBoolValue = @(isPublic);
-    NSNumber *privateBoolValue = @(!isPublic);
-    NSNumber *publicStatusValue = @(isPublic ? 1 : 0);
     parameters[@"is_public"] = publicBoolValue;
-    parameters[@"isPublic"] = publicBoolValue;
-    parameters[@"visible"] = publicBoolValue;
-    parameters[@"public_status"] = publicStatusValue;
-    parameters[@"is_private"] = privateBoolValue;
-    parameters[@"private"] = privateBoolValue;
+    NSLog(@"[Publish API] request is_public=%@ title=%@",
+          parameters[@"is_public"],
+          title ?: @"");
 
     if (locationName) {
         parameters[@"location_name"] = locationName;
@@ -2135,6 +2125,8 @@ static NSString *YALAIExtractTextFromSSETranscript(NSString *fullText) {
     // 兼容后端常见分页参数命名（文档里是 size）
     parameters[@"size"] = @(pageSize);
     parameters[@"limit"] = @(pageSize);
+    parameters[@"include_private"] = @YES;
+    parameters[@"includePrivate"] = @YES;
 
     // 获取认证headers（需要token）
     NSDictionary *headers = [[YALAuthManager sharedManager] getAuthHeadersWithToken];

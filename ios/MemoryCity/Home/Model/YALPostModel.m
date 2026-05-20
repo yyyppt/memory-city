@@ -56,6 +56,7 @@ static double YALPostModelCoordinateValue(id value) {
         NSString *text = [((NSString *)value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         return text.length > 0 ? text.doubleValue : 0.0;
     }
+    
     return 0.0;
 }
 
@@ -216,7 +217,7 @@ static NSNumber * _Nullable YALPostModelFirstNumber(NSDictionary *dict, NSArray<
         else if ([dict[@"Images"] isKindOfClass:[NSArray class]]) {
             imageArray = dict[@"Images"];
         }
-        // 尝试 image_urls
+
         else if ([dict[@"image_urls"] isKindOfClass:[NSArray class]]) {
             imageArray = dict[@"image_urls"];
         }

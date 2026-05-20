@@ -414,6 +414,7 @@ static NSString *YALSearchAICombinedDisplayText(YALAIAnalyzeResultModel *result)
 @property (nonatomic, assign) BOOL isContentLoading;
 @property (nonatomic, assign) BOOL isUserLoading;
 @property (nonatomic, assign) BOOL isAILoading;
+@property (nonatomic, assign) BOOL hasAutoFocusedSearchBar;
 @property (nonatomic, assign) NSUInteger contentRequestToken;
 @property (nonatomic, assign) NSUInteger userRequestToken;
 @property (nonatomic, assign) NSUInteger aiRequestToken;
@@ -443,17 +444,23 @@ static NSString *YALSearchAICombinedDisplayText(YALAIAnalyzeResultModel *result)
 
     if (self.isResultPage) {
         [self performSearchWithKeyword:self.keyword];
-    } else {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
-                       dispatch_get_main_queue(), ^{
-            [self.searchBar becomeFirstResponder];
-        });
     }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     self.tabBarController.tabBar.hidden = YES;
+}
+
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+
+    if (!self.isResultPage && !self.hasAutoFocusedSearchBar) {
+        self.hasAutoFocusedSearchBar = YES;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.searchBar becomeFirstResponder];
+        });
+    }
 }
 
 - (void)viewWillDisappear:(BOOL)animated {

@@ -662,12 +662,17 @@ static NSString * const kYALPostDetailInteractionCachePrefix = @"YALPostDetailIn
     }
 }
 
-- (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar {
-    [searchBar resignFirstResponder];
+- (BOOL)searchBarShouldBeginEditing:(UISearchBar *)searchBar {
+    (void)searchBar;
 
     YALSearchController *vc = [[YALSearchController alloc] init];
     vc.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:vc animated:YES];
+    return NO;
+}
+
+- (void)searchBarTextDidBeginEditing:(UISearchBar *)searchBar {
+    (void)searchBar;
 }
 
 @end
